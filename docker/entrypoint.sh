@@ -23,7 +23,7 @@ EOF
 
 # Run migrations and seeder
 echo "Running migrations and seeding..."
-php artisan migrate --force || true
+php artisan migrate:fresh --force || true
 php artisan db:seed --force || true
 
 # Cache configurations
