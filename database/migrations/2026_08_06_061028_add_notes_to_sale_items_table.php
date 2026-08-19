@@ -12,7 +12,7 @@ return new class extends Migration
     public function up(): void
     {
         Schema::table('sale_items', function (Blueprint $table) {
-            $table->string('notes')->nullable()->after('warranty_months');
+            $table->string('notes')->nullable();
         });
     }
 

@@ -13,8 +13,8 @@ return new class extends Migration
     {
         Schema::table('purchase_items', function (Blueprint $table) {
             $table->dropColumn('item_description');
-            $table->foreignId('product_id')->after('purchase_id')->constrained()->cascadeOnDelete();
-            $table->json('imeis')->nullable()->after('quantity');
+            $table->foreignId('product_id')->constrained()->cascadeOnDelete();
+            $table->json('imeis')->nullable();
         });
     }
 

@@ -12,11 +12,11 @@ return new class extends Migration
     public function up(): void
     {
         Schema::table('products', function (Blueprint $table) {
-            $table->string('type')->default('serialized')->after('model_name'); // 'serialized' or 'bulk'
-            $table->string('sku')->nullable()->unique()->after('type');
-            $table->integer('quantity')->default(0)->after('sku');
-            $table->decimal('cost_price', 10, 2)->nullable()->after('quantity');
-            $table->decimal('selling_price', 10, 2)->nullable()->after('cost_price');
+            $table->string('type')->default('serialized'); // 'serialized' or 'bulk'
+            $table->string('sku')->nullable()->unique();
+            $table->integer('quantity')->default(0);
+            $table->decimal('cost_price', 10, 2)->nullable();
+            $table->decimal('selling_price', 10, 2)->nullable();
         });
 
         Schema::table('sale_items', function (Blueprint $table) {
@@ -25,8 +25,8 @@ return new class extends Migration
             // Actually, we must make device_imei_id nullable. Laravel 11 handles this fine on SQLite if doctrine/dbal is installed, or with native sqlite driver modifications.
             // Let's assume it's MySQL or we can just alter it.
             $table->foreignId('device_imei_id')->nullable()->change();
-            $table->foreignId('product_id')->nullable()->constrained('products')->onDelete('cascade')->after('device_imei_id');
-            $table->integer('quantity')->default(1)->after('product_id');
+            $table->foreignId('product_id')->nullable()->constrained('products')->onDelete('cascade');
+            $table->integer('quantity')->default(1);
         });
     }
 

@@ -12,11 +12,11 @@ return new class extends Migration
     public function up(): void
     {
         Schema::table('dealer_items', function (Blueprint $table) {
-            $table->string('type')->default('serialized')->after('device_imei_id'); // 'serialized' or 'bulk'
-            $table->foreignId('product_id')->nullable()->after('type')->constrained('products');
-            $table->integer('quantity')->default(1)->after('product_id');
-            $table->integer('quantity_sold')->default(0)->after('quantity');
-            $table->integer('quantity_returned')->default(0)->after('quantity_sold');
+            $table->string('type')->default('serialized'); // 'serialized' or 'bulk'
+            $table->foreignId('product_id')->nullable()->constrained('products');
+            $table->integer('quantity')->default(1);
+            $table->integer('quantity_sold')->default(0);
+            $table->integer('quantity_returned')->default(0);
             
             // Note: Making foreign key nullable in SQLite is difficult, so assuming MySQL or doctrine/dbal is handling it, 
             // or we just bypass altering device_imei_id for sqlite. We will just attempt to change it.

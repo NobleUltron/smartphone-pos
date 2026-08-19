@@ -13,13 +13,13 @@ return new class extends Migration
     {
         Schema::table('dealer_items', function (Blueprint $table) {
             if (!Schema::hasColumn('dealer_items', 'direction')) {
-                $table->enum('direction', ['outward', 'inward'])->default('outward')->after('dealer_id');
+                $table->enum('direction', ['outward', 'inward'])->default('outward');
             }
             if (!Schema::hasColumn('dealer_items', 'wholesale_cost')) {
-                $table->decimal('wholesale_cost', 15, 2)->default(0)->after('dealer_price');
+                $table->decimal('wholesale_cost', 15, 2)->default(0);
             }
             if (!Schema::hasColumn('dealer_items', 'retail_price')) {
-                $table->decimal('retail_price', 15, 2)->default(0)->after('wholesale_cost');
+                $table->decimal('retail_price', 15, 2)->default(0);
             }
         });
     }

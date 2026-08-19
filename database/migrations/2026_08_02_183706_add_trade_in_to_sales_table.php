@@ -12,8 +12,8 @@ return new class extends Migration
     public function up(): void
     {
         Schema::table('sales', function (Blueprint $table) {
-            $table->decimal('trade_in_value', 15, 2)->default(0)->after('discount');
-            $table->string('trade_in_device')->nullable()->after('trade_in_value');
+            $table->decimal('trade_in_value', 15, 2)->default(0);
+            $table->string('trade_in_device')->nullable();
         });
     }
 
