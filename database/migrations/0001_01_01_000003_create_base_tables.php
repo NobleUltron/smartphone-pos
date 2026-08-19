@@ -34,7 +34,7 @@ return new class extends Migration
             $table->foreignId('product_id')->constrained('products')->onDelete('cascade');
             $table->string('imei', 15)->unique();
             $table->enum('condition', ['Brand New', 'Refurbished', 'Used Grade A', 'Used Grade B']);
-            $table->enum('status', ['In Stock', 'Sold', 'Reserved', 'Defective'])->default('In Stock');
+            $table->enum('status', ['In Stock', 'Sold', 'Reserved', 'Defective', 'In Transit', 'With Dealer'])->default('In Stock');
             $table->decimal('cost_price', 10, 2);
             $table->timestamps();
         });
@@ -56,7 +56,7 @@ return new class extends Migration
             $table->decimal('discount', 10, 2)->default(0.00);
             $table->decimal('final_amount', 10, 2);
             $table->enum('payment_method', ['Cash', 'Bank Transfer', 'MTN MoMo', 'Airtel Money', 'Layaway']);
-            $table->enum('payment_status', ['Paid', 'Partial', 'Unpaid']);
+            $table->enum('payment_status', ['Paid', 'Partial', 'Unpaid', 'Refunded']);
             $table->timestamp('sale_date')->useCurrent();
             $table->timestamps();
         });
