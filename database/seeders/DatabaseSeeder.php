@@ -17,17 +17,23 @@ class DatabaseSeeder extends Seeder
     {
         // User::factory(10)->create();
 
-        User::factory()->create([
-            'name' => 'Admin User',
-            'email' => 'admin@example.com',
-            'role' => 'admin',
-        ]);
+        User::firstOrCreate(
+            ['email' => 'admin@example.com'],
+            [
+                'name' => 'Admin User',
+                'role' => 'admin',
+                'password' => bcrypt('password'), // Ensure a default password is set
+            ]
+        );
 
-        User::factory()->create([
-            'name' => 'Cashier User',
-            'email' => 'cashier@example.com',
-            'role' => 'cashier',
-        ]);
+        User::firstOrCreate(
+            ['email' => 'cashier@example.com'],
+            [
+                'name' => 'Cashier User',
+                'role' => 'cashier',
+                'password' => bcrypt('password'),
+            ]
+        );
 
         $this->call([
             CategorySeeder::class,
