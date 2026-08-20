@@ -271,7 +271,6 @@ Route::middleware('auth')->group(function () {
     // Admin & Manager Only Routes
     Route::middleware(['role:admin,manager'])->group(function () {
         Route::get('/activity-logs', [ActivityLogController::class, 'index'])->name('activity-logs.index');
-        Route::get('/settings/backup/download', [\App\Http\Controllers\BackupController::class, 'download'])->name('settings.backup.download');
         Route::get('/reports', [ReportController::class, 'index'])->name('reports.index');
         Route::get('/api/export/inventory', [\App\Http\Controllers\ExportController::class, 'exportInventory'])->name('export.inventory');
         Route::get('/api/export/sales', [\App\Http\Controllers\ExportController::class, 'exportSales'])->name('export.sales');

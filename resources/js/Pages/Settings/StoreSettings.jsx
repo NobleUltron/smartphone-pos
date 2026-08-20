@@ -250,21 +250,6 @@ export default function StoreSettings({ auth, settings }) {
                         </div>
                     </form>
 
-                    {/* Database Backup & Data Protection Card */}
-                    <Card>
-                        <h3 className="font-bold text-slate-900 mb-2 flex items-center gap-2 border-b border-slate-100 pb-3">
-                            <Database size={20} className="text-indigo-600" /> Database Backup & Data Protection
-                        </h3>
-                        <p className="text-xs text-slate-500 mb-4">
-                            Download a complete 1-click offline backup of your system tables, transactions, inventory, and settings (.sql file) for offline recovery.
-                        </p>
-                        <a 
-                            href="/settings/backup/download"
-                            className="inline-flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-700 hover:to-indigo-800 text-white font-bold rounded-xl text-xs shadow-md shadow-indigo-500/20 transition-all"
-                        >
-                            <Download size={16} /> Download SQL Database Backup
-                        </a>
-                    </Card>
                 </div>
 
                 {/* Live Receipt Preview */}
