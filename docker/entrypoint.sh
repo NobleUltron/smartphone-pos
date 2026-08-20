@@ -22,9 +22,8 @@ MAIL_FROM_NAME="${MAIL_FROM_NAME:-\${APP_NAME}}"
 EOF
 
 # Run migrations and seeder
-echo "Running migrations and seeding..."
-php artisan migrate --force || true
-php artisan db:seed --force || true
+echo "Running migrations..."
+php artisan migrate --force
 
 # Cache configurations
 echo "Caching configuration..."
