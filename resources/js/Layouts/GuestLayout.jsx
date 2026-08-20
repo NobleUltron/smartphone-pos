@@ -38,9 +38,9 @@ export default function GuestLayout({ children }) {
                     overflow: hidden;
                 }
 
-                /* ================= LEFT SIDE (65%) ================= */
+                /* ================= LEFT SIDE (50%) ================= */
                 .auth-hero {
-                    flex: 0 0 65%;
+                    flex: 0 0 50%;
                     background: linear-gradient(135deg, var(--bg-dark-1) 0%, var(--bg-dark-2) 50%, var(--bg-dark-3) 100%);
                     position: relative;
                     padding: 60px 80px;
@@ -170,9 +170,9 @@ export default function GuestLayout({ children }) {
                     font-size: 15px; font-weight: 600; color: #E2E8F0;
                 }
 
-                /* ================= RIGHT SIDE (35%) ================= */
+                /* ================= RIGHT SIDE (50%) ================= */
                 .auth-form-wrapper {
-                    flex: 0 0 35%;
+                    flex: 0 0 50%;
                     background: #F8FAFC;
                     display: flex;
                     flex-direction: column;
