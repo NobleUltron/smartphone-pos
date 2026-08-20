@@ -26,9 +26,35 @@ use App\Models\Product;
 use App\Models\Repair;
 use Carbon\Carbon;
 
+use Illuminate\Support\Facades\DB;
+
 // Public Image Routes
 Route::get('/images/store-logo', [SettingController::class, 'serveLogo'])->name('images.store_logo');
 Route::get('/images/profile/{id}', [ProfileController::class, 'servePhoto'])->name('images.profile_photo');
+
+Route::get('/fix-sequences', function () {
+    if (DB::getDriverName() !== 'pgsql') {
+        return response()->json(['status' => 'error', 'message' => 'Not using PostgreSQL']);
+    }
+    
+    $tables = DB::select("SELECT table_name FROM information_schema.tables WHERE table_schema = 'public' AND table_type = 'BASE TABLE'");
+    $results = [];
+    
+    foreach ($tables as $table) {
+        $tableName = $table->table_name;
+        try {
+            $seqName = DB::selectOne("SELECT pg_get_serial_sequence(?, 'id') as seq", [$tableName])->seq;
+            if ($seqName) {
+                $maxId = DB::table($tableName)->max('id') ?? 1;
+                DB::statement("SELECT setval('$seqName', $maxId)");
+                $results[] = "Reset sequence for $tableName to $maxId";
+            }
+        } catch (\Exception $e) {
+            $results[] = "Error on $tableName: " . $e->getMessage();
+        }
+    }
+    return response()->json(['status' => 'success', 'results' => $results]);
+});
 
 Route::get('/', function (\Illuminate\Http\Request $request) {
     if (auth()->check()) {
