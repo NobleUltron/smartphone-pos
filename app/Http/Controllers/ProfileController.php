@@ -36,10 +36,11 @@ class ProfileController extends Controller
         }
 
         if ($request->hasFile('photo')) {
+            $disk = env('FILESYSTEM_DISK', 'public');
             if ($request->user()->profile_photo_path) {
-                \Illuminate\Support\Facades\Storage::disk('public')->delete($request->user()->profile_photo_path);
+                \Illuminate\Support\Facades\Storage::disk($disk)->delete($request->user()->profile_photo_path);
             }
-            $request->user()->profile_photo_path = $request->file('photo')->store('profile-photos', 'public');
+            $request->user()->profile_photo_path = $request->file('photo')->store('profile-photos', $disk);
         }
 
         $request->user()->save();
