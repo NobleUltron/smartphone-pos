@@ -36,4 +36,13 @@ class Setting extends Model
             ['value' => $valToStore]
         );
     }
+
+    public static function getLogoUrl()
+    {
+        $val = static::get('store_logo');
+        if ($val && str_starts_with($val, 'data:image')) {
+            return route('images.store_logo');
+        }
+        return $val;
+    }
 }

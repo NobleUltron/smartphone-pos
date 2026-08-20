@@ -15,13 +15,30 @@ class SettingController extends Controller
         }
     }
 
+    public function serveLogo()
+    {
+        $base64 = Setting::get('store_logo');
+        if (!$base64 || !str_starts_with($base64, 'data:image')) {
+            abort(404);
+        }
+
+        list($type, $data) = explode(';', $base64);
+        list(, $data)      = explode(',', $data);
+        $type = str_replace('data:', '', $type);
+        $decoded = base64_decode($data);
+
+        return response($decoded)
+            ->header('Content-Type', $type)
+            ->header('Cache-Control', 'public, max-age=86400');
+    }
+
     public function index()
     {
         $this->authorizeAdmin();
 
         $settings = [
             'shop_name' => Setting::get('shop_name', 'SmartPOS Kampala'),
-            'store_logo' => Setting::get('store_logo', null),
+            'store_logo' => Setting::getLogoUrl(),
             'shop_address' => Setting::get('shop_address', '123 Kampala Road, Kampala'),
             'shop_phone' => Setting::get('shop_phone', '+256 700 000 000'),
             'currency_symbol' => Setting::get('currency_symbol', 'UGX'),
@@ -46,7 +63,7 @@ class SettingController extends Controller
     {
         return response()->json([
             'shop_name' => Setting::get('shop_name', 'SmartPOS Kampala'),
-            'store_logo' => Setting::get('store_logo', null),
+            'store_logo' => Setting::getLogoUrl(),
             'shop_address' => Setting::get('shop_address', '123 Kampala Road, Kampala'),
             'shop_phone' => Setting::get('shop_phone', '+256 700 000 000'),
             'currency_symbol' => Setting::get('currency_symbol', 'UGX'),

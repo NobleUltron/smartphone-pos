@@ -61,7 +61,7 @@ class CashierPortalController extends Controller
 
         $settings = [
             'shop_name' => \App\Models\Setting::get('shop_name', 'SmartPOS Kampala'),
-            'store_logo' => \App\Models\Setting::get('store_logo', null),
+            'store_logo' => \App\Models\Setting::getLogoUrl(),
             'shop_address' => \App\Models\Setting::get('shop_address', '123 Kampala Road, Kampala'),
             'shop_phone' => \App\Models\Setting::get('shop_phone', '+256 700 000 000'),
             'currency_symbol' => \App\Models\Setting::get('currency_symbol', 'UGX'),

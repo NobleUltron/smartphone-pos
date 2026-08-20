@@ -63,7 +63,7 @@ class User extends Authenticatable
     {
         if ($this->profile_photo_path) {
             if (str_starts_with($this->profile_photo_path, 'data:image')) {
-                return $this->profile_photo_path;
+                return route('images.profile_photo', ['id' => $this->id]);
             }
             if (str_starts_with($this->profile_photo_path, 'http')) {
                 return $this->profile_photo_path;

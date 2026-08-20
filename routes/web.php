@@ -26,6 +26,10 @@ use App\Models\Product;
 use App\Models\Repair;
 use Carbon\Carbon;
 
+// Public Image Routes
+Route::get('/images/store-logo', [SettingController::class, 'serveLogo'])->name('images.store_logo');
+Route::get('/images/profile/{id}', [ProfileController::class, 'servePhoto'])->name('images.profile_photo');
+
 Route::get('/', function (\Illuminate\Http\Request $request) {
     if (auth()->check()) {
         $role = auth()->user()->role;

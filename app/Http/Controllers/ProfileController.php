@@ -14,6 +14,28 @@ use Inertia\Response;
 class ProfileController extends Controller
 {
     /**
+     * Serve the base64 profile photo directly.
+     */
+    public function servePhoto($id)
+    {
+        $user = \App\Models\User::findOrFail($id);
+        $base64 = $user->profile_photo_path;
+
+        if (!$base64 || !str_starts_with($base64, 'data:image')) {
+            abort(404);
+        }
+
+        list($type, $data) = explode(';', $base64);
+        list(, $data)      = explode(',', $data);
+        $type = str_replace('data:', '', $type);
+        $decoded = base64_decode($data);
+
+        return response($decoded)
+            ->header('Content-Type', $type)
+            ->header('Cache-Control', 'public, max-age=86400');
+    }
+
+    /**
      * Display the user's profile form.
      */
     public function edit(Request $request): Response
