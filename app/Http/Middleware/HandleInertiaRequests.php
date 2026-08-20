@@ -50,7 +50,7 @@ class HandleInertiaRequests extends Middleware
                       ->where('quantity', '<=', 5);
             })->orWhere(function ($query) {
                 $query->where('type', 'serialized')
-                      ->whereRaw('(SELECT COUNT(*) FROM device_imeis WHERE device_imeis.product_id = products.id AND device_imeis.status = "In Stock") <= 5');
+                      ->whereRaw("(SELECT COUNT(*) FROM device_imeis WHERE device_imeis.product_id = products.id AND device_imeis.status = 'In Stock') <= 5");
             })->count();
 
             if ($totalLowStock > 0) {
