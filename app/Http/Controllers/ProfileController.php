@@ -36,11 +36,9 @@ class ProfileController extends Controller
         }
 
         if ($request->hasFile('photo')) {
-            $disk = env('FILESYSTEM_DISK', 'public');
-            if ($request->user()->profile_photo_path) {
-                \Illuminate\Support\Facades\Storage::disk($disk)->delete($request->user()->profile_photo_path);
-            }
-            $request->user()->profile_photo_path = $request->file('photo')->store('profile-photos', $disk);
+            $file = $request->file('photo');
+            $base64 = 'data:' . $file->getMimeType() . ';base64,' . base64_encode(file_get_contents($file->getPathname()));
+            $request->user()->profile_photo_path = $base64;
         }
 
         $request->user()->save();

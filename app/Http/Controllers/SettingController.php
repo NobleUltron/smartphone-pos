@@ -82,14 +82,9 @@ class SettingController extends Controller
         ]);
 
         if ($request->hasFile('store_logo')) {
-            $disk = env('FILESYSTEM_DISK', 'public');
-            $path = $request->file('store_logo')->store('logos', $disk);
-            
-            if ($disk === 's3') {
-                Setting::set('store_logo', \Illuminate\Support\Facades\Storage::disk('s3')->url($path));
-            } else {
-                Setting::set('store_logo', '/storage/' . $path);
-            }
+            $file = $request->file('store_logo');
+            $base64 = 'data:' . $file->getMimeType() . ';base64,' . base64_encode(file_get_contents($file->getPathname()));
+            Setting::set('store_logo', $base64);
         }
         unset($validated['store_logo']);
 

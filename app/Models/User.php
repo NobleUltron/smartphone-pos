@@ -62,9 +62,11 @@ class User extends Authenticatable
     public function getProfilePhotoUrlAttribute()
     {
         if ($this->profile_photo_path) {
-            $disk = env('FILESYSTEM_DISK', 'public');
-            if ($disk === 's3') {
-                return \Illuminate\Support\Facades\Storage::disk('s3')->url($this->profile_photo_path);
+            if (str_starts_with($this->profile_photo_path, 'data:image')) {
+                return $this->profile_photo_path;
+            }
+            if (str_starts_with($this->profile_photo_path, 'http')) {
+                return $this->profile_photo_path;
             }
             return asset('storage/' . $this->profile_photo_path);
         }
