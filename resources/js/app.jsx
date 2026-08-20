@@ -20,7 +20,9 @@ createInertiaApp({
         root.render(<App {...props} />);
     },
     progress: {
-        color: '#4B5563',
+        color: '#4F46E5', // Indigo 600 for premium glowing look
+        showSpinner: true,
+        includeCSS: true,
     },
 });
 
