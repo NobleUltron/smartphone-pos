@@ -33,33 +33,12 @@ Route::get('/images/store-logo', [SettingController::class, 'serveLogo'])->name(
 Route::get('/images/profile/{id}', [ProfileController::class, 'servePhoto'])->name('images.profile_photo');
 
 Route::get('/fix-sequences', function () {
-    if (DB::getDriverName() !== 'pgsql') {
-        return response()->json(['status' => 'info', 'message' => 'Current database driver is ' . DB::getDriverName() . ' (PostgreSQL only required on production/Supabase).']);
-    }
-    
-    $tables = DB::select("SELECT table_name FROM information_schema.tables WHERE table_schema = 'public' AND table_type = 'BASE TABLE'");
-    $results = [];
-    
-    foreach ($tables as $table) {
-        $tableName = $table->table_name;
-        try {
-            $seqRow = DB::selectOne("SELECT pg_get_serial_sequence(?, 'id') as seq", [$tableName]);
-            $seqName = $seqRow ? $seqRow->seq : null;
-            if ($seqName) {
-                $maxId = DB::table($tableName)->max('id');
-                if ($maxId === null || $maxId == 0) {
-                    DB::statement("SELECT setval('$seqName', 1, false)");
-                    $results[] = "Reset empty sequence for $tableName (next ID: 1)";
-                } else {
-                    DB::statement("SELECT setval('$seqName', $maxId, true)");
-                    $results[] = "Synced sequence for $tableName: max ID is $maxId (next ID: " . ($maxId + 1) . ")";
-                }
-            }
-        } catch (\Throwable $e) {
-            $results[] = "Skipped $tableName: " . $e->getMessage();
-        }
-    }
-    return response()->json(['status' => 'success', 'results' => $results]);
+    $results = \App\Services\DatabaseSequenceService::syncAll();
+    return response()->json([
+        'status' => 'success',
+        'database_driver' => DB::getDriverName(),
+        'results' => $results,
+    ]);
 });
 
 Route::get('/', function (\Illuminate\Http\Request $request) {

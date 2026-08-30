@@ -29,9 +29,12 @@ AWS_URL="${AWS_URL}"
 AWS_USE_PATH_STYLE_ENDPOINT="${AWS_USE_PATH_STYLE_ENDPOINT}"
 EOF
 
-# Run migrations and seeder
+# Run migrations and sync sequences
 echo "Running migrations..."
 php artisan migrate --force
+
+echo "Synchronizing database sequences..."
+php artisan db:sync-sequences
 
 # Cache configurations
 echo "Caching configuration..."

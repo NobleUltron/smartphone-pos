@@ -447,6 +447,10 @@ class DealerController extends Controller
         ]);
 
         try {
+            \App\Services\DatabaseSequenceService::syncTable('products');
+            \App\Services\DatabaseSequenceService::syncTable('device_imeis');
+            \App\Services\DatabaseSequenceService::syncTable('dealer_items');
+
             DB::beginTransaction();
 
             $product = null;
