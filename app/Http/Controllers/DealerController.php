@@ -440,6 +440,9 @@ class DealerController extends Controller
             'brand_id' => 'required_without:product_id|nullable|exists:brands,id',
             'model_name' => 'required_without:product_id|nullable|string|max:255',
             'imei_number' => 'nullable|string|max:255',
+            'condition' => 'nullable|string|in:Brand New,Refurbished,Used Grade A,Used Grade B',
+            'storage_capacity' => 'nullable|string|max:50',
+            'color' => 'nullable|string|max:50',
             'wholesale_cost' => 'required|numeric|min:0',
             'retail_price' => 'required|numeric|min:0',
             'quantity' => 'required|integer|min:1',
@@ -485,7 +488,9 @@ class DealerController extends Controller
                     'cost_price' => $validated['wholesale_cost'],
                     'selling_price' => $validated['retail_price'],
                     'status' => 'In Stock',
-                    'condition' => 'Brand New',
+                    'condition' => $validated['condition'] ?? 'Brand New',
+                    'storage_capacity' => $validated['storage_capacity'] ?? null,
+                    'color' => $validated['color'] ?? null,
                 ]);
             } else {
                 $product->increment('quantity', $validated['quantity']);

@@ -36,6 +36,9 @@ export default function Show({ dealer, metrics, settings, monthlyTrends = [], an
         brand_id: '',
         model_name: '',
         imei_number: '',
+        condition: 'Brand New',
+        storage_capacity: '',
+        color: '',
         wholesale_cost: '',
         retail_price: '',
         quantity: 1,
@@ -55,6 +58,9 @@ export default function Show({ dealer, metrics, settings, monthlyTrends = [], an
                     brand_id: '',
                     model_name: '',
                     imei_number: '',
+                    condition: 'Brand New',
+                    storage_capacity: '',
+                    color: '',
                     wholesale_cost: '',
                     retail_price: '',
                     quantity: 1,
@@ -1163,17 +1169,55 @@ export default function Show({ dealer, metrics, settings, monthlyTrends = [], an
                         </div>
 
                         {inwardData.type === 'serialized' ? (
-                            <div>
-                                <label className="saas-label">IMEI / Serial Number</label>
-                                <input 
-                                    type="text" 
-                                    className="saas-input font-mono" 
-                                    placeholder="e.g. 354891029384210" 
-                                    value={inwardData.imei_number}
-                                    onChange={(e) => setInwardData('imei_number', e.target.value)}
-                                    required
-                                />
-                            </div>
+                            <>
+                                <div>
+                                    <label className="saas-label">IMEI / Serial Number</label>
+                                    <input 
+                                        type="text" 
+                                        className="saas-input font-mono" 
+                                        placeholder="e.g. 354891029384210" 
+                                        value={inwardData.imei_number}
+                                        onChange={(e) => setInwardData('imei_number', e.target.value)}
+                                        required
+                                    />
+                                </div>
+
+                                <div className="grid grid-cols-3 gap-3">
+                                    <div>
+                                        <label className="saas-label">Condition</label>
+                                        <select 
+                                            className="saas-input"
+                                            value={inwardData.condition}
+                                            onChange={(e) => setInwardData('condition', e.target.value)}
+                                        >
+                                            <option value="Brand New">Brand New</option>
+                                            <option value="Refurbished">Refurbished</option>
+                                            <option value="Used Grade A">Used Grade A</option>
+                                            <option value="Used Grade B">Used Grade B</option>
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label className="saas-label">Storage</label>
+                                        <input 
+                                            type="text" 
+                                            className="saas-input" 
+                                            placeholder="e.g. 128GB, 256GB" 
+                                            value={inwardData.storage_capacity}
+                                            onChange={(e) => setInwardData('storage_capacity', e.target.value)}
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="saas-label">Color</label>
+                                        <input 
+                                            type="text" 
+                                            className="saas-input" 
+                                            placeholder="e.g. Black, Gold, Silver" 
+                                            value={inwardData.color}
+                                            onChange={(e) => setInwardData('color', e.target.value)}
+                                        />
+                                    </div>
+                                </div>
+                            </>
                         ) : (
                             <div>
                                 <label className="saas-label">Quantity Received</label>
