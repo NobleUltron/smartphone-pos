@@ -205,6 +205,36 @@ export default function Show({ dealer, metrics, settings, monthlyTrends = [], an
         });
     };
 
+    const [settleItem, setSettleItem] = useState(null);
+    const { data: settleData, setData: setSettleData, post: postSettle, processing: processingSettle, errors: settleErrors, reset: resetSettle } = useForm({
+        payment_method: 'Cash',
+        amount: '',
+        notes: ''
+    });
+
+    const openSettleModal = (item) => {
+        setSettleItem(item);
+        setSettleData({
+            payment_method: 'Cash',
+            amount: item.wholesale_cost || item.dealer_price || '',
+            notes: ''
+        });
+    };
+
+    const closeSettleModal = () => {
+        setSettleItem(null);
+        resetSettle();
+    };
+
+    const submitSettle = (e) => {
+        e.preventDefault();
+        postSettle(route('dealers.settle', settleItem.id), {
+            onSuccess: () => {
+                closeSettleModal();
+            }
+        });
+    };
+
     return (
         <AuthenticatedLayout>
             <Head title={`Dealer: ${dealer.name}`} />
@@ -489,16 +519,38 @@ export default function Show({ dealer, metrics, settings, monthlyTrends = [], an
                                         <td className="px-6 py-4">
                                             {item.direction === 'inward' ? (
                                                 <div>
-                                                    <div className="font-bold text-rose-600" title="Wholesale Cost Owed to Dealer">
-                                                        Owe: {formatCurrency(item.wholesale_cost || item.dealer_price)}
-                                                    </div>
-                                                    <div className="text-[10px] text-slate-500 uppercase tracking-wide mt-1">
-                                                        POS Retail: {formatCurrency(item.retail_price)}
-                                                    </div>
+                                                    {item.settlement_status === 'Settled' ? (
+                                                        <>
+                                                            <div className="font-bold text-emerald-600" title="Settlement Payout Completed">
+                                                                Paid: {formatCurrency(item.settlement_amount || item.wholesale_cost || item.dealer_price)}
+                                                            </div>
+                                                            <div className="text-[10px] text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 px-1.5 py-0.5 rounded uppercase font-semibold tracking-wide inline-block mt-1">
+                                                                Settled ({item.settlement_method || 'Paid'})
+                                                            </div>
+                                                        </>
+                                                    ) : item.status === 'Sold' ? (
+                                                        <>
+                                                            <div className="font-bold text-rose-600" title="Wholesale Cost Owed to Dealer">
+                                                                Owe: {formatCurrency(item.wholesale_cost || item.dealer_price)}
+                                                            </div>
+                                                            <div className="text-[10px] text-slate-500 uppercase tracking-wide mt-1">
+                                                                POS Retail: {formatCurrency(item.retail_price || item.device_imei?.selling_price)}
+                                                            </div>
+                                                        </>
+                                                    ) : (
+                                                        <>
+                                                            <div className="font-bold text-slate-900 dark:text-white" title="Consignment Wholesale Cost">
+                                                                Cost: {formatCurrency(item.wholesale_cost || item.dealer_price)}
+                                                            </div>
+                                                            <div className="text-[10px] text-slate-500 uppercase tracking-wide mt-1">
+                                                                POS Retail: {formatCurrency(item.retail_price || item.device_imei?.selling_price)}
+                                                            </div>
+                                                        </>
+                                                    )}
                                                 </div>
                                             ) : (
                                                 <div>
-                                                    <div className="font-bold text-slate-900" title="Dealer Price Owed to Us">
+                                                    <div className="font-bold text-slate-900 dark:text-white" title="Dealer Price Owed to Us">
                                                         Dealer: {formatCurrency(item.dealer_price)}
                                                     </div>
                                                     <div className="text-[10px] text-slate-400 uppercase tracking-wide mt-1">
@@ -524,6 +576,23 @@ export default function Show({ dealer, metrics, settings, monthlyTrends = [], an
                                                     >
                                                         <Edit2 size={16} />
                                                     </button>
+                                                )}
+                                                {item.direction === 'inward' && item.status === 'Sold' && (
+                                                    <>
+                                                        {item.settlement_status === 'Settled' ? (
+                                                            <span className="px-2.5 py-1 bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 rounded-lg text-xs font-bold flex items-center gap-1">
+                                                                <CheckCircle size={13} /> Settled
+                                                            </span>
+                                                        ) : (
+                                                            <button 
+                                                                onClick={() => openSettleModal(item)}
+                                                                className="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-xs font-bold transition-colors flex items-center gap-1 shadow-sm"
+                                                                title="Pay Sourcing Dealer for this sold consignment phone"
+                                                            >
+                                                                <DollarSign size={14} /> Pay Dealer
+                                                            </button>
+                                                        )}
+                                                    </>
                                                 )}
                                                 {item.status === 'Pending' && getAvailableQuantity(item) > 0 && (
                                                     <>
@@ -917,6 +986,111 @@ export default function Show({ dealer, metrics, settings, monthlyTrends = [], an
                                 </div>
                             </form>
                         )}
+                    </div>
+                )}
+            </Modal>
+
+            {/* Dealer Settlement / Payout Modal */}
+            <Modal show={settleItem !== null} onClose={closeSettleModal} maxWidth="md">
+                {settleItem && (
+                    <div className="p-6">
+                        <div className="flex items-center justify-between mb-5 pb-4 border-b border-slate-100 dark:border-slate-800">
+                            <h2 className="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                                <DollarSign className="text-emerald-600" size={22} />
+                                Pay Dealer Consignment Payout
+                            </h2>
+                            <button type="button" onClick={closeSettleModal} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">
+                                <X size={20} />
+                            </button>
+                        </div>
+
+                        {/* Breakdown Box */}
+                        <div className="bg-slate-50 dark:bg-slate-800/50 rounded-2xl p-4 mb-5 border border-slate-200 dark:border-slate-700 space-y-2">
+                            <div className="flex justify-between items-center text-xs">
+                                <span className="text-slate-500">Sourcing Dealer:</span>
+                                <span className="font-bold text-slate-900 dark:text-white">{dealer.name} ({dealer.phone})</span>
+                            </div>
+                            <div className="flex justify-between items-center text-xs">
+                                <span className="text-slate-500">Consigned Item:</span>
+                                <span className="font-bold text-slate-900 dark:text-white">
+                                    {settleItem.type === 'serialized' ? `${settleItem.device_imei?.product?.model_name || 'Phone'}` : `${settleItem.product?.model_name || 'Item'}`}
+                                </span>
+                            </div>
+                            {settleItem.type === 'serialized' && (
+                                <div className="flex justify-between items-center text-xs">
+                                    <span className="text-slate-500">IMEI:</span>
+                                    <span className="font-mono text-slate-700 dark:text-slate-300">{settleItem.device_imei?.imei}</span>
+                                </div>
+                            )}
+                            <div className="border-t border-slate-200 dark:border-slate-700 pt-2 mt-2 flex justify-between items-center text-xs">
+                                <span className="text-slate-500">Customer Sold For:</span>
+                                <span className="font-semibold text-emerald-600">{formatCurrency(settleItem.retail_price || settleItem.device_imei?.selling_price)}</span>
+                            </div>
+                            <div className="flex justify-between items-center text-sm font-bold">
+                                <span className="text-rose-600">Amount Owed to Dealer:</span>
+                                <span className="text-rose-600">{formatCurrency(settleItem.wholesale_cost || settleItem.dealer_price)}</span>
+                            </div>
+                            {settleItem.retail_price && settleItem.wholesale_cost && (
+                                <div className="flex justify-between items-center text-[11px] text-indigo-600 dark:text-indigo-400 font-medium">
+                                    <span>Your Shop Net Margin:</span>
+                                    <span>+{formatCurrency(Number(settleItem.retail_price) - Number(settleItem.wholesale_cost))}</span>
+                                </div>
+                            )}
+                        </div>
+
+                        <form onSubmit={submitSettle} className="space-y-4">
+                            <div>
+                                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase mb-1">
+                                    Payout Payment Method *
+                                </label>
+                                <select
+                                    className="w-full rounded-xl border-slate-300 dark:border-slate-700 dark:bg-slate-900 text-sm focus:border-emerald-500 focus:ring-emerald-500 font-semibold"
+                                    value={settleData.payment_method}
+                                    onChange={e => setSettleData('payment_method', e.target.value)}
+                                    required
+                                >
+                                    <option value="Cash">Cash (Deduct from Active Till Shift)</option>
+                                    <option value="MTN MoMo">MTN Mobile Money</option>
+                                    <option value="Airtel Money">Airtel Money</option>
+                                    <option value="Bank Transfer">Bank Transfer</option>
+                                </select>
+                            </div>
+
+                            <div>
+                                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase mb-1">
+                                    Payout Amount (UGX) *
+                                </label>
+                                <input
+                                    type="number"
+                                    className="w-full rounded-xl border-slate-300 dark:border-slate-700 dark:bg-slate-900 text-lg font-bold text-rose-600 focus:border-emerald-500 focus:ring-emerald-500"
+                                    value={settleData.amount}
+                                    onChange={e => setSettleData('amount', e.target.value)}
+                                    required
+                                    min="1"
+                                />
+                                {settleErrors.amount && <p className="text-rose-500 text-xs mt-1">{settleErrors.amount}</p>}
+                            </div>
+
+                            <div>
+                                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase mb-1">
+                                    Reference / Payout Notes
+                                </label>
+                                <textarea
+                                    className="w-full rounded-xl border-slate-300 dark:border-slate-700 dark:bg-slate-900 text-sm focus:border-emerald-500 focus:ring-emerald-500"
+                                    rows="2"
+                                    placeholder="e.g. Paid to Dealer via MTN MoMo Txn #1234567..."
+                                    value={settleData.notes}
+                                    onChange={e => setSettleData('notes', e.target.value)}
+                                ></textarea>
+                            </div>
+
+                            <div className="mt-6 flex justify-end gap-3 pt-4 border-t border-slate-100 dark:border-slate-800">
+                                <Button variant="secondary" onClick={closeSettleModal}>Cancel</Button>
+                                <Button variant="success" type="submit" disabled={processingSettle} icon={CheckCircle}>
+                                    Confirm Payout & Settle
+                                </Button>
+                            </div>
+                        </form>
                     </div>
                 )}
             </Modal>

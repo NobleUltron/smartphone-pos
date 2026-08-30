@@ -662,6 +662,85 @@ class DealerController extends Controller
         }
     }
 
+    public function settleInward(Request $request, DealerItem $item)
+    {
+        if ($item->direction !== 'inward') {
+            return redirect()->back()->with('error', 'Only inward consignment items received from dealers can be settled.');
+        }
+
+        if ($item->status !== 'Sold') {
+            return redirect()->back()->with('error', 'Only sold consignment items can be settled.');
+        }
+
+        if ($item->settlement_status === 'Settled') {
+            return redirect()->back()->with('error', 'This consignment item has already been settled and paid.');
+        }
+
+        $validated = $request->validate([
+            'payment_method' => 'required|string|in:Cash,Bank Transfer,MTN MoMo,Airtel Money',
+            'amount' => 'required|numeric|min:1',
+            'notes' => 'nullable|string',
+        ]);
+
+        $user = auth()->user();
+        $activeDrawer = null;
+
+        if ($validated['payment_method'] === 'Cash') {
+            $activeDrawer = \App\Models\CashDrawer::where('user_id', $user->id)
+                ->where('status', 'open')
+                ->first();
+
+            if (!$activeDrawer) {
+                return redirect()->back()->with('error', 'You must have an open shift (Cash Drawer) to pay cash to the dealer.');
+            }
+
+            $availableCash = $activeDrawer->calculateExpectedCash();
+            if ($validated['amount'] > $availableCash) {
+                return redirect()->back()->with('error', 'Insufficient cash in active drawer shift! Available cash is ' . number_format(max(0, $availableCash)) . ' UGX.');
+            }
+        }
+
+        try {
+            DB::beginTransaction();
+
+            $dealerName = $item->dealer ? $item->dealer->name : 'Dealer';
+            $itemName = $item->type === 'serialized' 
+                ? ($item->deviceImei?->product?->model_name ?? 'Device') . ' (IMEI: ' . ($item->deviceImei?->imei ?? 'N/A') . ')'
+                : ($item->product?->model_name ?? 'Item');
+
+            $desc = "Consignment Settlement Payout to {$dealerName} for {$itemName} via {$validated['payment_method']}";
+            if (!empty($validated['notes'])) {
+                $desc .= " - Ref: " . $validated['notes'];
+            }
+
+            // Create Expense record for financial reporting
+            \App\Models\Expense::create([
+                'cash_drawer_id' => $activeDrawer?->id,
+                'user_id' => $user->id,
+                'recorded_by' => $user->id,
+                'amount' => $validated['amount'],
+                'category' => 'Dealer Settlement',
+                'description' => $desc,
+                'expense_date' => Carbon::today(),
+            ]);
+
+            // Update item settlement status
+            $item->update([
+                'settlement_status' => 'Settled',
+                'settled_at' => now(),
+                'settlement_method' => $validated['payment_method'],
+                'settlement_amount' => $validated['amount'],
+                'settlement_notes' => $validated['notes'],
+            ]);
+
+            DB::commit();
+            return redirect()->back()->with('success', "Consignment payout of UGX " . number_format($validated['amount']) . " to {$dealerName} successfully recorded!");
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return redirect()->back()->with('error', 'Error recording dealer settlement: ' . $e->getMessage());
+        }
+    }
+
     public function updateItem(Request $request, DealerItem $item)
     {
         $validated = $request->validate([

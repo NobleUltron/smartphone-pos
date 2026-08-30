@@ -29,6 +29,11 @@ class DealerItem extends Model
         'sold_at',
         'sale_id',
         'notes',
+        'settlement_status',
+        'settled_at',
+        'settlement_method',
+        'settlement_amount',
+        'settlement_notes',
     ];
 
     public function product()
@@ -41,6 +46,7 @@ class DealerItem extends Model
         'expected_return_date' => 'date',
         'returned_at' => 'datetime',
         'sold_at' => 'datetime',
+        'settled_at' => 'datetime',
     ];
 
     public function dealer()
