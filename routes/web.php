@@ -34,7 +34,7 @@ Route::get('/images/profile/{id}', [ProfileController::class, 'servePhoto'])->na
 
 Route::get('/fix-sequences', function () {
     if (DB::getDriverName() !== 'pgsql') {
-        return response()->json(['status' => 'error', 'message' => 'Not using PostgreSQL']);
+        return response()->json(['status' => 'info', 'message' => 'Current database driver is ' . DB::getDriverName() . ' (PostgreSQL only required on production/Supabase).']);
     }
     
     $tables = DB::select("SELECT table_name FROM information_schema.tables WHERE table_schema = 'public' AND table_type = 'BASE TABLE'");
@@ -43,14 +43,20 @@ Route::get('/fix-sequences', function () {
     foreach ($tables as $table) {
         $tableName = $table->table_name;
         try {
-            $seqName = DB::selectOne("SELECT pg_get_serial_sequence(?, 'id') as seq", [$tableName])->seq;
+            $seqRow = DB::selectOne("SELECT pg_get_serial_sequence(?, 'id') as seq", [$tableName]);
+            $seqName = $seqRow ? $seqRow->seq : null;
             if ($seqName) {
-                $maxId = DB::table($tableName)->max('id') ?? 1;
-                DB::statement("SELECT setval('$seqName', $maxId)");
-                $results[] = "Reset sequence for $tableName to $maxId";
+                $maxId = DB::table($tableName)->max('id');
+                if ($maxId === null || $maxId == 0) {
+                    DB::statement("SELECT setval('$seqName', 1, false)");
+                    $results[] = "Reset empty sequence for $tableName (next ID: 1)";
+                } else {
+                    DB::statement("SELECT setval('$seqName', $maxId, true)");
+                    $results[] = "Synced sequence for $tableName: max ID is $maxId (next ID: " . ($maxId + 1) . ")";
+                }
             }
-        } catch (\Exception $e) {
-            $results[] = "Error on $tableName: " . $e->getMessage();
+        } catch (\Throwable $e) {
+            $results[] = "Skipped $tableName: " . $e->getMessage();
         }
     }
     return response()->json(['status' => 'success', 'results' => $results]);
