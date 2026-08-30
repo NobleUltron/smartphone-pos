@@ -95,6 +95,12 @@ export default function Show({ dealer, metrics, settings, monthlyTrends = [], an
 
     const { data: editData, setData: setEditData, put, processing: processingEdit, errors: editErrors } = useForm({
         dealer_price: '',
+        wholesale_cost: '',
+        retail_price: '',
+        condition: 'Brand New',
+        storage_capacity: '',
+        color: '',
+        imei_number: '',
         expected_return_date: '',
         notes: ''
     });
@@ -169,11 +175,17 @@ export default function Show({ dealer, metrics, settings, monthlyTrends = [], an
         });
     };
 
-    const openViewModal = (item) => {
+    const openViewModal = (item, isEditMode = false) => {
         setViewItem(item);
-        setIsEditing(false);
+        setIsEditing(isEditMode);
         setEditData({
             dealer_price: item.dealer_price || '',
+            wholesale_cost: item.wholesale_cost || item.dealer_price || '',
+            retail_price: item.retail_price || (item.device_imei?.selling_price || item.product?.selling_price || ''),
+            condition: item.device_imei?.condition || 'Brand New',
+            storage_capacity: item.device_imei?.storage_capacity || '',
+            color: item.device_imei?.color || '',
+            imei_number: item.device_imei?.imei || '',
             expected_return_date: item.expected_return_date ? item.expected_return_date.split('T')[0] : '',
             notes: item.notes || ''
         });
@@ -498,12 +510,21 @@ export default function Show({ dealer, metrics, settings, monthlyTrends = [], an
                                         <td className="px-6 py-4 text-right">
                                             <div className="flex flex-wrap items-center justify-end gap-2">
                                                 <button 
-                                                    onClick={() => openViewModal(item)}
+                                                    onClick={() => openViewModal(item, false)}
                                                     className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
-                                                    title="View / Edit"
+                                                    title="View Details"
                                                 >
                                                     <Eye size={16} />
                                                 </button>
+                                                {item.status === 'Pending' && (
+                                                    <button 
+                                                        onClick={() => openViewModal(item, true)}
+                                                        className="p-1.5 text-slate-400 hover:text-amber-600 hover:bg-amber-50 rounded-lg transition-colors"
+                                                        title="Edit Item / Pricing Details"
+                                                    >
+                                                        <Edit2 size={16} />
+                                                    </button>
+                                                )}
                                                 {item.status === 'Pending' && getAvailableQuantity(item) > 0 && (
                                                     <>
                                                         {item.direction !== 'inward' && (
@@ -659,32 +680,47 @@ export default function Show({ dealer, metrics, settings, monthlyTrends = [], an
             </Modal>
 
             {/* View/Edit Modal */}
-            <Modal show={viewItem !== null} onClose={closeViewModal} maxWidth="md">
+            <Modal show={viewItem !== null} onClose={closeViewModal} maxWidth="lg">
                 {viewItem && (
                     <div className="p-6">
-                        <div className="flex items-center justify-between mb-5 pb-4 border-b border-slate-100">
-                            <h2 className="text-lg font-bold text-slate-900">Deal Details</h2>
-                            <button type="button" onClick={closeViewModal} className="text-slate-400 hover:text-slate-600">
+                        <div className="flex items-center justify-between mb-5 pb-4 border-b border-slate-100 dark:border-slate-800">
+                            <h2 className="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                                {isEditing ? <><Edit2 className="text-amber-500" size={20} /> Edit Consignment Details</> : 'Deal Details'}
+                            </h2>
+                            <button type="button" onClick={closeViewModal} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">
                                 <X size={20} />
                             </button>
                         </div>
 
-                        <div className="bg-slate-50 rounded-xl p-4 mb-6 border border-slate-200">
-                            <p className="text-sm font-bold text-slate-900">
-                                {viewItem.type === 'serialized' ? `${viewItem.device_imei?.product?.model_name}` : `${viewItem.product?.model_name}`}
-                            </p>
-                            <p className="text-xs text-slate-500 mb-2">
-                                {viewItem.type === 'serialized' ? `IMEI: ${viewItem.device_imei?.imei}` : `SKU: ${viewItem.product?.sku || 'N/A'}`}
-                            </p>
-                            <StatusBadge status={viewItem.status} />
+                        <div className="bg-slate-50 dark:bg-slate-800/50 rounded-xl p-4 mb-6 border border-slate-200 dark:border-slate-700">
+                            <div className="flex justify-between items-start">
+                                <div>
+                                    <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full inline-block mb-1.5 ${
+                                        viewItem.direction === 'inward' 
+                                            ? 'bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300' 
+                                            : 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300'
+                                    }`}>
+                                        {viewItem.direction === 'inward' ? 'Received Inward' : 'Issued Outward'}
+                                    </span>
+                                    <p className="text-sm font-bold text-slate-900 dark:text-white">
+                                        {viewItem.type === 'serialized' 
+                                            ? `${viewItem.device_imei?.product?.brand?.name || ''} ${viewItem.device_imei?.product?.model_name || viewItem.product?.model_name || 'Device'}` 
+                                            : `${viewItem.product?.brand?.name || ''} ${viewItem.product?.model_name || 'Item'}`}
+                                    </p>
+                                    <p className="text-xs text-slate-500 dark:text-slate-400">
+                                        {viewItem.type === 'serialized' ? `IMEI: ${viewItem.device_imei?.imei || 'N/A'}` : `SKU: ${viewItem.product?.sku || 'N/A'}`}
+                                    </p>
+                                </div>
+                                <StatusBadge status={viewItem.status} />
+                            </div>
                         </div>
 
                         {!isEditing ? (
                             <div className="space-y-4">
-                                <div className="grid grid-cols-3 gap-4 pb-4 border-b border-slate-100">
+                                <div className="grid grid-cols-3 gap-4 pb-4 border-b border-slate-100 dark:border-slate-800">
                                     <div>
-                                        <span className="block text-xs font-bold text-slate-500 uppercase">Issued</span>
-                                        <span className="text-sm text-slate-900 font-bold">{viewItem.quantity}</span>
+                                        <span className="block text-xs font-bold text-slate-500 uppercase">Quantity</span>
+                                        <span className="text-sm text-slate-900 dark:text-white font-bold">{viewItem.quantity}</span>
                                     </div>
                                     <div>
                                         <span className="block text-xs font-bold text-slate-500 uppercase">Sold</span>
@@ -695,64 +731,188 @@ export default function Show({ dealer, metrics, settings, monthlyTrends = [], an
                                         <span className="text-sm text-blue-600 font-bold">{viewItem.quantity_returned}</span>
                                     </div>
                                 </div>
-                                <div>
-                                    <span className="block text-xs font-bold text-slate-500 uppercase">Agreed Dealer Price</span>
-                                    <span className="text-sm text-slate-900 font-bold">{formatCurrency(viewItem.dealer_price)}</span>
-                                </div>
-                                <div>
-                                    <span className="block text-xs font-bold text-slate-500 uppercase">Expected Return Date</span>
-                                    <span className="text-sm text-slate-900">{viewItem.expected_return_date ? dayjs(viewItem.expected_return_date).format('DD MMM YYYY') : 'Not Set'}</span>
-                                </div>
+
+                                {viewItem.direction === 'inward' ? (
+                                    <>
+                                        <div className="grid grid-cols-2 gap-4 pb-4 border-b border-slate-100 dark:border-slate-800">
+                                            <div>
+                                                <span className="block text-xs font-bold text-slate-500 uppercase">Owed to Dealer (Wholesale)</span>
+                                                <span className="text-sm text-rose-600 font-bold">{formatCurrency(viewItem.wholesale_cost || viewItem.dealer_price)}</span>
+                                            </div>
+                                            <div>
+                                                <span className="block text-xs font-bold text-slate-500 uppercase">Target POS Retail Price</span>
+                                                <span className="text-sm text-emerald-600 font-bold">{formatCurrency(viewItem.retail_price || viewItem.device_imei?.selling_price)}</span>
+                                            </div>
+                                        </div>
+
+                                        {viewItem.type === 'serialized' && (
+                                            <div className="grid grid-cols-3 gap-4 pb-4 border-b border-slate-100 dark:border-slate-800">
+                                                <div>
+                                                    <span className="block text-xs font-bold text-slate-500 uppercase">Condition</span>
+                                                    <span className="text-sm text-slate-900 dark:text-white font-medium">{viewItem.device_imei?.condition || 'Brand New'}</span>
+                                                </div>
+                                                <div>
+                                                    <span className="block text-xs font-bold text-slate-500 uppercase">Storage</span>
+                                                    <span className="text-sm text-slate-900 dark:text-white font-medium">{viewItem.device_imei?.storage_capacity || 'N/A'}</span>
+                                                </div>
+                                                <div>
+                                                    <span className="block text-xs font-bold text-slate-500 uppercase">Color</span>
+                                                    <span className="text-sm text-slate-900 dark:text-white font-medium">{viewItem.device_imei?.color || 'N/A'}</span>
+                                                </div>
+                                            </div>
+                                        )}
+                                    </>
+                                ) : (
+                                    <>
+                                        <div className="grid grid-cols-2 gap-4 pb-4 border-b border-slate-100 dark:border-slate-800">
+                                            <div>
+                                                <span className="block text-xs font-bold text-slate-500 uppercase">Agreed Dealer Price</span>
+                                                <span className="text-sm text-slate-900 dark:text-white font-bold">{formatCurrency(viewItem.dealer_price)}</span>
+                                            </div>
+                                            <div>
+                                                <span className="block text-xs font-bold text-slate-500 uppercase">Expected Return Date</span>
+                                                <span className="text-sm text-slate-900 dark:text-white">{viewItem.expected_return_date ? dayjs(viewItem.expected_return_date).format('DD MMM YYYY') : 'Not Set'}</span>
+                                            </div>
+                                        </div>
+                                    </>
+                                )}
+
                                 <div>
                                     <span className="block text-xs font-bold text-slate-500 uppercase">Notes</span>
-                                    <span className="text-sm text-slate-900 whitespace-pre-wrap">{viewItem.notes || 'None'}</span>
+                                    <span className="text-sm text-slate-900 dark:text-white whitespace-pre-wrap">{viewItem.notes || 'None'}</span>
                                 </div>
 
-                                <div className="mt-8 flex justify-end gap-3 pt-4 border-t border-slate-100">
-                                    <Button variant="danger" onClick={closeViewModal}>Close</Button>
+                                <div className="mt-8 flex justify-end gap-3 pt-4 border-t border-slate-100 dark:border-slate-800">
+                                    <Button variant="secondary" onClick={closeViewModal}>Close</Button>
                                     {viewItem.status === 'Pending' && (
-                                        <Button variant="primary" onClick={() => setIsEditing(true)}>Edit Details</Button>
+                                        <Button variant="primary" icon={Edit2} onClick={() => setIsEditing(true)}>Edit Details</Button>
                                     )}
                                 </div>
                             </div>
                         ) : (
                             <form onSubmit={submitEdit} className="space-y-4">
-                                <div>
-                                    <label className="block text-sm font-bold text-slate-700 mb-1">Agreed Dealer Price *</label>
-                                    <input
-                                        type="number"
-                                        className="w-full rounded-xl border-slate-300 focus:border-indigo-500 focus:ring-indigo-500"
-                                        value={editData.dealer_price}
-                                        onChange={e => setEditData('dealer_price', e.target.value)}
-                                        required
-                                        min="0"
-                                    />
-                                    {editErrors.dealer_price && <p className="text-rose-500 text-xs mt-1">{editErrors.dealer_price}</p>}
-                                </div>
-                                
-                                <div>
-                                    <label className="block text-sm font-bold text-slate-700 mb-1">Expected Return Date</label>
-                                    <input
-                                        type="date"
-                                        className="w-full rounded-xl border-slate-300 focus:border-indigo-500 focus:ring-indigo-500"
-                                        value={editData.expected_return_date}
-                                        onChange={e => setEditData('expected_return_date', e.target.value)}
-                                    />
-                                    {editErrors.expected_return_date && <p className="text-rose-500 text-xs mt-1">{editErrors.expected_return_date}</p>}
-                                </div>
+                                {viewItem.direction === 'inward' ? (
+                                    <>
+                                        <div className="grid grid-cols-2 gap-4">
+                                            <div>
+                                                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase mb-1">Wholesale Cost (Owed to Dealer) *</label>
+                                                <input
+                                                    type="number"
+                                                    className="w-full rounded-xl border-slate-300 dark:border-slate-700 dark:bg-slate-900 text-rose-600 font-bold focus:border-indigo-500 focus:ring-indigo-500"
+                                                    value={editData.wholesale_cost}
+                                                    onChange={e => setEditData('wholesale_cost', e.target.value)}
+                                                    required
+                                                    min="0"
+                                                />
+                                                {editErrors.wholesale_cost && <p className="text-rose-500 text-xs mt-1">{editErrors.wholesale_cost}</p>}
+                                            </div>
+                                            <div>
+                                                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase mb-1">Target Retail Price (POS) *</label>
+                                                <input
+                                                    type="number"
+                                                    className="w-full rounded-xl border-slate-300 dark:border-slate-700 dark:bg-slate-900 text-emerald-600 font-bold focus:border-indigo-500 focus:ring-indigo-500"
+                                                    value={editData.retail_price}
+                                                    onChange={e => setEditData('retail_price', e.target.value)}
+                                                    required
+                                                    min="0"
+                                                />
+                                                {editErrors.retail_price && <p className="text-rose-500 text-xs mt-1">{editErrors.retail_price}</p>}
+                                            </div>
+                                        </div>
+
+                                        {viewItem.type === 'serialized' && (
+                                            <>
+                                                <div>
+                                                    <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase mb-1">IMEI / Serial Number *</label>
+                                                    <input
+                                                        type="text"
+                                                        className="w-full rounded-xl border-slate-300 dark:border-slate-700 dark:bg-slate-900 font-mono focus:border-indigo-500 focus:ring-indigo-500"
+                                                        value={editData.imei_number}
+                                                        onChange={e => setEditData('imei_number', e.target.value)}
+                                                        required
+                                                    />
+                                                    {editErrors.imei_number && <p className="text-rose-500 text-xs mt-1">{editErrors.imei_number}</p>}
+                                                </div>
+
+                                                <div className="grid grid-cols-3 gap-3">
+                                                    <div>
+                                                        <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase mb-1">Condition</label>
+                                                        <select
+                                                            className="w-full rounded-xl border-slate-300 dark:border-slate-700 dark:bg-slate-900 text-sm focus:border-indigo-500 focus:ring-indigo-500"
+                                                            value={editData.condition}
+                                                            onChange={e => setEditData('condition', e.target.value)}
+                                                        >
+                                                            <option value="Brand New">Brand New</option>
+                                                            <option value="Refurbished">Refurbished</option>
+                                                            <option value="Used Grade A">Used Grade A</option>
+                                                            <option value="Used Grade B">Used Grade B</option>
+                                                        </select>
+                                                    </div>
+                                                    <div>
+                                                        <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase mb-1">Storage</label>
+                                                        <input
+                                                            type="text"
+                                                            className="w-full rounded-xl border-slate-300 dark:border-slate-700 dark:bg-slate-900 text-sm focus:border-indigo-500 focus:ring-indigo-500"
+                                                            placeholder="e.g. 256GB"
+                                                            value={editData.storage_capacity}
+                                                            onChange={e => setEditData('storage_capacity', e.target.value)}
+                                                        />
+                                                    </div>
+                                                    <div>
+                                                        <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase mb-1">Color</label>
+                                                        <input
+                                                            type="text"
+                                                            className="w-full rounded-xl border-slate-300 dark:border-slate-700 dark:bg-slate-900 text-sm focus:border-indigo-500 focus:ring-indigo-500"
+                                                            placeholder="e.g. Gold"
+                                                            value={editData.color}
+                                                            onChange={e => setEditData('color', e.target.value)}
+                                                        />
+                                                    </div>
+                                                </div>
+                                            </>
+                                        )}
+                                    </>
+                                ) : (
+                                    <>
+                                        <div>
+                                            <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase mb-1">Agreed Dealer Price *</label>
+                                            <input
+                                                type="number"
+                                                className="w-full rounded-xl border-slate-300 dark:border-slate-700 dark:bg-slate-900 focus:border-indigo-500 focus:ring-indigo-500"
+                                                value={editData.dealer_price}
+                                                onChange={e => setEditData('dealer_price', e.target.value)}
+                                                required
+                                                min="0"
+                                            />
+                                            {editErrors.dealer_price && <p className="text-rose-500 text-xs mt-1">{editErrors.dealer_price}</p>}
+                                        </div>
+                                        
+                                        <div>
+                                            <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase mb-1">Expected Return Date</label>
+                                            <input
+                                                type="date"
+                                                className="w-full rounded-xl border-slate-300 dark:border-slate-700 dark:bg-slate-900 focus:border-indigo-500 focus:ring-indigo-500"
+                                                value={editData.expected_return_date}
+                                                onChange={e => setEditData('expected_return_date', e.target.value)}
+                                            />
+                                            {editErrors.expected_return_date && <p className="text-rose-500 text-xs mt-1">{editErrors.expected_return_date}</p>}
+                                        </div>
+                                    </>
+                                )}
 
                                 <div>
-                                    <label className="block text-sm font-bold text-slate-700 mb-1">Notes</label>
+                                    <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase mb-1">Notes</label>
                                     <textarea
-                                        className="w-full rounded-xl border-slate-300 focus:border-indigo-500 focus:ring-indigo-500"
+                                        className="w-full rounded-xl border-slate-300 dark:border-slate-700 dark:bg-slate-900 focus:border-indigo-500 focus:ring-indigo-500"
                                         rows="3"
+                                        placeholder="Add notes..."
                                         value={editData.notes}
                                         onChange={e => setEditData('notes', e.target.value)}
                                     ></textarea>
                                 </div>
 
-                                <div className="mt-8 flex justify-end gap-3 pt-4 border-t border-slate-100">
-                                    <Button variant="danger" onClick={() => setIsEditing(false)}>Cancel</Button>
+                                <div className="mt-8 flex justify-end gap-3 pt-4 border-t border-slate-100 dark:border-slate-800">
+                                    <Button variant="secondary" onClick={() => setIsEditing(false)}>Cancel</Button>
                                     <Button variant="primary" type="submit" disabled={processingEdit}>Save Changes</Button>
                                 </div>
                             </form>

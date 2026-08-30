@@ -665,21 +665,84 @@ class DealerController extends Controller
     public function updateItem(Request $request, DealerItem $item)
     {
         $validated = $request->validate([
-            'dealer_price' => 'required|numeric|min:0',
+            'dealer_price' => 'nullable|numeric|min:0',
+            'wholesale_cost' => 'nullable|numeric|min:0',
+            'retail_price' => 'nullable|numeric|min:0',
             'expected_return_date' => 'nullable|date',
+            'condition' => 'nullable|string|in:Brand New,Refurbished,Used Grade A,Used Grade B',
+            'storage_capacity' => 'nullable|string|max:50',
+            'color' => 'nullable|string|max:50',
+            'imei_number' => 'nullable|string|max:255',
             'notes' => 'nullable|string'
         ]);
 
         try {
-            $item->update([
-                'dealer_price' => $validated['dealer_price'],
-                'expected_return_date' => $validated['expected_return_date'],
-                'notes' => $validated['notes']
-            ]);
+            DB::beginTransaction();
 
-            return redirect()->back()->with('success', 'Deal updated successfully.');
+            $updateData = [
+                'notes' => $validated['notes'] ?? $item->notes,
+                'expected_return_date' => $validated['expected_return_date'] ?? $item->expected_return_date,
+            ];
+
+            if (isset($validated['dealer_price'])) {
+                $updateData['dealer_price'] = $validated['dealer_price'];
+            }
+
+            if (isset($validated['wholesale_cost'])) {
+                $updateData['wholesale_cost'] = $validated['wholesale_cost'];
+                $updateData['dealer_price'] = $validated['wholesale_cost'];
+            }
+
+            if (isset($validated['retail_price'])) {
+                $updateData['retail_price'] = $validated['retail_price'];
+            }
+
+            $item->update($updateData);
+
+            // If this item is linked to a physical DeviceImei (serialized stock)
+            if ($item->device_imei_id) {
+                $deviceImei = DeviceImei::find($item->device_imei_id);
+                if ($deviceImei) {
+                    $deviceUpdates = [];
+
+                    if (!empty($validated['imei_number']) && $validated['imei_number'] !== $deviceImei->imei) {
+                        $duplicate = DeviceImei::where('imei', $validated['imei_number'])
+                            ->where('id', '!=', $deviceImei->id)
+                            ->exists();
+                        if ($duplicate) {
+                            DB::rollBack();
+                            return redirect()->back()->with('error', 'Device IMEI ' . $validated['imei_number'] . ' already exists on another item.');
+                        }
+                        $deviceUpdates['imei'] = $validated['imei_number'];
+                    }
+
+                    if (isset($validated['wholesale_cost'])) {
+                        $deviceUpdates['cost_price'] = $validated['wholesale_cost'];
+                    }
+                    if (isset($validated['retail_price'])) {
+                        $deviceUpdates['selling_price'] = $validated['retail_price'];
+                    }
+                    if (!empty($validated['condition'])) {
+                        $deviceUpdates['condition'] = $validated['condition'];
+                    }
+                    if (isset($validated['storage_capacity'])) {
+                        $deviceUpdates['storage_capacity'] = $validated['storage_capacity'];
+                    }
+                    if (isset($validated['color'])) {
+                        $deviceUpdates['color'] = $validated['color'];
+                    }
+
+                    if (!empty($deviceUpdates)) {
+                        $deviceImei->update($deviceUpdates);
+                    }
+                }
+            }
+
+            DB::commit();
+            return redirect()->back()->with('success', 'Dealer item and inventory details updated successfully.');
         } catch (\Exception $e) {
-            return redirect()->back()->with('error', 'Error updating deal: ' . $e->getMessage());
+            DB::rollBack();
+            return redirect()->back()->with('error', 'Error updating dealer item: ' . $e->getMessage());
         }
     }
 
