@@ -26,29 +26,40 @@ class ProductController extends Controller
             }]);
 
         if ($request->filled('search')) {
-            $search = $request->input('search');
-            $query->where(function($q) use ($search) {
-                $q->where('model_name', 'like', "%{$search}%")
-                  ->orWhereHas('brand', function($q) use ($search) {
-                      $q->where('name', 'like', "%{$search}%");
+            $search = trim($request->input('search'));
+            $term = '%' . strtolower($search) . '%';
+            
+            $query->where(function($q) use ($term) {
+                $q->whereRaw('LOWER(products.model_name) LIKE ?', [$term])
+                  ->orWhereRaw('LOWER(COALESCE(products.sku, \'\')) LIKE ?', [$term])
+                  ->orWhereHas('brand', function($bQuery) use ($term) {
+                      $bQuery->whereRaw('LOWER(name) LIKE ?', [$term]);
+                  })
+                  ->orWhereHas('category', function($cQuery) use ($term) {
+                      $cQuery->whereRaw('LOWER(name) LIKE ?', [$term]);
+                  })
+                  ->orWhereHas('deviceImeis', function($dQuery) use ($term) {
+                      $dQuery->whereRaw('LOWER(imei) LIKE ?', [$term])
+                             ->orWhereRaw('LOWER(COALESCE(storage_capacity, \'\')) LIKE ?', [$term])
+                             ->orWhereRaw('LOWER(COALESCE(color, \'\')) LIKE ?', [$term]);
                   });
             });
         }
 
         if ($request->filled('category_id') && $request->input('category_id') !== 'all') {
-            $query->where('category_id', $request->input('category_id'));
+            $query->where('products.category_id', $request->input('category_id'));
         }
 
         if ($request->filled('brand_id') && $request->input('brand_id') !== 'all') {
-            $query->where('brand_id', $request->input('brand_id'));
+            $query->where('products.brand_id', $request->input('brand_id'));
         }
 
         if ($request->filled('product_id') && $request->input('product_id') !== 'all') {
             $query->where('products.id', $request->input('product_id'));
         }
 
-        $products = $query->join('brands', 'products.brand_id', '=', 'brands.id')
-            ->orderBy('brands.name', 'asc')
+        $products = $query->leftJoin('brands', 'products.brand_id', '=', 'brands.id')
+            ->orderByRaw('COALESCE(brands.name, products.model_name) ASC')
             ->orderBy('products.model_name', 'asc')
             ->paginate(10)
             ->withQueryString();

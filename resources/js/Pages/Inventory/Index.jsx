@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import toast from 'react-hot-toast';
 import { Head, Link, router } from '@inertiajs/react';
 import axios from 'axios';
-import { Search, Plus, Pencil, Trash2, Smartphone, Printer, Package, Layers, AlertTriangle, DollarSign, Scan, FileSpreadsheet } from 'lucide-react';
+import { Search, Plus, Pencil, Trash2, Smartphone, Printer, Package, Layers, AlertTriangle, DollarSign, Scan, FileSpreadsheet, X } from 'lucide-react';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import Card from '@/Components/SaaS/Card';
 import Badge from '@/Components/SaaS/Badge';
@@ -380,15 +380,25 @@ export default function Inventory({ auth, products, allProducts = [], categories
             {/* Search & Filter Bar */}
             <Card className="mb-6 animate-slide-up" style={{ animationDelay: '0.1s' }}>
                 <div className="flex flex-col md:flex-row gap-4">
-                    <div className="flex-1 saas-input-icon-wrapper">
+                    <div className="flex-1 saas-input-icon-wrapper relative">
                         <Search size={18} className="saas-input-icon" />
                         <input 
                             type="text" 
-                            className="saas-input" 
-                            placeholder="Search by brand or model name..." 
+                            className="saas-input pr-10" 
+                            placeholder="Search by model, brand, IMEI, SKU, storage, or color..." 
                             value={searchQuery} 
                             onChange={(e) => setSearchQuery(e.target.value)} 
                         />
+                        {searchQuery && (
+                            <button 
+                                type="button"
+                                onClick={() => setSearchQuery('')}
+                                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors p-1"
+                                title="Clear search"
+                            >
+                                <X size={16} />
+                            </button>
+                        )}
                     </div>
                     <div className="md:w-56">
                         <select 
