@@ -180,8 +180,8 @@ export default function Show({ dealer, metrics, settings, monthlyTrends = [], an
         setIsEditing(isEditMode);
         setEditData({
             dealer_price: item.dealer_price || '',
-            wholesale_cost: item.wholesale_cost || item.dealer_price || '',
-            retail_price: item.retail_price || (item.device_imei?.selling_price || item.product?.selling_price || ''),
+            wholesale_cost: item.direction === 'inward' ? (item.wholesale_cost || item.dealer_price || '') : '',
+            retail_price: item.direction === 'inward' ? (item.retail_price || item.device_imei?.selling_price || item.product?.selling_price || '') : '',
             condition: item.device_imei?.condition || 'Brand New',
             storage_capacity: item.device_imei?.storage_capacity || '',
             color: item.device_imei?.color || '',

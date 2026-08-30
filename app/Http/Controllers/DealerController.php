@@ -681,26 +681,30 @@ class DealerController extends Controller
 
             $updateData = [
                 'notes' => $validated['notes'] ?? $item->notes,
-                'expected_return_date' => $validated['expected_return_date'] ?? $item->expected_return_date,
             ];
 
-            if (isset($validated['dealer_price'])) {
-                $updateData['dealer_price'] = $validated['dealer_price'];
-            }
-
-            if (isset($validated['wholesale_cost'])) {
-                $updateData['wholesale_cost'] = $validated['wholesale_cost'];
-                $updateData['dealer_price'] = $validated['wholesale_cost'];
-            }
-
-            if (isset($validated['retail_price'])) {
-                $updateData['retail_price'] = $validated['retail_price'];
+            if ($item->direction === 'inward') {
+                if (isset($validated['wholesale_cost']) && $validated['wholesale_cost'] !== null) {
+                    $updateData['wholesale_cost'] = $validated['wholesale_cost'];
+                    $updateData['dealer_price'] = $validated['wholesale_cost'];
+                }
+                if (isset($validated['retail_price']) && $validated['retail_price'] !== null) {
+                    $updateData['retail_price'] = $validated['retail_price'];
+                }
+            } else {
+                // Outward deal
+                if (isset($validated['dealer_price']) && $validated['dealer_price'] !== null) {
+                    $updateData['dealer_price'] = $validated['dealer_price'];
+                }
+                if (array_key_exists('expected_return_date', $validated)) {
+                    $updateData['expected_return_date'] = $validated['expected_return_date'];
+                }
             }
 
             $item->update($updateData);
 
             // If this item is linked to a physical DeviceImei (serialized stock)
-            if ($item->device_imei_id) {
+            if ($item->device_imei_id && $item->direction === 'inward') {
                 $deviceImei = DeviceImei::find($item->device_imei_id);
                 if ($deviceImei) {
                     $deviceUpdates = [];
@@ -716,19 +720,19 @@ class DealerController extends Controller
                         $deviceUpdates['imei'] = $validated['imei_number'];
                     }
 
-                    if (isset($validated['wholesale_cost'])) {
+                    if (isset($validated['wholesale_cost']) && $validated['wholesale_cost'] !== null) {
                         $deviceUpdates['cost_price'] = $validated['wholesale_cost'];
                     }
-                    if (isset($validated['retail_price'])) {
+                    if (isset($validated['retail_price']) && $validated['retail_price'] !== null) {
                         $deviceUpdates['selling_price'] = $validated['retail_price'];
                     }
                     if (!empty($validated['condition'])) {
                         $deviceUpdates['condition'] = $validated['condition'];
                     }
-                    if (isset($validated['storage_capacity'])) {
+                    if (array_key_exists('storage_capacity', $validated)) {
                         $deviceUpdates['storage_capacity'] = $validated['storage_capacity'];
                     }
-                    if (isset($validated['color'])) {
+                    if (array_key_exists('color', $validated)) {
                         $deviceUpdates['color'] = $validated['color'];
                     }
 
