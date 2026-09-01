@@ -26,7 +26,8 @@ import {
     TrendingUp,
     Clock,
     DollarSign,
-    RefreshCw
+    RefreshCw,
+    X
 } from 'lucide-react';
 import dayjs from 'dayjs';
 
@@ -502,29 +503,49 @@ export default function AccountsIndex({ accounts, metrics, transactions, filters
 
             {/* Create Payment Account Modal */}
             <Modal show={showCreateModal} onClose={() => setShowCreateModal(false)} maxWidth="md">
-                <form onSubmit={handleCreateAccount} className="p-6 bg-white dark:bg-slate-900 rounded-2xl">
-                    <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-4 flex items-center gap-2">
-                        <Plus className="text-indigo-600" size={20} /> Add New Payment Account
-                    </h3>
+                <div className="p-6 bg-white dark:bg-slate-900 rounded-2xl">
+                    <div className="flex items-center justify-between pb-4 border-b border-slate-100 dark:border-slate-800 mb-5">
+                        <div className="flex items-center gap-2.5">
+                            <div className="p-2 bg-indigo-50 dark:bg-indigo-950/60 rounded-xl text-indigo-600 dark:text-indigo-400">
+                                <Plus size={20} />
+                            </div>
+                            <div>
+                                <h3 className="text-base font-bold text-slate-900 dark:text-white">Add New Payment Account</h3>
+                                <p className="text-xs text-slate-500 dark:text-slate-400">Register a new wallet, till register, or bank account</p>
+                            </div>
+                        </div>
+                        <button
+                            type="button"
+                            onClick={() => setShowCreateModal(false)}
+                            className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                        >
+                            <X size={18} />
+                        </button>
+                    </div>
 
-                    <div className="space-y-4">
-                        <div>
-                            <InputLabel value="Account Name" />
-                            <TextInput
-                                className="w-full text-xs"
+                    <form onSubmit={handleCreateAccount} className="space-y-4">
+                        <div className="space-y-1.5">
+                            <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">
+                                Account Name *
+                            </label>
+                            <input
+                                type="text"
+                                className="w-full px-3.5 py-2.5 text-sm font-semibold rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/80 text-slate-900 dark:text-white placeholder-slate-400 focus:bg-white dark:focus:bg-slate-800 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all shadow-sm"
                                 placeholder="e.g. Stanbic Corporate Bank, MTN Merchant SIM 2"
                                 value={createForm.data.name}
                                 onChange={e => createForm.setData('name', e.target.value)}
                                 required
                             />
-                            <InputError message={createForm.errors.name} />
+                            {createForm.errors.name && <p className="text-xs text-rose-500 font-bold">{createForm.errors.name}</p>}
                         </div>
 
                         <div className="grid grid-cols-2 gap-3">
-                            <div>
-                                <InputLabel value="Account Type" />
+                            <div className="space-y-1.5">
+                                <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">
+                                    Account Type *
+                                </label>
                                 <select
-                                    className="w-full text-xs rounded-xl border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
+                                    className="w-full px-3.5 py-2.5 text-sm font-semibold rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/80 text-slate-900 dark:text-white focus:bg-white dark:focus:bg-slate-800 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all shadow-sm"
                                     value={createForm.data.type}
                                     onChange={e => createForm.setData('type', e.target.value)}
                                 >
@@ -535,73 +556,112 @@ export default function AccountsIndex({ accounts, metrics, transactions, filters
                                 </select>
                             </div>
 
-                            <div>
-                                <InputLabel value="Provider / Institution" />
-                                <TextInput
-                                    className="w-full text-xs"
-                                    placeholder="e.g. MTN, Airtel, Stanbic, Centenary"
+                            <div className="space-y-1.5">
+                                <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">
+                                    Provider
+                                </label>
+                                <input
+                                    type="text"
+                                    className="w-full px-3.5 py-2.5 text-sm font-semibold rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/80 text-slate-900 dark:text-white placeholder-slate-400 focus:bg-white dark:focus:bg-slate-800 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all shadow-sm"
+                                    placeholder="e.g. MTN, Airtel, Stanbic"
                                     value={createForm.data.provider}
                                     onChange={e => createForm.setData('provider', e.target.value)}
                                 />
                             </div>
                         </div>
 
-                        <div>
-                            <InputLabel value="Account Number / Phone / Till ID (Optional)" />
-                            <TextInput
-                                className="w-full text-xs font-mono"
+                        <div className="space-y-1.5">
+                            <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">
+                                Account Number / Phone / Till ID <span className="text-slate-400 font-normal">(Optional)</span>
+                            </label>
+                            <input
+                                type="text"
+                                className="w-full px-3.5 py-2.5 text-sm font-mono font-semibold rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/80 text-slate-900 dark:text-white placeholder-slate-400 focus:bg-white dark:focus:bg-slate-800 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all shadow-sm"
                                 placeholder="e.g. +256 788 123456 or 9040001234567"
                                 value={createForm.data.account_number}
                                 onChange={e => createForm.setData('account_number', e.target.value)}
                             />
                         </div>
 
-                        <div>
-                            <InputLabel value="Opening Float Balance (UGX)" />
-                            <TextInput
-                                type="number"
-                                className="w-full text-xs font-bold"
-                                placeholder="0"
-                                value={createForm.data.opening_balance}
-                                onChange={e => createForm.setData('opening_balance', e.target.value)}
-                            />
+                        <div className="space-y-1.5">
+                            <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">
+                                Opening Float Balance
+                            </label>
+                            <div className="relative">
+                                <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400">UGX</span>
+                                <input
+                                    type="number"
+                                    min="0"
+                                    className="w-full pl-12 pr-3.5 py-2.5 text-sm font-bold text-slate-900 dark:text-white border border-slate-200 dark:border-slate-700 rounded-xl bg-slate-50 dark:bg-slate-800/80 focus:bg-white dark:focus:bg-slate-800 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 shadow-sm transition-all"
+                                    placeholder="0"
+                                    value={createForm.data.opening_balance}
+                                    onChange={e => createForm.setData('opening_balance', e.target.value)}
+                                />
+                            </div>
                         </div>
 
-                        <div>
-                            <InputLabel value="Description / Notes (Optional)" />
+                        <div className="space-y-1.5">
+                            <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">
+                                Description / Notes <span className="text-slate-400 font-normal">(Optional)</span>
+                            </label>
                             <textarea
-                                className="w-full text-xs rounded-xl border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
+                                className="w-full px-3.5 py-2 text-sm rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/80 text-slate-900 dark:text-white placeholder-slate-400 focus:bg-white dark:focus:bg-slate-800 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all shadow-sm"
                                 rows="2"
                                 placeholder="Purpose of this account..."
                                 value={createForm.data.description}
                                 onChange={e => createForm.setData('description', e.target.value)}
                             />
                         </div>
-                    </div>
 
-                    <div className="mt-6 flex items-center justify-end gap-3 pt-4 border-t border-slate-100 dark:border-slate-800">
-                        <SecondaryButton type="button" onClick={() => setShowCreateModal(false)}>
-                            Cancel
-                        </SecondaryButton>
-                        <PrimaryButton type="submit" disabled={createForm.processing} className="bg-indigo-600 hover:bg-indigo-700 text-white">
-                            Create Account
-                        </PrimaryButton>
-                    </div>
-                </form>
+                        <div className="mt-6 flex items-center justify-end gap-2.5 pt-4 border-t border-slate-100 dark:border-slate-800">
+                            <button
+                                type="button"
+                                onClick={() => setShowCreateModal(false)}
+                                className="px-4 py-2.5 text-xs font-bold text-slate-700 dark:text-slate-300 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 rounded-xl transition-colors"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                type="submit"
+                                disabled={createForm.processing}
+                                className="px-5 py-2.5 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl shadow-md shadow-indigo-500/20 transition-all disabled:opacity-50"
+                            >
+                                {createForm.processing ? 'Creating...' : 'Create Account'}
+                            </button>
+                        </div>
+                    </form>
+                </div>
             </Modal>
 
             {/* Inter-Account Transfer Modal */}
             <Modal show={showTransferModal} onClose={() => setShowTransferModal(false)} maxWidth="md">
-                <form onSubmit={handleTransfer} className="p-6 bg-white dark:bg-slate-900 rounded-2xl">
-                    <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-4 flex items-center gap-2">
-                        <ArrowRightLeft className="text-indigo-600" size={20} /> Inter-Account Float Transfer
-                    </h3>
+                <div className="p-6 bg-white dark:bg-slate-900 rounded-2xl">
+                    <div className="flex items-center justify-between pb-4 border-b border-slate-100 dark:border-slate-800 mb-5">
+                        <div className="flex items-center gap-2.5">
+                            <div className="p-2 bg-indigo-50 dark:bg-indigo-950/60 rounded-xl text-indigo-600 dark:text-indigo-400">
+                                <ArrowRightLeft size={20} />
+                            </div>
+                            <div>
+                                <h3 className="text-base font-bold text-slate-900 dark:text-white">Inter-Account Float Transfer</h3>
+                                <p className="text-xs text-slate-500 dark:text-slate-400">Rebalance float between cash registers, MoMo SIMs, and bank accounts</p>
+                            </div>
+                        </div>
+                        <button
+                            type="button"
+                            onClick={() => setShowTransferModal(false)}
+                            className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                        >
+                            <X size={18} />
+                        </button>
+                    </div>
 
-                    <div className="space-y-4">
-                        <div>
-                            <InputLabel value="From Source Account (Debit)" />
+                    <form onSubmit={handleTransfer} className="space-y-4">
+                        <div className="space-y-1.5">
+                            <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">
+                                From Source Account (Debit) *
+                            </label>
                             <select
-                                className="w-full text-xs rounded-xl border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
+                                className="w-full px-3.5 py-2.5 text-sm font-semibold rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/80 text-slate-900 dark:text-white focus:bg-white dark:focus:bg-slate-800 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all shadow-sm"
                                 value={transferForm.data.from_account_id}
                                 onChange={e => transferForm.setData('from_account_id', e.target.value)}
                                 required
@@ -612,13 +672,15 @@ export default function AccountsIndex({ accounts, metrics, transactions, filters
                                     </option>
                                 ))}
                             </select>
-                            <InputError message={transferForm.errors.from_account_id} />
+                            {transferForm.errors.from_account_id && <p className="text-xs text-rose-500 font-bold">{transferForm.errors.from_account_id}</p>}
                         </div>
 
-                        <div>
-                            <InputLabel value="To Destination Account (Credit)" />
+                        <div className="space-y-1.5">
+                            <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">
+                                To Destination Account (Credit) *
+                            </label>
                             <select
-                                className="w-full text-xs rounded-xl border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
+                                className="w-full px-3.5 py-2.5 text-sm font-semibold rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/80 text-slate-900 dark:text-white focus:bg-white dark:focus:bg-slate-800 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all shadow-sm"
                                 value={transferForm.data.to_account_id}
                                 onChange={e => transferForm.setData('to_account_id', e.target.value)}
                                 required
@@ -629,84 +691,122 @@ export default function AccountsIndex({ accounts, metrics, transactions, filters
                                     </option>
                                 ))}
                             </select>
-                            <InputError message={transferForm.errors.to_account_id} />
+                            {transferForm.errors.to_account_id && <p className="text-xs text-rose-500 font-bold">{transferForm.errors.to_account_id}</p>}
                         </div>
 
-                        <div>
-                            <InputLabel value="Transfer Amount (UGX)" />
-                            <TextInput
-                                type="number"
-                                className="w-full text-sm font-black text-indigo-600 dark:text-indigo-400"
-                                placeholder="0"
-                                value={transferForm.data.amount}
-                                onChange={e => transferForm.setData('amount', e.target.value)}
-                                required
-                                min="1"
-                            />
-                            <InputError message={transferForm.errors.amount} />
+                        <div className="space-y-1.5">
+                            <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">
+                                Transfer Amount *
+                            </label>
+                            <div className="relative">
+                                <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400">UGX</span>
+                                <input
+                                    type="number"
+                                    min="1"
+                                    step="100"
+                                    className="w-full pl-12 pr-3.5 py-2.5 text-base font-black text-indigo-600 dark:text-indigo-400 border border-slate-200 dark:border-slate-700 rounded-xl bg-slate-50 dark:bg-slate-800/80 focus:bg-white dark:focus:bg-slate-800 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 shadow-sm transition-all"
+                                    placeholder="0"
+                                    value={transferForm.data.amount}
+                                    onChange={e => transferForm.setData('amount', e.target.value)}
+                                    required
+                                />
+                            </div>
+                            {transferForm.errors.amount && <p className="text-xs text-rose-500 font-bold">{transferForm.errors.amount}</p>}
                         </div>
 
-                        <div>
-                            <InputLabel value="Transfer Reference / Notes (Optional)" />
-                            <TextInput
-                                className="w-full text-xs"
+                        <div className="space-y-1.5">
+                            <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">
+                                Transfer Reference / Notes <span className="text-slate-400 font-normal">(Optional)</span>
+                            </label>
+                            <input
+                                type="text"
+                                className="w-full px-3.5 py-2.5 text-sm font-semibold rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/80 text-slate-900 dark:text-white placeholder-slate-400 focus:bg-white dark:focus:bg-slate-800 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all shadow-sm"
                                 placeholder="e.g. Deposited cash float into MoMo SIM"
                                 value={transferForm.data.notes}
                                 onChange={e => transferForm.setData('notes', e.target.value)}
                             />
                         </div>
-                    </div>
 
-                    <div className="mt-6 flex items-center justify-end gap-3 pt-4 border-t border-slate-100 dark:border-slate-800">
-                        <SecondaryButton type="button" onClick={() => setShowTransferModal(false)}>
-                            Cancel
-                        </SecondaryButton>
-                        <PrimaryButton type="submit" disabled={transferForm.processing} className="bg-indigo-600 hover:bg-indigo-700 text-white">
-                            Confirm Transfer
-                        </PrimaryButton>
-                    </div>
-                </form>
+                        <div className="mt-6 flex items-center justify-end gap-2.5 pt-4 border-t border-slate-100 dark:border-slate-800">
+                            <button
+                                type="button"
+                                onClick={() => setShowTransferModal(false)}
+                                className="px-4 py-2.5 text-xs font-bold text-slate-700 dark:text-slate-300 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 rounded-xl transition-colors"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                type="submit"
+                                disabled={transferForm.processing}
+                                className="px-5 py-2.5 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl shadow-md shadow-indigo-500/20 transition-all disabled:opacity-50"
+                            >
+                                {transferForm.processing ? 'Transferring...' : 'Confirm Transfer'}
+                            </button>
+                        </div>
+                    </form>
+                </div>
             </Modal>
 
             {/* Audit & Reconcile Modal */}
             <Modal show={showReconcileModal} onClose={() => setShowReconcileModal(false)} maxWidth="md">
-                <form onSubmit={handleReconcile} className="p-6 bg-white dark:bg-slate-900 rounded-2xl">
-                    <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-2 flex items-center gap-2">
-                        <Scale className="text-amber-500" size={20} /> Reconcile & Audit Balance
-                    </h3>
-                    <p className="text-xs text-slate-500 dark:text-slate-400 mb-4">
-                        Reconciling <strong className="text-slate-900 dark:text-white">{selectedAccountForAudit?.name}</strong>
-                    </p>
-
-                    <div className="p-3 bg-slate-50 dark:bg-slate-800 rounded-xl mb-4 text-xs space-y-1.5">
-                        <div className="flex justify-between">
-                            <span className="text-slate-500">Recorded System Balance:</span>
-                            <span className="font-bold text-slate-900 dark:text-white">
-                                UGX {Number(selectedAccountForAudit?.current_balance || 0).toLocaleString()}
-                            </span>
+                <div className="p-6 bg-white dark:bg-slate-900 rounded-2xl">
+                    <div className="flex items-center justify-between pb-4 border-b border-slate-100 dark:border-slate-800 mb-5">
+                        <div className="flex items-center gap-2.5">
+                            <div className="p-2 bg-amber-50 dark:bg-amber-950/60 rounded-xl text-amber-600 dark:text-amber-400">
+                                <Scale size={20} />
+                            </div>
+                            <div>
+                                <h3 className="text-base font-bold text-slate-900 dark:text-white">Reconcile & Audit Balance</h3>
+                                <p className="text-xs text-slate-500 dark:text-slate-400">
+                                    Auditing <strong className="text-slate-900 dark:text-white">{selectedAccountForAudit?.name}</strong>
+                                </p>
+                            </div>
                         </div>
+                        <button
+                            type="button"
+                            onClick={() => setShowReconcileModal(false)}
+                            className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                        >
+                            <X size={18} />
+                        </button>
                     </div>
 
-                    <div className="space-y-4">
-                        <div>
-                            <InputLabel value="Actual Physical / Phone Balance (UGX)" />
-                            <TextInput
-                                type="number"
-                                className="w-full text-sm font-black"
-                                value={reconcileForm.data.actual_balance}
-                                onChange={e => reconcileForm.setData('actual_balance', e.target.value)}
-                                required
-                            />
-                            <InputError message={reconcileForm.errors.actual_balance} />
+                    <form onSubmit={handleReconcile} className="space-y-4">
+                        <div className="p-3.5 bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700 rounded-xl text-xs space-y-1.5">
+                            <div className="flex justify-between items-center">
+                                <span className="text-slate-500 font-medium">Recorded System Balance:</span>
+                                <span className="font-bold text-slate-900 dark:text-white text-sm">
+                                    UGX {Number(selectedAccountForAudit?.current_balance || 0).toLocaleString()}
+                                </span>
+                            </div>
+                        </div>
+
+                        <div className="space-y-1.5">
+                            <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">
+                                Actual Physical / Phone SIM Balance *
+                            </label>
+                            <div className="relative">
+                                <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400">UGX</span>
+                                <input
+                                    type="number"
+                                    min="0"
+                                    step="100"
+                                    className="w-full pl-12 pr-3.5 py-2.5 text-base font-black text-slate-900 dark:text-white border border-slate-200 dark:border-slate-700 rounded-xl bg-slate-50 dark:bg-slate-800/80 focus:bg-white dark:focus:bg-slate-800 focus:border-amber-500 focus:ring-1 focus:ring-amber-500 shadow-sm transition-all"
+                                    value={reconcileForm.data.actual_balance}
+                                    onChange={e => reconcileForm.setData('actual_balance', e.target.value)}
+                                    required
+                                />
+                            </div>
+                            {reconcileForm.errors.actual_balance && <p className="text-xs text-rose-500 font-bold">{reconcileForm.errors.actual_balance}</p>}
                         </div>
 
                         {reconcileForm.data.actual_balance !== '' && (
-                            <div className="text-xs font-bold p-2.5 rounded-xl border bg-slate-50 dark:bg-slate-800/50 flex justify-between items-center">
-                                <span>Variance / Discrepancy:</span>
+                            <div className="text-xs font-bold p-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 flex justify-between items-center">
+                                <span className="text-slate-600 dark:text-slate-400">Variance / Discrepancy:</span>
                                 <span className={
                                     (Number(reconcileForm.data.actual_balance) - (selectedAccountForAudit?.current_balance || 0)) >= 0
-                                        ? 'text-emerald-600 font-black'
-                                        : 'text-rose-600 font-black'
+                                        ? 'text-emerald-600 dark:text-emerald-400 font-black'
+                                        : 'text-rose-600 dark:text-rose-400 font-black'
                                 }>
                                     {((Number(reconcileForm.data.actual_balance) - (selectedAccountForAudit?.current_balance || 0)) >= 0 ? '+' : '')}
                                     UGX {(Number(reconcileForm.data.actual_balance) - (selectedAccountForAudit?.current_balance || 0)).toLocaleString()}
@@ -714,26 +814,37 @@ export default function AccountsIndex({ accounts, metrics, transactions, filters
                             </div>
                         )}
 
-                        <div>
-                            <InputLabel value="Audit Explanation / Reason" />
-                            <TextInput
-                                className="w-full text-xs"
+                        <div className="space-y-1.5">
+                            <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">
+                                Audit Explanation / Reason
+                            </label>
+                            <input
+                                type="text"
+                                className="w-full px-3.5 py-2.5 text-sm font-semibold rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/80 text-slate-900 dark:text-white placeholder-slate-400 focus:bg-white dark:focus:bg-slate-800 focus:border-amber-500 focus:ring-1 focus:ring-amber-500 transition-all shadow-sm"
                                 placeholder="e.g. End of month physical cash count variance"
                                 value={reconcileForm.data.reason}
                                 onChange={e => reconcileForm.setData('reason', e.target.value)}
                             />
                         </div>
-                    </div>
 
-                    <div className="mt-6 flex items-center justify-end gap-3 pt-4 border-t border-slate-100 dark:border-slate-800">
-                        <SecondaryButton type="button" onClick={() => setShowReconcileModal(false)}>
-                            Cancel
-                        </SecondaryButton>
-                        <PrimaryButton type="submit" disabled={reconcileForm.processing} className="bg-amber-600 hover:bg-amber-700 text-white">
-                            Save Reconciliation
-                        </PrimaryButton>
-                    </div>
-                </form>
+                        <div className="mt-6 flex items-center justify-end gap-2.5 pt-4 border-t border-slate-100 dark:border-slate-800">
+                            <button
+                                type="button"
+                                onClick={() => setShowReconcileModal(false)}
+                                className="px-4 py-2.5 text-xs font-bold text-slate-700 dark:text-slate-300 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 rounded-xl transition-colors"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                type="submit"
+                                disabled={reconcileForm.processing}
+                                className="px-5 py-2.5 text-xs font-bold text-white bg-amber-600 hover:bg-amber-700 rounded-xl shadow-md shadow-amber-500/20 transition-all disabled:opacity-50"
+                            >
+                                {reconcileForm.processing ? 'Saving...' : 'Save Reconciliation'}
+                            </button>
+                        </div>
+                    </form>
+                </div>
             </Modal>
         </AuthenticatedLayout>
     );
