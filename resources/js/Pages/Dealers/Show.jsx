@@ -73,11 +73,15 @@ export default function Show({ dealer, metrics, settings, monthlyTrends = [], an
     // Statement Modal States
     const [showStatementModal, setShowStatementModal] = useState(false);
     const [statementFilter, setStatementFilter] = useState('all');
+    const [statementDirection, setStatementDirection] = useState('all'); // 'all', 'inward', 'outward'
     const [statementStartDate, setStatementStartDate] = useState('');
     const [statementEndDate, setStatementEndDate] = useState('');
 
+    // Settlement Success Modal State
+    const [settledSuccessItem, setSettledSuccessItem] = useState(null);
+
     const handleGenerateStatement = (mode = 'download') => {
-        let url = route('dealers.statement', dealer.id) + `?status=${statementFilter}&mode=${mode}`;
+        let url = route('dealers.statement', dealer.id) + `?status=${statementFilter}&direction=${statementDirection}&mode=${mode}`;
         if (statementStartDate) url += `&start_date=${statementStartDate}`;
         if (statementEndDate) url += `&end_date=${statementEndDate}`;
         window.open(url, '_blank');
@@ -228,9 +232,11 @@ export default function Show({ dealer, metrics, settings, monthlyTrends = [], an
 
     const submitSettle = (e) => {
         e.preventDefault();
+        const currentItem = settleItem;
         postSettle(route('dealers.settle', settleItem.id), {
             onSuccess: () => {
                 closeSettleModal();
+                setSettledSuccessItem(currentItem);
             }
         });
     };
@@ -580,9 +586,20 @@ export default function Show({ dealer, metrics, settings, monthlyTrends = [], an
                                                 {item.direction === 'inward' && item.status === 'Sold' && (
                                                     <>
                                                         {item.settlement_status === 'Settled' ? (
-                                                            <span className="px-2.5 py-1 bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 rounded-lg text-xs font-bold flex items-center gap-1">
-                                                                <CheckCircle size={13} /> Settled
-                                                            </span>
+                                                            <div className="flex items-center gap-1.5">
+                                                                <span className="px-2 py-1 bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 rounded-lg text-xs font-bold flex items-center gap-1">
+                                                                    <CheckCircle size={13} /> Settled
+                                                                </span>
+                                                                <a
+                                                                    href={`/dealers/items/${item.id}/voucher?mode=stream`}
+                                                                    target="_blank"
+                                                                    rel="noreferrer"
+                                                                    className="px-2.5 py-1 bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950/50 dark:hover:bg-indigo-900 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 rounded-lg text-xs font-bold flex items-center gap-1 transition-colors"
+                                                                    title="View / Print Official Payout Voucher (PDF)"
+                                                                >
+                                                                    <FileText size={13} /> Voucher
+                                                                </a>
+                                                            </div>
                                                         ) : (
                                                             <button 
                                                                 onClick={() => openSettleModal(item)}
@@ -1342,7 +1359,34 @@ export default function Show({ dealer, metrics, settings, monthlyTrends = [], an
 
                     <div className="space-y-5">
                         <div>
-                            <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-2">Statement Type / Item Filter</label>
+                            <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-2">Deal Direction / Portfolio</label>
+                            <div className="grid grid-cols-3 gap-2">
+                                <button
+                                    type="button"
+                                    onClick={() => setStatementDirection('all')}
+                                    className={`p-2.5 rounded-xl border text-xs font-bold text-center transition-all ${statementDirection === 'all' ? 'border-indigo-600 bg-indigo-50/80 dark:bg-indigo-950/70 text-indigo-700 dark:text-indigo-300 ring-2 ring-indigo-500/20' : 'border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300'}`}
+                                >
+                                    All Deals
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => setStatementDirection('inward')}
+                                    className={`p-2.5 rounded-xl border text-xs font-bold text-center transition-all ${statementDirection === 'inward' ? 'border-purple-600 bg-purple-50/80 dark:bg-purple-950/70 text-purple-700 dark:text-purple-300 ring-2 ring-purple-500/20' : 'border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300'}`}
+                                >
+                                    Inward Sourced
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => setStatementDirection('outward')}
+                                    className={`p-2.5 rounded-xl border text-xs font-bold text-center transition-all ${statementDirection === 'outward' ? 'border-amber-600 bg-amber-50/80 dark:bg-amber-950/70 text-amber-800 dark:text-amber-300 ring-2 ring-amber-500/20' : 'border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300'}`}
+                                >
+                                    Outward Issued
+                                </button>
+                            </div>
+                        </div>
+
+                        <div>
+                            <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-2">Item Status Filter</label>
                             <div className="grid grid-cols-2 gap-2">
                                 <button
                                     type="button"
@@ -1358,7 +1402,7 @@ export default function Show({ dealer, metrics, settings, monthlyTrends = [], an
                                     className={`p-3 rounded-xl border text-xs font-bold text-left transition-all ${statementFilter === 'pending' ? 'border-amber-500 dark:border-amber-500 bg-amber-50/80 dark:bg-amber-950/70 text-amber-800 dark:text-amber-300 ring-2 ring-amber-500/20' : 'border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700 text-slate-700 dark:text-slate-300 bg-white dark:bg-slate-900'}`}
                                 >
                                     <div className="font-bold text-sm">Outstanding Only</div>
-                                    <div className="text-[10px] text-slate-500 dark:text-slate-400 font-normal mt-0.5">Items currently out ({metrics.still_out})</div>
+                                    <div className="text-[10px] text-slate-500 dark:text-slate-400 font-normal mt-0.5">Unsold / currently held items</div>
                                 </button>
                                 <button
                                     type="button"
@@ -1366,7 +1410,7 @@ export default function Show({ dealer, metrics, settings, monthlyTrends = [], an
                                     className={`p-3 rounded-xl border text-xs font-bold text-left transition-all ${statementFilter === 'sold' ? 'border-emerald-600 dark:border-emerald-500 bg-emerald-50/80 dark:bg-emerald-950/70 text-emerald-700 dark:text-emerald-300 ring-2 ring-emerald-500/20' : 'border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700 text-slate-700 dark:text-slate-300 bg-white dark:bg-slate-900'}`}
                                 >
                                     <div className="font-bold text-sm">Sold Items</div>
-                                    <div className="text-[10px] text-slate-500 dark:text-slate-400 font-normal mt-0.5">Settled dealer sales only</div>
+                                    <div className="text-[10px] text-slate-500 dark:text-slate-400 font-normal mt-0.5">Settled & sold dealer items</div>
                                 </button>
                                 <button
                                     type="button"
@@ -1422,6 +1466,54 @@ export default function Show({ dealer, metrics, settings, monthlyTrends = [], an
                                 <Download size={15} /> Download PDF
                             </button>
                         </div>
+                    </div>
+                </div>
+            </Modal>
+
+            {/* Instant Settlement Success & Payout Voucher Modal */}
+            <Modal show={!!settledSuccessItem} onClose={() => setSettledSuccessItem(null)} maxWidth="md">
+                <div className="p-6 bg-white dark:bg-slate-900 rounded-2xl text-center">
+                    <div className="w-16 h-16 rounded-3xl bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 flex items-center justify-center mx-auto mb-4 shadow-lg shadow-emerald-500/20 ring-4 ring-emerald-500/10">
+                        <CheckCircle size={36} />
+                    </div>
+                    <h3 className="text-xl font-black text-slate-900 dark:text-white mb-1">
+                        Dealer Settlement Recorded!
+                    </h3>
+                    <p className="text-xs text-slate-500 dark:text-slate-400 mb-6 max-w-sm mx-auto">
+                        Payment of <strong className="text-slate-900 dark:text-white">UGX {Number(settledSuccessItem?.settlement_amount || settledSuccessItem?.wholesale_cost || settledSuccessItem?.dealer_price || 0).toLocaleString()}</strong> has been recorded and expensed in your cashier shift.
+                    </p>
+
+                    <div className="bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700/80 rounded-xl p-3.5 mb-6 text-left text-xs space-y-1.5">
+                        <div className="flex justify-between">
+                            <span className="text-slate-500">Dealer:</span>
+                            <span className="font-bold text-slate-900 dark:text-white">{dealer.name}</span>
+                        </div>
+                        <div className="flex justify-between">
+                            <span className="text-slate-500">Device / Item:</span>
+                            <span className="font-bold text-slate-900 dark:text-white">
+                                {settledSuccessItem?.device_imei?.product?.brand?.name || ''} {settledSuccessItem?.device_imei?.product?.model_name || settledSuccessItem?.product?.model_name}
+                            </span>
+                        </div>
+                        {settledSuccessItem?.device_imei?.imei_number && (
+                            <div className="flex justify-between">
+                                <span className="text-slate-500">IMEI:</span>
+                                <span className="font-mono font-semibold text-indigo-600 dark:text-indigo-400">{settledSuccessItem.device_imei.imei_number}</span>
+                            </div>
+                        )}
+                    </div>
+
+                    <div className="flex items-center justify-center gap-3">
+                        <Button variant="secondary" onClick={() => setSettledSuccessItem(null)}>
+                            Close
+                        </Button>
+                        <a
+                            href={`/dealers/items/${settledSuccessItem?.id}/voucher?mode=stream`}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl transition-all shadow-md shadow-emerald-500/20 flex items-center gap-2"
+                        >
+                            <FileText size={16} /> Print Payout Voucher
+                        </a>
                     </div>
                 </div>
             </Modal>

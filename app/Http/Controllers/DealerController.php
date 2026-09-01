@@ -832,12 +832,21 @@ class DealerController extends Controller
     public function generateStatement(Dealer $dealer, Request $request)
     {
         $status = $request->query('status', 'all'); // 'all', 'pending', 'sold', 'returned'
+        $direction = $request->query('direction', 'all'); // 'all', 'inward', 'outward'
         $startDate = $request->query('start_date');
         $endDate = $request->query('end_date');
         $outputMode = $request->query('mode', 'download'); // 'download' or 'stream'
 
         $query = $dealer->dealerItems()
             ->with(['deviceImei.product.brand', 'product.brand', 'user', 'sale']);
+
+        if ($direction !== 'all') {
+            if ($direction === 'inward') {
+                $query->where('direction', 'inward');
+            } else {
+                $query->where('direction', '!=', 'inward');
+            }
+        }
 
         if ($status !== 'all') {
             if ($status === 'pending') {
@@ -850,47 +859,45 @@ class DealerController extends Controller
         }
 
         if ($startDate) {
-            $query->whereDate('issued_at', '>=', $startDate);
+            $query->whereDate('created_at', '>=', $startDate);
         }
 
         if ($endDate) {
-            $query->whereDate('issued_at', '<=', $endDate);
+            $query->whereDate('created_at', '<=', $endDate);
         }
 
-        $items = $query->orderBy('issued_at', 'desc')->get();
+        $items = $query->orderBy('created_at', 'desc')->get();
 
-        // Calculate summary for statement
-        $totalItemsTaken = $dealer->dealerItems()->sum('quantity');
-        $totalItemsSold = $dealer->dealerItems()->sum('quantity_sold');
-        $totalItemsReturned = $dealer->dealerItems()->sum('quantity_returned');
-        
-        $pendingItemsQuery = $dealer->dealerItems()->where('status', 'Pending');
-        $currentlyOutCount = $pendingItemsQuery->sum(DB::raw('quantity - quantity_sold - quantity_returned'));
-        $outstandingBalance = $pendingItemsQuery->sum(DB::raw('dealer_price * (quantity - quantity_sold - quantity_returned)'));
-        
-        $settledSalesValue = $dealer->dealerItems()->where('status', 'Sold')->sum(DB::raw('dealer_price * quantity_sold'));
+        // Inward Consignments Summary
+        $inwardTotalCount = $dealer->dealerItems()->where('direction', 'inward')->count();
+        $inwardPendingCount = $dealer->dealerItems()->where('direction', 'inward')->where('status', 'Pending')->count();
+        $inwardSoldCount = $dealer->dealerItems()->where('direction', 'inward')->where('status', 'Sold')->count();
+        $inwardSettledAmount = (float) $dealer->dealerItems()->where('direction', 'inward')->where('settlement_status', 'Settled')->sum('settlement_amount');
+        $inwardOwedAmount = (float) $dealer->dealerItems()->where('direction', 'inward')
+            ->where('status', 'Sold')
+            ->where('settlement_status', '!=', 'Settled')
+            ->sum(DB::raw('COALESCE(wholesale_cost, dealer_price, 0)'));
 
-        $overdueCount = $dealer->dealerItems()
+        // Outward Consignments Summary
+        $outwardTotalCount = $dealer->dealerItems()->where('direction', '!=', 'inward')->sum('quantity');
+        $outwardSoldCount = $dealer->dealerItems()->where('direction', '!=', 'inward')->sum('quantity_sold');
+        $outwardReturnedCount = $dealer->dealerItems()->where('direction', '!=', 'inward')->sum('quantity_returned');
+        $outwardPendingCount = $dealer->dealerItems()->where('direction', '!=', 'inward')->where('status', 'Pending')->sum(DB::raw('quantity - quantity_sold - quantity_returned'));
+        $outwardReceivableAmount = (float) $dealer->dealerItems()->where('direction', '!=', 'inward')
             ->where('status', 'Pending')
-            ->whereNotNull('expected_return_date')
-            ->where('expected_return_date', '<', Carbon::today())
-            ->count();
-            
-        $overdueValue = $dealer->dealerItems()
-            ->where('status', 'Pending')
-            ->whereNotNull('expected_return_date')
-            ->where('expected_return_date', '<', Carbon::today())
             ->sum(DB::raw('dealer_price * (quantity - quantity_sold - quantity_returned)'));
 
         $summary = [
-            'total_items_taken' => $totalItemsTaken,
-            'total_items_sold' => $totalItemsSold,
-            'total_items_returned' => $totalItemsReturned,
-            'currently_out_count' => $currentlyOutCount,
-            'outstanding_balance' => $outstandingBalance,
-            'settled_sales_value' => $settledSalesValue,
-            'overdue_count' => $overdueCount,
-            'overdue_value' => $overdueValue,
+            'inward_total_count' => $inwardTotalCount,
+            'inward_pending_count' => $inwardPendingCount,
+            'inward_sold_count' => $inwardSoldCount,
+            'inward_settled_amount' => $inwardSettledAmount,
+            'inward_owed_amount' => $inwardOwedAmount,
+            'outward_total_count' => $outwardTotalCount,
+            'outward_sold_count' => $outwardSoldCount,
+            'outward_returned_count' => $outwardReturnedCount,
+            'outward_pending_count' => $outwardPendingCount,
+            'outward_receivable_amount' => $outwardReceivableAmount,
         ];
 
         $settings = [
@@ -903,7 +910,7 @@ class DealerController extends Controller
         ];
 
         $pdf = Pdf::loadView('pdf.dealer_statement', compact(
-            'dealer', 'items', 'summary', 'settings', 'status', 'startDate', 'endDate'
+            'dealer', 'items', 'summary', 'settings', 'status', 'direction', 'startDate', 'endDate'
         ))->setPaper('a4', 'portrait');
 
         $filename = 'dealer-statement-' . \Str::slug($dealer->name) . '-' . now()->format('Ymd') . '.pdf';
@@ -913,5 +920,31 @@ class DealerController extends Controller
         }
 
         return $pdf->download($filename);
+    }
+
+    public function generatePayoutVoucher(DealerItem $item, Request $request)
+    {
+        $item->load(['dealer', 'deviceImei.product.brand', 'product.brand', 'user']);
+        $outputMode = $request->query('mode', 'stream');
+
+        $settings = [
+            'shop_name' => \App\Models\Setting::get('shop_name', 'SmartPOS Kampala'),
+            'store_logo' => \App\Models\Setting::getLogoUrl(),
+            'shop_address' => \App\Models\Setting::get('shop_address', '123 Kampala Road, Kampala'),
+            'shop_phone' => \App\Models\Setting::get('shop_phone', '+256 700 000 000'),
+            'shop_email' => \App\Models\Setting::get('shop_email', 'info@smartpos.com'),
+            'currency_symbol' => \App\Models\Setting::get('currency_symbol', 'UGX'),
+        ];
+
+        $pdf = Pdf::loadView('pdf.dealer_payout_voucher', compact('item', 'settings'))
+            ->setPaper('a4', 'portrait');
+
+        $filename = 'payout-voucher-VCH-' . str_pad($item->id, 5, '0', STR_PAD_LEFT) . '-' . now()->format('Ymd') . '.pdf';
+
+        if ($outputMode === 'download') {
+            return $pdf->download($filename);
+        }
+
+        return $pdf->stream($filename);
     }
 }
