@@ -205,6 +205,35 @@ class ReportController extends Controller
         $inStockCount = DeviceImei::where('status', 'In Stock')->count() + Product::where('type', 'bulk')->where('quantity', '>', 0)->sum('quantity');
         $defectiveCount = DeviceImei::where('status', 'Defective')->count();
 
+        // Consignments Breakdown in Period
+        $inwardReceivedCount = \App\Models\DealerItem::where('direction', 'inward')->where('created_at', '>=', $startDate)->count();
+        $inwardSoldCount = \App\Models\DealerItem::where('direction', 'inward')->where('status', 'Sold')->where('sold_at', '>=', $startDate)->count();
+        $inwardSettledAmount = (float) \App\Models\DealerItem::where('direction', 'inward')->where('settlement_status', 'Settled')->where('settled_at', '>=', $startDate)->sum('settlement_amount');
+        $unsettledOwedAmount = (float) \App\Models\DealerItem::where('direction', 'inward')->where('status', 'Sold')->where('settlement_status', '!=', 'Settled')->sum(DB::raw('COALESCE(wholesale_cost, dealer_price, 0)'));
+        $consignmentGrossRevenue = (float) \App\Models\DealerItem::where('direction', 'inward')->where('status', 'Sold')->where('sold_at', '>=', $startDate)->sum('retail_price');
+        $consignmentWholesaleCost = (float) \App\Models\DealerItem::where('direction', 'inward')->where('status', 'Sold')->where('sold_at', '>=', $startDate)->sum(DB::raw('COALESCE(wholesale_cost, dealer_price, 0)'));
+        $consignmentNetProfit = max(0, $consignmentGrossRevenue - $consignmentWholesaleCost);
+        $outwardIssuedCount = \App\Models\DealerItem::where('direction', '!=', 'inward')->where('created_at', '>=', $startDate)->count();
+        $outwardSoldCount = \App\Models\DealerItem::where('direction', '!=', 'inward')->where('status', 'Sold')->where('sold_at', '>=', $startDate)->count();
+
+        // Layaways Breakdown in Period
+        $newLayawaysCount = \App\Models\Layaway::where('created_at', '>=', $startDate)->count();
+        $completedLayawaysCount = \App\Models\Layaway::where('status', 'completed')->where('completed_at', '>=', $startDate)->count();
+        $activeLayawaysCount = \App\Models\Layaway::where('status', 'active')->count();
+        $totalLayawayReceivable = (float) \App\Models\Layaway::where('status', 'active')->sum('remaining_balance');
+        $layawayCollectedInPeriod = (float) \App\Models\LayawayPayment::where('payment_date', '>=', $startDate)->sum('amount_paid');
+
+        // Expense & Payout Categories Breakdown in Period
+        $totalExpensesInPeriod = (float) \App\Models\Expense::where('expense_date', '>=', $startDate)->sum('amount');
+        $expenseCategories = \App\Models\Expense::where('expense_date', '>=', $startDate)
+            ->select('category as name', DB::raw('sum(amount) as value'))
+            ->groupBy('category')
+            ->orderByDesc('value')
+            ->get();
+
+        // Repairs Breakdown in Period
+        $repairsLogged = Repair::where('created_at', '>=', $startDate)->count();
+
         return Inertia::render('Reports/Index', [
             'period' => $period,
             'metrics' => [
@@ -222,6 +251,33 @@ class ReportController extends Controller
                 'potentialProfit' => $potentialProfit,
                 'inStockCount' => $inStockCount,
                 'defectiveCount' => $defectiveCount,
+            ],
+            'consignments' => [
+                'inwardReceived' => $inwardReceivedCount,
+                'inwardSold' => $inwardSoldCount,
+                'settledPayouts' => $inwardSettledAmount,
+                'unsettledOwed' => $unsettledOwedAmount,
+                'grossRevenue' => $consignmentGrossRevenue,
+                'wholesaleCost' => $consignmentWholesaleCost,
+                'netProfit' => $consignmentNetProfit,
+                'outwardIssued' => $outwardIssuedCount,
+                'outwardSold' => $outwardSoldCount,
+            ],
+            'layaways' => [
+                'newPlans' => $newLayawaysCount,
+                'completedPlans' => $completedLayawaysCount,
+                'activePlans' => $activeLayawaysCount,
+                'totalReceivable' => $totalLayawayReceivable,
+                'collected' => $layawayCollectedInPeriod,
+            ],
+            'expenses' => [
+                'total' => $totalExpensesInPeriod,
+                'categories' => $expenseCategories,
+            ],
+            'repairs' => [
+                'logged' => $repairsLogged,
+                'completed' => $repairsCompleted,
+                'revenue' => $repairRevenue,
             ],
             'topBrands' => $topBrands,
             'topCategories' => $topCategories,

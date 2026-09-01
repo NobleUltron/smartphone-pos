@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Head, Link } from '@inertiajs/react';
 import axios from 'axios';
-import { TrendingUp, Smartphone, AlertTriangle, Sparkles, User, Banknote, PieChart as PieChartIcon, Minimize2, Maximize2, Trash2, Send, Bot, Clock, ArrowRight, ShoppingCart, Settings } from 'lucide-react';
+import { TrendingUp, Smartphone, AlertTriangle, Sparkles, User, Banknote, PieChart as PieChartIcon, Minimize2, Maximize2, Trash2, Send, Bot, Clock, ArrowRight, ShoppingCart, Settings, Handshake, Layers, DollarSign, Wrench, Wallet, ArrowUpRight } from 'lucide-react';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Sector } from 'recharts';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import Card from '@/Components/SaaS/Card';
@@ -10,7 +10,23 @@ import Button from '@/Components/SaaS/Button';
 import PageHeader from '@/Components/SaaS/PageHeader';
 import AiSalesAnalytics from '@/Components/SaaS/AiSalesAnalytics';
 
-export default function Dashboard({ auth, todaySales = 0, inStockCount = 0, scrappedCount = 0, lowStockCount = 0, activeRepairsCount = 0, completedRepairsToday = 0, salesData = [], recentSales = [], inventoryValue = 0, topBrands = [] }) {
+export default function Dashboard({ 
+    auth, 
+    todaySales = 0, 
+    inStockCount = 0, 
+    scrappedCount = 0, 
+    lowStockCount = 0, 
+    activeRepairsCount = 0, 
+    completedRepairsToday = 0, 
+    salesData = [], 
+    recentSales = [], 
+    inventoryValue = 0, 
+    topBrands = [],
+    dealerMetrics = {},
+    layawayMetrics = {},
+    repairMetrics = {},
+    shiftMetrics = {}
+}) {
     const COLORS = ['#F43F5E', '#1E293B', '#38BDF8', '#8B5CF6', '#10B981'];
     
     const [messages, setMessages] = useState([
@@ -319,6 +335,170 @@ export default function Dashboard({ auth, todaySales = 0, inStockCount = 0, scra
                     </div>
                     <Sparkles className="absolute -right-4 -bottom-6 w-32 h-32 text-indigo-500/5 -rotate-12 pointer-events-none group-hover:scale-110 transition-transform" />
                 </Card>
+            </div>
+
+            {/* Operational Portfolios & Working Capital Grid */}
+            <div className="mb-8">
+                <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                        <Layers size={18} className="text-indigo-500" />
+                        Consignments, Layaways & Working Capital
+                    </h3>
+                    <span className="text-xs text-slate-500 dark:text-slate-400 font-medium">Real-time balances & receivables</span>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-5">
+                    {/* Dealer Consignments */}
+                    <Card className="relative overflow-hidden group hover:border-purple-500/40 transition-all">
+                        <div className="flex justify-between items-start mb-3">
+                            <div>
+                                <span className="text-[11px] font-bold text-purple-600 dark:text-purple-400 uppercase tracking-wider block mb-1">
+                                    Dealer Consignments
+                                </span>
+                                <h4 className="text-2xl font-black text-slate-900 dark:text-white">
+                                    {dealerMetrics?.owedAmount > 0 ? (
+                                        <span className="text-rose-600">UGX {Number(dealerMetrics.owedAmount).toLocaleString()}</span>
+                                    ) : (
+                                        <span>UGX 0</span>
+                                    )}
+                                </h4>
+                                <span className="text-xs text-slate-500 font-medium block">Wholesale Payouts Owed</span>
+                            </div>
+                            <div className="w-10 h-10 rounded-xl bg-purple-50 dark:bg-purple-950/50 text-purple-600 dark:text-purple-300 flex items-center justify-center shadow-sm">
+                                <Handshake size={20} />
+                            </div>
+                        </div>
+
+                        <div className="mt-4 pt-3 border-t border-slate-100 dark:border-slate-800/80 flex items-center justify-between text-xs">
+                            <div className="space-y-1">
+                                <div className="text-slate-600 dark:text-slate-300">
+                                    <span className="font-bold text-slate-900 dark:text-white">{dealerMetrics?.pendingInwardCount || 0}</span> Consigned in shop
+                                </div>
+                                <div className="text-slate-500">
+                                    <span className="font-bold text-slate-800 dark:text-slate-200">{dealerMetrics?.outwardPendingCount || 0}</span> with Partners
+                                    {dealerMetrics?.outwardOverdueCount > 0 && (
+                                        <span className="text-rose-600 font-bold ml-1">({dealerMetrics.outwardOverdueCount} Overdue)</span>
+                                    )}
+                                </div>
+                            </div>
+                            <Link 
+                                href="/dealers/dashboard" 
+                                className="p-1.5 bg-purple-50 hover:bg-purple-100 dark:bg-purple-950/40 dark:hover:bg-purple-900/60 text-purple-700 dark:text-purple-300 rounded-lg transition-colors"
+                                title="View Dealer Consignments"
+                            >
+                                <ArrowUpRight size={16} />
+                            </Link>
+                        </div>
+                    </Card>
+
+                    {/* Layaway Receivables */}
+                    <Card className="relative overflow-hidden group hover:border-emerald-500/40 transition-all">
+                        <div className="flex justify-between items-start mb-3">
+                            <div>
+                                <span className="text-[11px] font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider block mb-1">
+                                    Layaway Plans
+                                </span>
+                                <h4 className="text-2xl font-black text-slate-900 dark:text-white">
+                                    UGX {Number(layawayMetrics?.totalReceivable || 0).toLocaleString()}
+                                </h4>
+                                <span className="text-xs text-slate-500 font-medium block">Uncollected Receivables</span>
+                            </div>
+                            <div className="w-10 h-10 rounded-xl bg-emerald-50 dark:bg-emerald-950/50 text-emerald-600 dark:text-emerald-300 flex items-center justify-center shadow-sm">
+                                <Wallet size={20} />
+                            </div>
+                        </div>
+
+                        <div className="mt-4 pt-3 border-t border-slate-100 dark:border-slate-800/80 flex items-center justify-between text-xs">
+                            <div className="space-y-1">
+                                <div className="text-slate-600 dark:text-slate-300">
+                                    <span className="font-bold text-slate-900 dark:text-white">{layawayMetrics?.activeCount || 0}</span> Active Customer Plans
+                                </div>
+                                <div className="text-emerald-600 font-semibold">
+                                    +UGX {Number(layawayMetrics?.todayCollections || 0).toLocaleString()} Paid Today
+                                </div>
+                            </div>
+                            <Link 
+                                href="/layaways" 
+                                className="p-1.5 bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/40 dark:hover:bg-emerald-900/60 text-emerald-700 dark:text-emerald-300 rounded-lg transition-colors"
+                                title="View Layaway Plans"
+                            >
+                                <ArrowUpRight size={16} />
+                            </Link>
+                        </div>
+                    </Card>
+
+                    {/* Repairs & Services */}
+                    <Card className="relative overflow-hidden group hover:border-amber-500/40 transition-all">
+                        <div className="flex justify-between items-start mb-3">
+                            <div>
+                                <span className="text-[11px] font-bold text-amber-600 dark:text-amber-400 uppercase tracking-wider block mb-1">
+                                    Repairs & Workshop
+                                </span>
+                                <h4 className="text-2xl font-black text-slate-900 dark:text-white">
+                                    {repairMetrics?.activeCount || 0} <span className="text-sm font-semibold text-slate-500">Tickets</span>
+                                </h4>
+                                <span className="text-xs text-slate-500 font-medium block">In Queue / Diagnosing</span>
+                            </div>
+                            <div className="w-10 h-10 rounded-xl bg-amber-50 dark:bg-amber-950/50 text-amber-600 dark:text-amber-300 flex items-center justify-center shadow-sm">
+                                <Wrench size={20} />
+                            </div>
+                        </div>
+
+                        <div className="mt-4 pt-3 border-t border-slate-100 dark:border-slate-800/80 flex items-center justify-between text-xs">
+                            <div className="space-y-1">
+                                <div className="text-slate-600 dark:text-slate-300">
+                                    <span className="font-bold text-slate-900 dark:text-white">{repairMetrics?.completedToday || 0}</span> Finished Today
+                                </div>
+                                <div className="text-indigo-600 dark:text-indigo-400 font-semibold">
+                                    +UGX {Number(repairMetrics?.todayRevenue || 0).toLocaleString()} Collected Today
+                                </div>
+                            </div>
+                            <Link 
+                                href="/repairs" 
+                                className="p-1.5 bg-amber-50 hover:bg-amber-100 dark:bg-amber-950/40 dark:hover:bg-amber-900/60 text-amber-700 dark:text-amber-300 rounded-lg transition-colors"
+                                title="View Repairs Workshop"
+                            >
+                                <ArrowUpRight size={16} />
+                            </Link>
+                        </div>
+                    </Card>
+
+                    {/* Cash Drawer & Till Shifts */}
+                    <Card className="relative overflow-hidden group hover:border-cyan-500/40 transition-all">
+                        <div className="flex justify-between items-start mb-3">
+                            <div>
+                                <span className="text-[11px] font-bold text-cyan-600 dark:text-cyan-400 uppercase tracking-wider block mb-1">
+                                    Till Shifts & Expenses
+                                </span>
+                                <h4 className="text-2xl font-black text-slate-900 dark:text-white">
+                                    {shiftMetrics?.activeDrawersCount || 0} <span className="text-sm font-semibold text-slate-500">Open Shift(s)</span>
+                                </h4>
+                                <span className="text-xs text-slate-500 font-medium block">Active Cash Registers</span>
+                            </div>
+                            <div className="w-10 h-10 rounded-xl bg-cyan-50 dark:bg-cyan-950/50 text-cyan-600 dark:text-cyan-300 flex items-center justify-center shadow-sm">
+                                <Banknote size={20} />
+                            </div>
+                        </div>
+
+                        <div className="mt-4 pt-3 border-t border-slate-100 dark:border-slate-800/80 flex items-center justify-between text-xs">
+                            <div className="space-y-1">
+                                <div className="text-slate-600 dark:text-slate-300">
+                                    Expenses Today: <span className="font-bold text-rose-600">UGX {Number(shiftMetrics?.todayExpenses || 0).toLocaleString()}</span>
+                                </div>
+                                <div className="text-emerald-600 font-semibold flex items-center gap-1">
+                                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span> Live Register Audited
+                                </div>
+                            </div>
+                            <Link 
+                                href="/cash-drawer" 
+                                className="p-1.5 bg-cyan-50 hover:bg-cyan-100 dark:bg-cyan-950/40 dark:hover:bg-cyan-900/60 text-cyan-700 dark:text-cyan-300 rounded-lg transition-colors"
+                                title="View Cash Drawer Shifts"
+                            >
+                                <ArrowUpRight size={16} />
+                            </Link>
+                        </div>
+                    </Card>
+                </div>
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">

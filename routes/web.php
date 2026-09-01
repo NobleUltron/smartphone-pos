@@ -125,6 +125,31 @@ Route::get('/dashboard', function () {
         ->limit(5)
         ->get();
 
+    $dealerPendingInwardCount = \App\Models\DealerItem::where('direction', 'inward')->where('status', 'Pending')->count();
+    $dealerOwedAmount = (float) \App\Models\DealerItem::where('direction', 'inward')
+        ->where('status', 'Sold')
+        ->where('settlement_status', '!=', 'Settled')
+        ->sum(\Illuminate\Support\Facades\DB::raw('COALESCE(wholesale_cost, dealer_price, 0)'));
+    $dealerOutwardPendingCount = \App\Models\DealerItem::where('direction', '!=', 'inward')->where('status', 'Pending')->count();
+    $dealerOutwardOverdueCount = \App\Models\DealerItem::where('direction', '!=', 'inward')
+        ->where('status', 'Pending')
+        ->where('expected_return_date', '<', Carbon::today())
+        ->count();
+
+    $activeLayawaysCount = \App\Models\Layaway::where('status', 'active')->count();
+    $totalLayawayReceivable = (float) \App\Models\Layaway::where('status', 'active')->sum('remaining_balance');
+
+    $todayRepairRevenue = (float) \App\Models\LayawayPayment::whereHas('sale', function ($q) {
+            $q->whereNotNull('repair_id');
+        })
+        ->whereDate('payment_date', Carbon::today())
+        ->sum('amount_paid');
+
+    $activeDrawersCount = \App\Models\CashDrawer::where('status', 'open')->count();
+    $todayExpenses = (float) \App\Models\Expense::whereDate('expense_date', Carbon::today())
+        ->whereNotIn('category', ['Refund', 'Refund (Past Shift)'])
+        ->sum('amount');
+
     return Inertia::render('Dashboard', [
         'todaySales' => $todaySales,
         'inStockCount' => $inStockCount,
@@ -135,7 +160,27 @@ Route::get('/dashboard', function () {
         'salesData' => $salesData,
         'recentSales' => $recentSales,
         'inventoryValue' => $inventoryValue,
-        'topBrands' => $topBrands
+        'topBrands' => $topBrands,
+        'dealerMetrics' => [
+            'pendingInwardCount' => $dealerPendingInwardCount,
+            'owedAmount' => $dealerOwedAmount,
+            'outwardPendingCount' => $dealerOutwardPendingCount,
+            'outwardOverdueCount' => $dealerOutwardOverdueCount,
+        ],
+        'layawayMetrics' => [
+            'activeCount' => $activeLayawaysCount,
+            'totalReceivable' => $totalLayawayReceivable,
+            'todayCollections' => (float) $todayLayawayPayments,
+        ],
+        'repairMetrics' => [
+            'activeCount' => $activeRepairsCount,
+            'completedToday' => $completedRepairsToday,
+            'todayRevenue' => $todayRepairRevenue,
+        ],
+        'shiftMetrics' => [
+            'activeDrawersCount' => $activeDrawersCount,
+            'todayExpenses' => $todayExpenses,
+        ],
     ]);
 })->middleware(['auth', 'verified', 'role:admin,manager'])->name('dashboard');
 

@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Head, Link, router } from '@inertiajs/react';
 import { 
-    BarChart3, TrendingUp, DollarSign, Smartphone, Users2, Activity, Tags, Wallet, Package, Wrench, Sparkles 
+    BarChart3, TrendingUp, DollarSign, Smartphone, Users2, Activity, Tags, Wallet, Package, Wrench, Sparkles, Handshake, Layers, ArrowUpRight, Receipt, CheckCircle 
 } from 'lucide-react';
 import { PieChart, Pie, Cell, Tooltip, Legend, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Sector } from 'recharts';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
@@ -11,7 +11,20 @@ import PageHeader from '@/Components/SaaS/PageHeader';
 
 const COLORS = ['#4F46E5', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#3B82F6', '#EC4899', '#14B8A6'];
 
-export default function ReportsIndex({ auth, period = 'today', metrics = {}, inventory = {}, topBrands = [], topCategories = [], cashierPerformance = [], brandProfitBreakdown = [] }) {
+export default function ReportsIndex({ 
+    auth, 
+    period = 'today', 
+    metrics = {}, 
+    inventory = {}, 
+    consignments = {}, 
+    layaways = {}, 
+    expenses = {}, 
+    repairs = {}, 
+    topBrands = [], 
+    topCategories = [], 
+    cashierPerformance = [], 
+    brandProfitBreakdown = [] 
+}) {
     const [activeIndex, setActiveIndex] = useState(0);
 
     const onPieEnter = (_, index) => {
@@ -147,6 +160,223 @@ export default function ReportsIndex({ auth, period = 'today', metrics = {}, inv
                     <div className="flex items-center gap-2 text-sm text-slate-500">
                         <Badge variant="info">Volume</Badge>
                         <span>Sold</span>
+                    </div>
+                </Card>
+            </div>
+
+            {/* Consignments & Dealer Settlements */}
+            <div className="flex items-center justify-between mt-10 mb-4">
+                <h3 className="text-lg font-bold text-slate-900 flex items-center gap-2">
+                    <Handshake size={20} className="text-purple-600" /> 
+                    Dealer Consignments & Settlements ({period === 'all' ? 'All Time' : period.charAt(0).toUpperCase() + period.slice(1)})
+                </h3>
+                <Link href="/dealers/dashboard" className="text-xs font-bold text-purple-600 hover:text-purple-700 flex items-center gap-1">
+                    Dealer Directory <ArrowUpRight size={14} />
+                </Link>
+            </div>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+                <Card className="animate-slide-up relative overflow-hidden flex flex-col justify-between">
+                    <div className="flex justify-between items-start mb-4">
+                        <div>
+                            <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Wholesale Payouts Settled</p>
+                            <h3 className="text-3xl font-black text-emerald-600">{Number(consignments?.settledPayouts || 0).toLocaleString()} <span className="text-lg text-slate-500 font-normal">UGX</span></h3>
+                        </div>
+                        <div className="w-12 h-12 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center">
+                            <CheckCircle size={24} />
+                        </div>
+                    </div>
+                    <div className="flex items-center gap-2 text-sm text-slate-500">
+                        <Badge variant="success">Paid Out</Badge>
+                        <span>Settled with sourcing dealers</span>
+                    </div>
+                </Card>
+
+                <Card className="animate-slide-up relative overflow-hidden flex flex-col justify-between">
+                    <div className="flex justify-between items-start mb-4">
+                        <div>
+                            <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Outstanding Payouts Owed</p>
+                            <h3 className="text-3xl font-black text-rose-600">{Number(consignments?.unsettledOwed || 0).toLocaleString()} <span className="text-lg text-slate-500 font-normal">UGX</span></h3>
+                        </div>
+                        <div className="w-12 h-12 rounded-2xl bg-rose-50 text-rose-600 flex items-center justify-center">
+                            <DollarSign size={24} />
+                        </div>
+                    </div>
+                    <div className="flex items-center gap-2 text-sm text-slate-500">
+                        <Badge variant="danger">Pending</Badge>
+                        <span>Unsettled sold stock</span>
+                    </div>
+                </Card>
+
+                <Card className="animate-slide-up relative overflow-hidden flex flex-col justify-between">
+                    <div className="flex justify-between items-start mb-4">
+                        <div>
+                            <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Consignment Net Profit</p>
+                            <h3 className="text-3xl font-black text-slate-900">{Number(consignments?.netProfit || 0).toLocaleString()} <span className="text-lg text-slate-500 font-normal">UGX</span></h3>
+                        </div>
+                        <div className="w-12 h-12 rounded-2xl bg-purple-50 text-purple-600 flex items-center justify-center">
+                            <TrendingUp size={24} />
+                        </div>
+                    </div>
+                    <div className="flex items-center gap-2 text-sm text-slate-500">
+                        <Badge variant="info">Margin</Badge>
+                        <span>Shop gross markup</span>
+                    </div>
+                </Card>
+
+                <Card className="animate-slide-up relative overflow-hidden flex flex-col justify-between">
+                    <div className="flex justify-between items-start mb-4">
+                        <div>
+                            <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Consignment Volume</p>
+                            <h3 className="text-3xl font-black text-slate-900">{Number(consignments?.inwardSold || 0)} <span className="text-lg text-slate-500 font-normal">Sold</span></h3>
+                        </div>
+                        <div className="w-12 h-12 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center">
+                            <Smartphone size={24} />
+                        </div>
+                    </div>
+                    <div className="flex items-center gap-2 text-sm text-slate-500">
+                        <Badge variant="neutral">{consignments?.inwardReceived || 0} Intake</Badge>
+                        <span>{consignments?.outwardIssued || 0} Outward Partner</span>
+                    </div>
+                </Card>
+            </div>
+
+            {/* Layaways & Receivables Portfolio */}
+            <div className="flex items-center justify-between mt-10 mb-4">
+                <h3 className="text-lg font-bold text-slate-900 flex items-center gap-2">
+                    <Wallet size={20} className="text-emerald-600" /> 
+                    Layaways & Installments Portfolio ({period === 'all' ? 'All Time' : period.charAt(0).toUpperCase() + period.slice(1)})
+                </h3>
+                <Link href="/layaways" className="text-xs font-bold text-emerald-600 hover:text-emerald-700 flex items-center gap-1">
+                    Layaway Management <ArrowUpRight size={14} />
+                </Link>
+            </div>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+                <Card className="animate-slide-up relative overflow-hidden flex flex-col justify-between">
+                    <div className="flex justify-between items-start mb-4">
+                        <div>
+                            <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Installments Collected</p>
+                            <h3 className="text-3xl font-black text-emerald-600">{Number(layaways?.collected || 0).toLocaleString()} <span className="text-lg text-slate-500 font-normal">UGX</span></h3>
+                        </div>
+                        <div className="w-12 h-12 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center">
+                            <Wallet size={24} />
+                        </div>
+                    </div>
+                    <div className="flex items-center gap-2 text-sm text-slate-500">
+                        <Badge variant="success">Inflow</Badge>
+                        <span>Cash from installment payments</span>
+                    </div>
+                </Card>
+
+                <Card className="animate-slide-up relative overflow-hidden flex flex-col justify-between">
+                    <div className="flex justify-between items-start mb-4">
+                        <div>
+                            <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Active Layaway Contracts</p>
+                            <h3 className="text-3xl font-black text-slate-900">{Number(layaways?.activePlans || 0)} <span className="text-lg text-slate-500 font-normal">Plans</span></h3>
+                        </div>
+                        <div className="w-12 h-12 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center">
+                            <Layers size={24} />
+                        </div>
+                    </div>
+                    <div className="flex items-center gap-2 text-sm text-slate-500">
+                        <Badge variant="info">Ongoing</Badge>
+                        <span>Customers currently paying</span>
+                    </div>
+                </Card>
+
+                <Card className="animate-slide-up relative overflow-hidden flex flex-col justify-between">
+                    <div className="flex justify-between items-start mb-4">
+                        <div>
+                            <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Outstanding Receivables</p>
+                            <h3 className="text-3xl font-black text-indigo-600">{Number(layaways?.totalReceivable || 0).toLocaleString()} <span className="text-lg text-slate-500 font-normal">UGX</span></h3>
+                        </div>
+                        <div className="w-12 h-12 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center">
+                            <DollarSign size={24} />
+                        </div>
+                    </div>
+                    <div className="flex items-center gap-2 text-sm text-slate-500">
+                        <Badge variant="warning">Receivable</Badge>
+                        <span>Remaining customer balance</span>
+                    </div>
+                </Card>
+
+                <Card className="animate-slide-up relative overflow-hidden flex flex-col justify-between">
+                    <div className="flex justify-between items-start mb-4">
+                        <div>
+                            <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Completed Layaways</p>
+                            <h3 className="text-3xl font-black text-slate-900">{Number(layaways?.completedPlans || 0)} <span className="text-lg text-slate-500 font-normal">Finished</span></h3>
+                        </div>
+                        <div className="w-12 h-12 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center">
+                            <Sparkles size={24} />
+                        </div>
+                    </div>
+                    <div className="flex items-center gap-2 text-sm text-slate-500">
+                        <Badge variant="success">Completed</Badge>
+                        <span>Fully paid & released</span>
+                    </div>
+                </Card>
+            </div>
+
+            {/* Expenses & Payout Categories Breakdown */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+                <Card className="lg:col-span-1 flex flex-col justify-between">
+                    <div>
+                        <div className="flex items-center justify-between mb-4">
+                            <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Total Expenses & Payouts</span>
+                            <div className="w-10 h-10 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center">
+                                <DollarSign size={20} />
+                            </div>
+                        </div>
+                        <h3 className="text-3xl font-black text-rose-600 mb-2">
+                            {Number(expenses?.total || 0).toLocaleString()} <span className="text-lg text-slate-500 font-normal">UGX</span>
+                        </h3>
+                        <p className="text-sm text-slate-500">Total operational outflows in this period, including dealer payouts, refunds, and overheads.</p>
+                    </div>
+                    <div className="mt-6 pt-4 border-t border-slate-100 flex items-center justify-between">
+                        <span className="text-xs text-slate-400 font-medium">Logged across all shifts</span>
+                        <Link href="/expenses" className="text-xs font-bold text-rose-600 hover:text-rose-700 flex items-center gap-1">
+                            Expense Ledger <ArrowUpRight size={13} />
+                        </Link>
+                    </div>
+                </Card>
+
+                <Card noPadding className="lg:col-span-2 flex flex-col">
+                    <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
+                        <h3 className="font-bold text-slate-900 flex items-center gap-2">
+                            <Receipt size={18} className="text-rose-500" />
+                            Expense & Payout Breakdown by Category
+                        </h3>
+                    </div>
+                    <div className="p-6">
+                        {expenses?.categories?.length > 0 ? (
+                            <div className="space-y-4">
+                                {expenses.categories.map((cat, idx) => {
+                                    const pct = expenses.total > 0 ? Math.round((Number(cat.value) / expenses.total) * 100) : 0;
+                                    return (
+                                        <div key={idx}>
+                                            <div className="flex justify-between items-center text-sm mb-1.5">
+                                                <span className="font-bold text-slate-800">{cat.name}</span>
+                                                <div className="flex items-center gap-3">
+                                                    <span className="font-extrabold text-slate-900">{Number(cat.value).toLocaleString()} UGX</span>
+                                                    <span className="text-xs font-semibold text-slate-500 w-10 text-right">{pct}%</span>
+                                                </div>
+                                            </div>
+                                            <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden">
+                                                <div 
+                                                    className="bg-gradient-to-r from-rose-500 to-pink-500 h-2 rounded-full transition-all duration-500"
+                                                    style={{ width: `${pct}%` }}
+                                                ></div>
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        ) : (
+                            <div className="h-32 flex items-center justify-center text-slate-400">
+                                No expenses logged for this period.
+                            </div>
+                        )}
                     </div>
                 </Card>
             </div>
