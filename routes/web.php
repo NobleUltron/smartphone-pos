@@ -136,8 +136,11 @@ Route::get('/dashboard', function () {
         ->where('expected_return_date', '<', Carbon::today())
         ->count();
 
-    $activeLayawaysCount = \App\Models\Layaway::where('status', 'active')->count();
-    $totalLayawayReceivable = (float) \App\Models\Layaway::where('status', 'active')->sum('remaining_balance');
+    $activeLayaways = Sale::with('layawayPayments')->where('payment_status', 'Partial')->get();
+    $activeLayawaysCount = $activeLayaways->count();
+    $totalLayawayReceivable = (float) $activeLayaways->sum(function ($sale) {
+        return max(0, $sale->final_amount - $sale->layawayPayments->sum('amount_paid'));
+    });
 
     $todayRepairRevenue = (float) \App\Models\LayawayPayment::whereHas('sale', function ($q) {
             $q->whereNotNull('repair_id');

@@ -217,10 +217,13 @@ class ReportController extends Controller
         $outwardSoldCount = \App\Models\DealerItem::where('direction', '!=', 'inward')->where('status', 'Sold')->where('sold_at', '>=', $startDate)->count();
 
         // Layaways Breakdown in Period
-        $newLayawaysCount = \App\Models\Layaway::where('created_at', '>=', $startDate)->count();
-        $completedLayawaysCount = \App\Models\Layaway::where('status', 'completed')->where('completed_at', '>=', $startDate)->count();
-        $activeLayawaysCount = \App\Models\Layaway::where('status', 'active')->count();
-        $totalLayawayReceivable = (float) \App\Models\Layaway::where('status', 'active')->sum('remaining_balance');
+        $newLayawaysCount = Sale::where('payment_status', 'Partial')->where('created_at', '>=', $startDate)->count();
+        $completedLayawaysCount = Sale::where('payment_method', 'Layaway')->where('payment_status', 'Paid')->where('updated_at', '>=', $startDate)->count();
+        $activeLayaways = Sale::with('layawayPayments')->where('payment_status', 'Partial')->get();
+        $activeLayawaysCount = $activeLayaways->count();
+        $totalLayawayReceivable = (float) $activeLayaways->sum(function ($sale) {
+            return max(0, $sale->final_amount - $sale->layawayPayments->sum('amount_paid'));
+        });
         $layawayCollectedInPeriod = (float) \App\Models\LayawayPayment::where('payment_date', '>=', $startDate)->sum('amount_paid');
 
         // Expense & Payout Categories Breakdown in Period
