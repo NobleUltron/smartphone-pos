@@ -284,11 +284,29 @@
             </tr>
         </thead>
         <tbody>
+            @php
+                $brandName = $item->deviceImei->product->brand->name 
+                    ?? $item->product->brand->name 
+                    ?? '';
+                $modelName = $item->deviceImei->product->model_name 
+                    ?? $item->product->model_name 
+                    ?? 'Smartphone Device';
+                $imei = $item->deviceImei->imei 
+                    ?? $item->deviceImei->imei_number 
+                    ?? $item->imei 
+                    ?? '';
+                $storage = $item->deviceImei->storage_capacity 
+                    ?? $item->deviceImei->storage 
+                    ?? $item->storage 
+                    ?? '';
+                $color = $item->deviceImei->color ?? $item->color ?? '';
+                $condition = $item->deviceImei->condition ?? $item->condition ?? '';
+            @endphp
             <tr>
                 <td class="text-center font-bold">1</td>
                 <td>
                     <div class="font-bold" style="font-size: 9.5pt; color: #0f172a;">
-                        {{ $item->product->brand->name ?? '' }} {{ $item->product->name ?? 'Consigned Device' }}
+                        {{ $brandName }} {{ $modelName }}
                     </div>
                     <div style="font-size: 8pt; color: #64748b; margin-top: 2px;">
                         Received on: {{ \Carbon\Carbon::parse($item->created_at)->format('d M Y') }}
@@ -296,17 +314,12 @@
                     </div>
                 </td>
                 <td>
-                    @if($item->deviceImei)
+                    @if($item->type === 'serialized' || $imei)
                         <div class="font-bold" style="color: #4f46e5; font-size: 8.5pt;">
-                            IMEI: {{ $item->deviceImei->imei_number }}
+                            IMEI: {{ $imei ?: 'N/A' }}
                         </div>
-                        <div style="font-size: 7.5pt; color: #475569;">
-                            {{ $item->deviceImei->storage ?? '' }} &bull; {{ $item->deviceImei->color ?? '' }} &bull; {{ $item->deviceImei->condition ?? '' }}
-                        </div>
-                    @elseif($item->imei)
-                        <div class="font-bold" style="color: #4f46e5; font-size: 8.5pt;">IMEI: {{ $item->imei }}</div>
-                        <div style="font-size: 7.5pt; color: #475569;">
-                            {{ $item->storage ?? '' }} &bull; {{ $item->color ?? '' }} &bull; {{ $item->condition ?? '' }}
+                        <div style="font-size: 7.5pt; color: #475569; margin-top: 2px;">
+                            {{ implode(' • ', array_filter([$storage, $color, $condition])) }}
                         </div>
                     @else
                         <div style="color: #64748b;">Quantity: {{ $item->quantity }} pcs</div>

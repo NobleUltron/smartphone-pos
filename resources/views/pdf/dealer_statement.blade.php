@@ -337,11 +337,27 @@
             <tbody>
                 @foreach($inwardItems as $idx => $item)
                     @php
-                        $itemName = $item->type === 'serialized'
-                            ? (($item->deviceImei->product->brand->name ?? '') . ' ' . ($item->deviceImei->product->name ?? 'Device'))
-                            : (($item->product->brand->name ?? '') . ' ' . ($item->product->name ?? 'Item'));
-                        $itemDetail = $item->type === 'serialized'
-                            ? ('IMEI: ' . ($item->deviceImei->imei_number ?? $item->imei ?? 'N/A') . ' • ' . ($item->deviceImei->storage ?? $item->storage ?? '') . ' • ' . ($item->deviceImei->color ?? $item->color ?? '') . ' • ' . ($item->deviceImei->condition ?? $item->condition ?? ''))
+                        $brandName = $item->deviceImei->product->brand->name 
+                            ?? $item->product->brand->name 
+                            ?? '';
+                        $modelName = $item->deviceImei->product->model_name 
+                            ?? $item->product->model_name 
+                            ?? 'Device';
+                        $itemName = trim($brandName . ' ' . $modelName);
+
+                        $imei = $item->deviceImei->imei 
+                            ?? $item->deviceImei->imei_number 
+                            ?? $item->imei 
+                            ?? '';
+                        $storage = $item->deviceImei->storage_capacity 
+                            ?? $item->deviceImei->storage 
+                            ?? $item->storage 
+                            ?? '';
+                        $color = $item->deviceImei->color ?? $item->color ?? '';
+                        $condition = $item->deviceImei->condition ?? $item->condition ?? '';
+
+                        $itemDetail = ($item->type === 'serialized' || $imei)
+                            ? ('IMEI: ' . ($imei ?: 'N/A') . (count(array_filter([$storage, $color, $condition])) ? ' • ' . implode(' • ', array_filter([$storage, $color, $condition])) : ''))
                             : ('Quantity: ' . $item->quantity . ' pcs');
                         $wholesale = $item->settlement_amount > 0 ? $item->settlement_amount : ($item->wholesale_cost ?? $item->dealer_price ?? 0);
                     @endphp
@@ -398,11 +414,20 @@
                 @foreach($outwardItems as $idx => $item)
                     @php
                         $isOverdue = $item->status === 'Pending' && $item->expected_return_date && \Carbon\Carbon::parse($item->expected_return_date)->isBefore(\Carbon\Carbon::today());
-                        $itemName = $item->type === 'serialized'
-                            ? (($item->deviceImei->product->brand->name ?? '') . ' ' . ($item->deviceImei->product->name ?? 'Device'))
-                            : (($item->product->brand->name ?? '') . ' ' . ($item->product->name ?? 'Item'));
-                        $itemDetail = $item->type === 'serialized'
-                            ? ('IMEI: ' . ($item->deviceImei->imei_number ?? $item->imei ?? 'N/A'))
+                        $brandName = $item->deviceImei->product->brand->name 
+                            ?? $item->product->brand->name 
+                            ?? '';
+                        $modelName = $item->deviceImei->product->model_name 
+                            ?? $item->product->model_name 
+                            ?? 'Device';
+                        $itemName = trim($brandName . ' ' . $modelName);
+
+                        $imei = $item->deviceImei->imei 
+                            ?? $item->deviceImei->imei_number 
+                            ?? $item->imei 
+                            ?? '';
+                        $itemDetail = ($item->type === 'serialized' || $imei)
+                            ? ('IMEI: ' . ($imei ?: 'N/A'))
                             : ('Quantity: ' . ($item->quantity - $item->quantity_sold - $item->quantity_returned) . ' pcs');
                     @endphp
                     <tr class="{{ $isOverdue ? 'overdue-row' : '' }}">
