@@ -343,6 +343,7 @@ Route::middleware('auth')->group(function () {
         // Accounts & Treasury Management
         Route::get('/accounts', [\App\Http\Controllers\AccountController::class, 'index'])->name('accounts.index');
         Route::post('/accounts', [\App\Http\Controllers\AccountController::class, 'store'])->name('accounts.store');
+        Route::post('/accounts/sync', [\App\Http\Controllers\AccountController::class, 'syncHistorical'])->name('accounts.sync');
         Route::post('/accounts/transfer', [\App\Http\Controllers\AccountController::class, 'transfer'])->name('accounts.transfer');
         Route::get('/accounts/{account}', [\App\Http\Controllers\AccountController::class, 'show'])->name('accounts.show');
         Route::put('/accounts/{account}', [\App\Http\Controllers\AccountController::class, 'update'])->name('accounts.update');

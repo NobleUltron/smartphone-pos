@@ -144,6 +144,16 @@ export default function AccountsIndex({ accounts, metrics, transactions, filters
         return 'bg-purple-50 text-purple-700 dark:bg-purple-950/50 dark:text-purple-300 border-purple-200 dark:border-purple-800';
     };
 
+    const [isSyncing, setIsSyncing] = useState(false);
+
+    const handleSyncHistorical = () => {
+        setIsSyncing(true);
+        router.post(route('accounts.sync'), {}, {
+            preserveScroll: true,
+            onFinish: () => setIsSyncing(false)
+        });
+    };
+
     return (
         <AuthenticatedLayout>
             <Head title="Money & Treasury Management" />
@@ -169,12 +179,24 @@ export default function AccountsIndex({ accounts, metrics, transactions, filters
 
                     <div className="flex items-center gap-3 flex-wrap">
                         <button
+                            type="button"
+                            onClick={handleSyncHistorical}
+                            disabled={isSyncing}
+                            className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold transition-all flex items-center gap-2 shadow-sm"
+                            title="Recalculate balances and sync past POS sales & expenses into accounts"
+                        >
+                            <RefreshCw size={16} className={isSyncing ? 'animate-spin text-indigo-600' : ''} />
+                            {isSyncing ? 'Syncing...' : 'Sync Past Data'}
+                        </button>
+                        <button
+                            type="button"
                             onClick={() => setShowTransferModal(true)}
                             className="px-4 py-2.5 bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950/50 dark:hover:bg-indigo-900 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 rounded-xl text-xs font-bold transition-all flex items-center gap-2 shadow-sm"
                         >
                             <ArrowRightLeft size={16} /> Inter-Account Transfer
                         </button>
                         <button
+                            type="button"
                             onClick={() => setShowCreateModal(true)}
                             className="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold transition-all flex items-center gap-2 shadow-md shadow-indigo-500/20"
                         >

@@ -21,6 +21,11 @@ class AccountController extends Controller
 
     public function index(Request $request)
     {
+        // Lazy auto-backfill if no transactions exist yet
+        if (AccountTransaction::count() === 0) {
+            TreasuryService::syncHistorical();
+        }
+
         $accounts = PaymentAccount::withCount('transactions')->get();
 
         $totalLiquidity = (float) $accounts->sum('current_balance');
@@ -43,10 +48,10 @@ class AccountController extends Controller
         }
 
         if ($request->filled('search')) {
-            $search = $request->search;
+            $search = strtolower($request->search);
             $query->where(function ($q) use ($search) {
-                $q->where('description', 'ilike', "%{$search}%")
-                  ->orWhere('transaction_reference', 'ilike', "%{$search}%");
+                $q->whereRaw('LOWER(description) LIKE ?', ["%{$search}%"])
+                  ->orWhereRaw('LOWER(transaction_reference) LIKE ?', ["%{$search}%"]);
             });
         }
 
@@ -89,10 +94,10 @@ class AccountController extends Controller
         }
 
         if ($request->filled('search')) {
-            $search = $request->search;
+            $search = strtolower($request->search);
             $query->where(function ($q) use ($search) {
-                $q->where('description', 'ilike', "%{$search}%")
-                  ->orWhere('transaction_reference', 'ilike', "%{$search}%");
+                $q->whereRaw('LOWER(description) LIKE ?', ["%{$search}%"])
+                  ->orWhereRaw('LOWER(transaction_reference) LIKE ?', ["%{$search}%"]);
             });
         }
 
@@ -132,59 +137,66 @@ class AccountController extends Controller
         ]);
     }
 
+    public function syncHistorical()
+    {
+        try {
+            TreasuryService::syncHistorical();
+            return redirect()->back()->with('success', 'Historical transactions successfully synchronized across all payment accounts!');
+        } catch (\Exception $e) {
+            return redirect()->back()->withErrors(['sync' => $e->getMessage()]);
+        }
+    }
+
     public function store(Request $request)
     {
         $validated = $request->validate([
-            'name' => 'required|string|max:255',
-            'type' => 'required|in:cash,mobile_money,bank,other',
-            'account_number' => 'nullable|string|max:255',
-            'provider' => 'nullable|string|max:255',
+            'name' => 'required|string|max:100',
+            'type' => 'required|string|in:cash,mobile_money,bank,other',
+            'account_number' => 'nullable|string|max:100',
+            'provider' => 'nullable|string|max:100',
             'opening_balance' => 'nullable|numeric|min:0',
-            'description' => 'nullable|string',
+            'description' => 'nullable|string|max:255',
         ]);
-
-        $openingBalance = (float) ($validated['opening_balance'] ?? 0);
 
         $account = PaymentAccount::create([
             'name' => $validated['name'],
             'type' => $validated['type'],
             'account_number' => $validated['account_number'] ?? null,
             'provider' => $validated['provider'] ?? null,
-            'opening_balance' => $openingBalance,
-            'current_balance' => $openingBalance,
-            'is_active' => true,
+            'opening_balance' => $validated['opening_balance'] ?? 0,
+            'current_balance' => $validated['opening_balance'] ?? 0,
             'description' => $validated['description'] ?? null,
+            'is_active' => true,
         ]);
 
-        if ($openingBalance > 0) {
-            AccountTransaction::create([
-                'payment_account_id' => $account->id,
-                'type' => 'inflow',
-                'amount' => $openingBalance,
-                'balance_after' => $openingBalance,
-                'category' => 'Opening Balance',
-                'description' => 'Initial account opening float balance',
-                'user_id' => auth()->id(),
-                'transaction_date' => now(),
-            ]);
+        if (($validated['opening_balance'] ?? 0) > 0) {
+            TreasuryService::recordInflow(
+                $account,
+                (float) $validated['opening_balance'],
+                'Opening Balance',
+                null,
+                'Initial opening balance for new account',
+                'INIT-' . $account->id,
+                auth()->id()
+            );
         }
 
-        return redirect()->back()->with('success', "Payment account {$account->name} created successfully.");
+        return redirect()->back()->with('success', "Payment account '{$account->name}' created successfully.");
     }
 
-    public function update(Request $request, PaymentAccount $account)
+    public function update(PaymentAccount $account, Request $request)
     {
         $validated = $request->validate([
-            'name' => 'required|string|max:255',
-            'account_number' => 'nullable|string|max:255',
-            'provider' => 'nullable|string|max:255',
-            'description' => 'nullable|string',
+            'name' => 'required|string|max:100',
+            'account_number' => 'nullable|string|max:100',
+            'provider' => 'nullable|string|max:100',
+            'description' => 'nullable|string|max:255',
             'is_active' => 'boolean',
         ]);
 
         $account->update($validated);
 
-        return redirect()->back()->with('success', 'Account details updated successfully.');
+        return redirect()->back()->with('success', "Account '{$account->name}' details updated.");
     }
 
     public function transfer(Request $request)
@@ -198,15 +210,16 @@ class AccountController extends Controller
 
         try {
             TreasuryService::transfer(
-                $validated['from_account_id'],
-                $validated['to_account_id'],
+                (int) $validated['from_account_id'],
+                (int) $validated['to_account_id'],
                 (float) $validated['amount'],
-                $validated['notes'] ?? ''
+                $validated['notes'] ?? null,
+                auth()->id()
             );
 
-            return redirect()->back()->with('success', 'Inter-account transfer completed successfully.');
+            return redirect()->back()->with('success', 'Transfer completed successfully.');
         } catch (\Exception $e) {
-            return redirect()->back()->withErrors(['amount' => $e->getMessage()]);
+            return redirect()->back()->withErrors(['transfer' => $e->getMessage()]);
         }
     }
 
