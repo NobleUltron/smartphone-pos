@@ -714,7 +714,7 @@ class DealerController extends Controller
             }
 
             // Create Expense record for financial reporting
-            \App\Models\Expense::create([
+            $expense = \App\Models\Expense::create([
                 'cash_drawer_id' => $activeDrawer?->id,
                 'user_id' => $user->id,
                 'recorded_by' => $user->id,
@@ -723,6 +723,17 @@ class DealerController extends Controller
                 'description' => $desc,
                 'expense_date' => Carbon::today(),
             ]);
+
+            // Sync with Treasury Service (Debit selected payment account)
+            \App\Services\TreasuryService::recordOutflow(
+                $validated['payment_method'],
+                floatval($validated['amount']),
+                'Dealer Settlement',
+                $item,
+                $desc,
+                $validated['notes'] ?? null,
+                $user->id
+            );
 
             // Update item settlement status
             $item->update([

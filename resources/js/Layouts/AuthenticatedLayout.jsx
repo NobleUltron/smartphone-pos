@@ -23,7 +23,8 @@ import {
     Clock,
     Handshake,
     Sun,
-    Moon
+    Moon,
+    Landmark
 } from 'lucide-react';
 import Dropdown from '@/Components/Dropdown';
 import { Toaster, toast } from 'react-hot-toast';
@@ -34,6 +35,8 @@ import PwaInstallPrompt from '@/Components/PwaInstallPrompt';
 function LayoutInner({ children }) {
     const { isDark, toggleTheme } = useTheme();
     const { auth, errors, flash, notifications } = usePage().props;
+    const [showingNavigationDropdown, setShowingNavigationDropdown] = useState(false);
+    const [scrolled, setScrolled] = useState(false);
     const user = auth?.user;
     const [isSidebarOpen, setIsSidebarOpen] = useState(false);
     const [isMobile, setIsMobile] = useState(false);
@@ -67,7 +70,7 @@ function LayoutInner({ children }) {
         return () => window.removeEventListener('resize', handleResize);
     }, []);
 
-    const userRole = user?.role || 'cashier';
+    const userRole = (user?.role || 'cashier').toLowerCase();
     const isAdminOrManager = userRole === 'admin' || userRole === 'manager';
     const isAdmin = userRole === 'admin';
     const isTechnician = userRole === 'technician';
@@ -85,6 +88,7 @@ function LayoutInner({ children }) {
             items: [
                 dashboardLink,
                 !isTechnician ? { name: 'POS Checkout', href: route('pos.index'), icon: ShoppingCart, active: route().current('pos.*') } : null,
+                isAdminOrManager ? { name: 'Money & Accounts', href: route('accounts.index'), icon: Landmark, active: route().current('accounts.*') } : null,
                 !isTechnician ? { name: 'Shift Management', href: route('cash-drawer.index'), icon: Wallet, active: route().current('cash-drawer.*') } : null,
                 !isTechnician ? { name: 'Expenses', href: route('expenses.index'), icon: Receipt, active: route().current('expenses.*') } : null,
             ].filter(Boolean)

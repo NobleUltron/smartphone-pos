@@ -153,6 +153,16 @@ class RepairController extends Controller
                     'payment_method' => 'Cash',
                     'payment_date' => now()
                 ]);
+
+                \App\Services\TreasuryService::recordInflow(
+                    'Cash',
+                    floatval($repair->deposit),
+                    'Repair Deposit',
+                    $repair,
+                    "Repair Deposit for Ticket #{$repair->id}",
+                    null,
+                    auth()->id()
+                );
             }
 
             foreach ($parts as $partData) {
@@ -276,6 +286,17 @@ class RepairController extends Controller
                             'payment_method' => $validatedDelivery['payment_method'],
                             'payment_date' => now()
                         ]);
+
+                        \App\Services\TreasuryService::recordInflow(
+                            $validatedDelivery['payment_method'],
+                            floatval($balance),
+                            'Repair Collection',
+                            $repair,
+                            "Final Repair Payment for Ticket #{$repair->id}",
+                            null,
+                            auth()->id()
+                        );
+
                         $repair->update(['deposit' => $repair->estimated_cost]);
                     }
                 }

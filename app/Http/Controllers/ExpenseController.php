@@ -148,7 +148,7 @@ class ExpenseController extends Controller
             }
         }
 
-        Expense::create([
+        $expense = Expense::create([
             'cash_drawer_id' => $activeDrawer?->id,
             'user_id'        => $user->id,
             'recorded_by'    => $user->id,
@@ -157,6 +157,29 @@ class ExpenseController extends Controller
             'description'    => $request->description,
             'expense_date'   => Carbon::today(),
         ]);
+
+        // Sync with Treasury Service
+        if ($request->category === 'Cash In') {
+            \App\Services\TreasuryService::recordInflow(
+                'Cash',
+                floatval($request->amount),
+                'Cash In Float',
+                $expense,
+                $request->description ?: 'Drawer float addition',
+                null,
+                $user->id
+            );
+        } else {
+            \App\Services\TreasuryService::recordOutflow(
+                'Cash',
+                floatval($request->amount),
+                'Expense',
+                $expense,
+                "Expense: {$request->category}" . ($request->description ? " - {$request->description}" : ''),
+                null,
+                $user->id
+            );
+        }
 
         return back()->with('success', 'Expense logged successfully.');
     }

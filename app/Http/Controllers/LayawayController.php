@@ -68,13 +68,24 @@ class LayawayController extends Controller
         DB::beginTransaction();
 
         try {
-            LayawayPayment::create([
+            $payment = LayawayPayment::create([
                 'sale_id' => $sale->id,
                 'cash_drawer_id' => $activeDrawer->id,
                 'amount_paid' => $request->amount_paid,
                 'payment_method' => $request->payment_method,
                 'payment_date' => now(),
             ]);
+
+            // Sync with Treasury Service
+            \App\Services\TreasuryService::recordInflow(
+                $request->payment_method,
+                floatval($request->amount_paid),
+                'Layaway Installment',
+                $sale,
+                "Layaway Installment for Sale #{$sale->id}",
+                null,
+                auth()->id()
+            );
 
             // Recalculate total paid
             $totalPaid = $sale->layawayPayments()->sum('amount_paid');

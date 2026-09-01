@@ -319,6 +319,17 @@ class PurchaseController extends Controller
                     'expense_date' => now(),
                 ]);
             }
+
+            // Sync with Treasury Service
+            \App\Services\TreasuryService::recordOutflow(
+                $paymentMethod,
+                floatval($validated['amount']),
+                'Supplier Payment',
+                $purchase,
+                "Supplier Payment for Purchase #{$purchase->id} (" . ($purchase->supplier->name ?? 'Supplier') . ")",
+                $validated['notes'] ?? null,
+                auth()->id()
+            );
         });
 
         return redirect()->back()->with('success', 'Supplier payment of ' . number_format($validated['amount']) . ' UGX recorded successfully.');

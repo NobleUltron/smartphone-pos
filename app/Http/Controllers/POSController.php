@@ -277,6 +277,29 @@ class POSController extends Controller
                 }
             }
 
+            // Record Treasury Account Inflows
+            if ($sale->payment_status === 'Paid' && $final > 0) {
+                \App\Services\TreasuryService::recordInflow(
+                    $sale->payment_method,
+                    $final,
+                    'Sale',
+                    $sale,
+                    "POS Sale #{$sale->id}",
+                    null,
+                    auth()->id()
+                );
+            } elseif ($request->payment_method === 'Layaway' && $request->amount_paid > 0) {
+                \App\Services\TreasuryService::recordInflow(
+                    'Cash',
+                    floatval($request->amount_paid),
+                    'Layaway Deposit',
+                    $sale,
+                    "Layaway Deposit for Sale #{$sale->id}",
+                    null,
+                    auth()->id()
+                );
+            }
+
             $userRole = auth()->user()->role ?? 'cashier';
             if ($userRole === 'cashier') {
                 if ($discount > 0 && !\App\Models\Setting::get('allow_cashier_discounts', true)) {
