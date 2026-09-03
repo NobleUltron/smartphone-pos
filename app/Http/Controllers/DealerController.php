@@ -393,8 +393,8 @@ class DealerController extends Controller
 
     public function storeIssue(Request $request)
     {
-        // Check if multi-item batch request
-        if ($request->has('items') && is_array($request->input('items'))) {
+        // Check if multi-item batch request with at least one item
+        if ($request->filled('items') && is_array($request->input('items')) && count($request->input('items')) > 0) {
             $validated = $request->validate([
                 'dealer_id' => 'required|exists:dealers,id',
                 'expected_return_date' => 'nullable|date',
@@ -526,8 +526,8 @@ class DealerController extends Controller
 
     public function storeInward(Request $request)
     {
-        // Check if multi-item batch request
-        if ($request->has('items') && is_array($request->input('items'))) {
+        // Check if multi-item batch request with at least one item
+        if ($request->filled('items') && is_array($request->input('items')) && count($request->input('items')) > 0) {
             $validated = $request->validate([
                 'dealer_id' => 'required|exists:dealers,id',
                 'notes' => 'nullable|string',

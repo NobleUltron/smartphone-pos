@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { useForm } from '@inertiajs/react';
+import { useForm, router } from '@inertiajs/react';
 import Modal from '@/Components/Modal';
-import { Download, X, Search, Plus, Package, Check, Sparkles, CheckCircle2, Trash2, Smartphone, Layers } from 'lucide-react';
+import { Download, X, Search, Plus, Package, Check, Sparkles, CheckCircle2, Trash2, Smartphone, Layers, AlertCircle } from 'lucide-react';
 
 export default function ReceiveStockModal({
     isOpen,
@@ -31,8 +31,7 @@ export default function ReceiveStockModal({
         wholesale_cost: '',
         retail_price: '',
         quantity: 1,
-        notes: '',
-        items: []
+        notes: ''
     });
 
     useEffect(() => {
@@ -179,14 +178,13 @@ export default function ReceiveStockModal({
     const handleSubmit = (e) => {
         e.preventDefault();
 
-        // If user has staged items, submit the batch
+        // If user has staged items, submit the batch via router.post
         if (stagedItems.length > 0) {
-            post(route('dealers.store-inward'), {
-                data: {
-                    dealer_id: data.dealer_id,
-                    notes: data.notes,
-                    items: stagedItems
-                },
+            router.post(route('dealers.store-inward'), {
+                dealer_id: data.dealer_id,
+                notes: data.notes,
+                items: stagedItems
+            }, {
                 onSuccess: () => {
                     handleClose();
                 }
@@ -238,6 +236,13 @@ export default function ReceiveStockModal({
 
                 <form onSubmit={handleSubmit} className="flex flex-col flex-1 overflow-hidden">
                     <div className="p-6 space-y-5 overflow-y-auto flex-1">
+                    {/* Error Banner */}
+                    {Object.keys(errors).length > 0 && (
+                        <div className="p-3 bg-rose-50 dark:bg-rose-950/60 border border-rose-200 dark:border-rose-800 rounded-xl text-xs text-rose-600 dark:text-rose-400 font-bold flex items-center gap-2">
+                            <AlertCircle size={16} className="shrink-0" />
+                            <span>{errors.items || errors.error || Object.values(errors)[0]}</span>
+                        </div>
+                    )}
                     {/* Dealer Selection */}
                     <div className="space-y-1.5">
                         <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">

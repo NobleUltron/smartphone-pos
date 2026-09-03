@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { useForm } from '@inertiajs/react';
+import { useForm, router } from '@inertiajs/react';
 import Modal from '@/Components/Modal';
 import { Handshake, X, Search, Package, Check, Smartphone, Layers, Calendar, ArrowUpRight, AlertCircle, Loader2, Trash2, Plus } from 'lucide-react';
 import axios from 'axios';
@@ -26,8 +26,7 @@ export default function IssueStockModal({
         quantity: 1,
         dealer_price: '',
         expected_return_date: '',
-        notes: '',
-        items: []
+        notes: ''
     });
 
     useEffect(() => {
@@ -146,15 +145,14 @@ export default function IssueStockModal({
     const handleSubmit = (e) => {
         e.preventDefault();
 
-        // If user has staged items, submit the batch
+        // If user has staged items, submit the batch via router.post
         if (stagedItems.length > 0) {
-            post(route('dealers.store-issue'), {
-                data: {
-                    dealer_id: data.dealer_id,
-                    expected_return_date: data.expected_return_date,
-                    notes: data.notes,
-                    items: stagedItems
-                },
+            router.post(route('dealers.store-issue'), {
+                dealer_id: data.dealer_id,
+                expected_return_date: data.expected_return_date,
+                notes: data.notes,
+                items: stagedItems
+            }, {
                 onSuccess: () => {
                     handleClose();
                 }
@@ -211,6 +209,14 @@ export default function IssueStockModal({
                 <form onSubmit={handleSubmit} className="flex flex-col flex-1 overflow-hidden">
                     <div className="p-6 space-y-5 overflow-y-auto flex-1">
                         
+                        {/* Error Banner */}
+                        {Object.keys(errors).length > 0 && (
+                            <div className="p-3 bg-rose-50 dark:bg-rose-950/60 border border-rose-200 dark:border-rose-800 rounded-xl text-xs text-rose-600 dark:text-rose-400 font-bold flex items-center gap-2">
+                                <AlertCircle size={16} className="shrink-0" />
+                                <span>{errors.items || errors.error || Object.values(errors)[0]}</span>
+                            </div>
+                        )}
+
                         {/* 1. Select Dealer */}
                         <div className="space-y-1.5">
                             <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">
