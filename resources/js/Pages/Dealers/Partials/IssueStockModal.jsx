@@ -17,6 +17,7 @@ export default function IssueStockModal({
     const [isSearching, setIsSearching] = useState(false);
     const [selectedItem, setSelectedItem] = useState(null);
     const [stagedItems, setStagedItems] = useState([]);
+    const [submitError, setSubmitError] = useState(null);
 
     const { data, setData, post, processing, reset, errors, clearErrors } = useForm({
         dealer_id: preselectedDealerId || '',
@@ -38,23 +39,25 @@ export default function IssueStockModal({
     // Debounced search for available in-stock devices / bulk items
     const searchStock = useMemo(
         () =>
-            debounce(async (query) => {
-                if (!query || query.trim().length < 1) {
+            debounce((query) => {
+                if (!query.trim()) {
                     setSearchResults([]);
                     setIsSearching(false);
                     return;
                 }
                 setIsSearching(true);
-                try {
-                    const res = await axios.get(route('dealers.search-device', { query: query.trim() }));
-                    setSearchResults(res.data || []);
-                } catch (error) {
-                    console.error('Error searching inventory for dealer issue:', error);
-                    setSearchResults([]);
-                } finally {
-                    setIsSearching(false);
-                }
-            }, 250),
+                axios.get(route('dealers.search-device'), { params: { query } })
+                    .then(res => {
+                        setSearchResults(res.data || []);
+                    })
+                    .catch(err => {
+                        console.error('Error searching inventory for consignment:', err);
+                        setSearchResults([]);
+                    })
+                    .finally(() => {
+                        setIsSearching(false);
+                    });
+            }, 300),
         []
     );
 
@@ -66,16 +69,32 @@ export default function IssueStockModal({
 
     const handleSelectItem = (item) => {
         setSelectedItem(item);
-        setData(prev => ({
-            ...prev,
-            type: item.type,
-            device_imei_id: item.type === 'serialized' ? item.id : '',
-            product_id: item.type === 'bulk' ? item.id : '',
-            quantity: 1,
-            dealer_price: item.selling_price || item.cost_price || ''
-        }));
         setSearchQuery('');
         setSearchResults([]);
+        setSubmitError(null);
+
+        // Pre-fill suggested partner price based on selling or cost price
+        const suggestedPrice = item.selling_price || item.cost_price || '';
+
+        if (item.type === 'serialized') {
+            setData(prev => ({
+                ...prev,
+                type: 'serialized',
+                device_imei_id: item.id,
+                product_id: '',
+                quantity: 1,
+                dealer_price: suggestedPrice
+            }));
+        } else {
+            setData(prev => ({
+                ...prev,
+                type: 'bulk',
+                device_imei_id: '',
+                product_id: item.id,
+                quantity: 1,
+                dealer_price: suggestedPrice
+            }));
+        }
     };
 
     const handleClearItem = () => {
@@ -138,37 +157,93 @@ export default function IssueStockModal({
         setStagedItems([]);
         setSearchQuery('');
         setSearchResults([]);
+        setSubmitError(null);
         clearErrors();
         onClose();
     };
 
     const handleSubmit = (e) => {
         e.preventDefault();
+        setSubmitError(null);
 
-        // If user has staged items, submit the batch via router.post
-        if (stagedItems.length > 0) {
+        let finalItems = [...stagedItems];
+
+        // Auto-include currently configured item if user forgot to click "+ Add This Item to Consignment Slip"
+        if (selectedItem && data.dealer_price && Number(data.dealer_price) > 0) {
+            const isSerialized = selectedItem.type === 'serialized';
+            const title = isSerialized
+                ? `${selectedItem.product?.brand?.name || ''} ${selectedItem.product?.model_name || ''}`.trim()
+                : `${selectedItem.brand?.name || ''} ${selectedItem.model_name || ''}`.trim();
+            const detail = isSerialized
+                ? `IMEI: ${selectedItem.imei}`
+                : `SKU: ${selectedItem.sku || 'N/A'}`;
+
+            const autoItem = {
+                title,
+                detail,
+                type: selectedItem.type,
+                device_imei_id: isSerialized ? selectedItem.id : null,
+                product_id: !isSerialized ? selectedItem.id : null,
+                quantity: isSerialized ? 1 : Number(data.quantity || 1),
+                dealer_price: Number(data.dealer_price),
+                notes: data.notes || ''
+            };
+
+            if (!finalItems.some(i => isSerialized && i.device_imei_id === autoItem.device_imei_id)) {
+                finalItems.push(autoItem);
+            }
+        }
+
+        // If user has items ready in batch
+        if (finalItems.length > 0) {
+            if (!data.dealer_id) {
+                setSubmitError('Please select a partner dealer.');
+                return;
+            }
+
             router.post(route('dealers.store-issue'), {
                 dealer_id: data.dealer_id,
-                expected_return_date: data.expected_return_date,
-                notes: data.notes,
-                items: stagedItems
+                expected_return_date: data.expected_return_date || null,
+                notes: data.notes || null,
+                items: finalItems
             }, {
-                onSuccess: () => {
+                onSuccess: (page) => {
+                    if (page?.props?.flash?.error) {
+                        setSubmitError(page.props.flash.error);
+                        return;
+                    }
                     handleClose();
+                },
+                onError: (errs) => {
+                    console.error('Batch issue errors:', errs);
+                    setSubmitError(errs.items || Object.values(errs)[0] || 'Error issuing items to dealer.');
                 }
             });
             return;
         }
 
-        // If single item is selected but not added to slip yet
-        if (selectedItem) {
-            post(route('dealers.store-issue'), {
-                onSuccess: () => {
-                    handleClose();
-                }
-            });
+        // Single item validation fallback
+        if (!selectedItem) {
+            setSubmitError('Please search and select at least one item from stock.');
             return;
         }
+        if (!data.dealer_price || Number(data.dealer_price) <= 0) {
+            setSubmitError('Please enter an agreed dealer price.');
+            return;
+        }
+
+        post(route('dealers.store-issue'), {
+            onSuccess: (page) => {
+                if (page?.props?.flash?.error) {
+                    setSubmitError(page.props.flash.error);
+                    return;
+                }
+                handleClose();
+            },
+            onError: (errs) => {
+                setSubmitError(errs.items || Object.values(errs)[0] || 'Error issuing item to dealer.');
+            }
+        });
     };
 
     const formatCurrency = (val) => {
@@ -210,48 +285,88 @@ export default function IssueStockModal({
                     <div className="p-6 space-y-5 overflow-y-auto flex-1">
                         
                         {/* Error Banner */}
-                        {Object.keys(errors).length > 0 && (
+                        {(submitError || Object.keys(errors).length > 0) && (
                             <div className="p-3 bg-rose-50 dark:bg-rose-950/60 border border-rose-200 dark:border-rose-800 rounded-xl text-xs text-rose-600 dark:text-rose-400 font-bold flex items-center gap-2">
                                 <AlertCircle size={16} className="shrink-0" />
-                                <span>{errors.items || errors.error || Object.values(errors)[0]}</span>
+                                <span>{submitError || errors.items || errors.error || Object.values(errors)[0]}</span>
                             </div>
                         )}
 
-                        {/* 1. Select Dealer */}
-                        <div className="space-y-1.5">
-                            <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">
-                                1. Select Partner Dealer (Recipient Shop) *
-                            </label>
-                            {preselectedDealerId && targetDealer ? (
-                                <div className="p-3 bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-xl flex items-center justify-between">
-                                    <div>
-                                        <div className="text-sm font-bold text-slate-900 dark:text-white">{targetDealer.name}</div>
-                                        <div className="text-xs text-slate-500 dark:text-slate-400">{targetDealer.phone} {targetDealer.address ? `• ${targetDealer.address}` : ''}</div>
+                        {/* 1. Partner Dealer & Return Date */}
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div className="space-y-1.5">
+                                <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">
+                                    1. Partner Dealer (Recipient Shop) *
+                                </label>
+                                {preselectedDealerId && targetDealer ? (
+                                    <div className="p-3 bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-xl flex items-center justify-between">
+                                        <div>
+                                            <div className="text-sm font-bold text-slate-900 dark:text-white">{targetDealer.name}</div>
+                                            <div className="text-xs text-slate-500 dark:text-slate-400">{targetDealer.phone} {targetDealer.address ? `• ${targetDealer.address}` : ''}</div>
+                                        </div>
+                                        <span className="text-[11px] font-bold px-2.5 py-1 bg-indigo-100 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 rounded-lg">
+                                            Consignment Partner
+                                        </span>
                                     </div>
-                                    <span className="text-[11px] font-bold px-2.5 py-1 bg-indigo-100 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 rounded-lg">
-                                        Consignment Partner
-                                    </span>
+                                ) : (
+                                    <select
+                                        className="w-full px-3.5 py-2.5 text-sm font-semibold rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:bg-white dark:focus:bg-slate-800 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all shadow-sm"
+                                        value={data.dealer_id}
+                                        onChange={(e) => setData('dealer_id', e.target.value)}
+                                        required
+                                    >
+                                        <option value="">-- Choose Partner Dealer --</option>
+                                        {dealers.map(d => (
+                                            <option key={d.id} value={d.id}>{d.name} ({d.phone})</option>
+                                        ))}
+                                    </select>
+                                )}
+                                {errors.dealer_id && <p className="text-xs text-rose-500 font-bold">{errors.dealer_id}</p>}
+                            </div>
+
+                            <div className="space-y-1.5">
+                                <div className="flex justify-between items-center">
+                                    <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">
+                                        Expected Return Date <span className="text-slate-400 font-normal lowercase">(optional)</span>
+                                    </label>
+                                    <div className="flex gap-1">
+                                        <button
+                                            type="button"
+                                            onClick={() => setQuickDueDate(3)}
+                                            className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:text-indigo-600"
+                                        >
+                                            +3d
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => setQuickDueDate(7)}
+                                            className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:text-indigo-600"
+                                        >
+                                            +7d
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => setQuickDueDate(14)}
+                                            className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:text-indigo-600"
+                                        >
+                                            +14d
+                                        </button>
+                                    </div>
                                 </div>
-                            ) : (
-                                <select
+                                <input
+                                    type="date"
                                     className="w-full px-3.5 py-2.5 text-sm font-semibold rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:bg-white dark:focus:bg-slate-800 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all shadow-sm"
-                                    value={data.dealer_id}
-                                    onChange={(e) => setData('dealer_id', e.target.value)}
-                                    required
-                                >
-                                    <option value="">-- Choose Partner Dealer --</option>
-                                    {dealers.map(d => (
-                                        <option key={d.id} value={d.id}>{d.name} ({d.phone})</option>
-                                    ))}
-                                </select>
-                            )}
-                            {errors.dealer_id && <p className="text-xs text-rose-500 font-bold">{errors.dealer_id}</p>}
+                                    value={data.expected_return_date}
+                                    onChange={(e) => setData('expected_return_date', e.target.value)}
+                                />
+                                {errors.expected_return_date && <p className="text-xs text-rose-500 font-bold">{errors.expected_return_date}</p>}
+                            </div>
                         </div>
 
                         {/* 2. Select Stock Item */}
-                        <div className="space-y-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+                        <div className="space-y-3 pt-2 border-t border-slate-100 dark:border-slate-800">
                             <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">
-                                2. Select Active Item from Shop Stock *
+                                2. Select Item from Shop Stock to Issue
                             </label>
 
                             {!selectedItem ? (
@@ -264,7 +379,6 @@ export default function IssueStockModal({
                                             placeholder="Search by IMEI, SKU, or Model Name..."
                                             value={searchQuery}
                                             onChange={handleSearchChange}
-                                            autoFocus
                                         />
                                         {isSearching && (
                                             <Loader2 className="absolute right-3.5 top-1/2 -translate-y-1/2 text-indigo-600 animate-spin" size={16} />
@@ -323,34 +437,81 @@ export default function IssueStockModal({
                                     )}
                                 </div>
                             ) : (
-                                /* Selected Item Badge Card */
-                                <div className="p-3.5 bg-indigo-50/70 dark:bg-indigo-950/40 border border-indigo-200/80 dark:border-indigo-800/60 rounded-xl flex items-center justify-between">
-                                    <div className="flex items-center gap-3">
-                                        <div className="p-2 bg-indigo-600 text-white rounded-lg">
-                                            {selectedItem.type === 'serialized' ? <Smartphone size={18} /> : <Layers size={18} />}
+                                /* Selected Item Configuration Box */
+                                <div className="p-4 bg-slate-50 dark:bg-slate-800/80 border border-indigo-200 dark:border-indigo-900/50 rounded-2xl space-y-3.5 shadow-sm">
+                                    <div className="flex items-center justify-between">
+                                        <div className="flex items-center gap-2.5">
+                                            <div className="p-2 bg-indigo-600 text-white rounded-lg">
+                                                {selectedItem.type === 'serialized' ? <Smartphone size={18} /> : <Layers size={18} />}
+                                            </div>
+                                            <div>
+                                                <div className="text-xs font-bold uppercase tracking-wider text-indigo-600 dark:text-indigo-400 flex items-center gap-1">
+                                                    <Check size={14} /> Item Ready to Add
+                                                </div>
+                                                <div className="text-sm font-black text-slate-900 dark:text-white">
+                                                    {selectedItem.type === 'serialized'
+                                                        ? `${selectedItem.product?.brand?.name || ''} ${selectedItem.product?.model_name || ''}`.trim()
+                                                        : `${selectedItem.brand?.name || ''} ${selectedItem.model_name || ''}`.trim()}
+                                                </div>
+                                                <div className="text-xs text-slate-500 dark:text-slate-400">
+                                                    {selectedItem.type === 'serialized'
+                                                        ? `IMEI: ${selectedItem.imei} • Condition: ${selectedItem.condition || 'Brand New'}`
+                                                        : `SKU: ${selectedItem.sku || 'N/A'} • Available: ${selectedItem.quantity} units`}
+                                                </div>
+                                            </div>
                                         </div>
-                                        <div>
-                                            <div className="text-xs font-bold uppercase tracking-wider text-indigo-600 dark:text-indigo-400 flex items-center gap-1.5">
-                                                <Check size={14} /> Selected Active Stock Item
+                                        <button
+                                            type="button"
+                                            onClick={handleClearItem}
+                                            className="text-xs font-bold text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 px-3 py-1.5 rounded-lg transition-colors"
+                                        >
+                                            Change
+                                        </button>
+                                    </div>
+
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                                        {selectedItem.type === 'bulk' && (
+                                            <div className="space-y-1">
+                                                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300">
+                                                    Quantity to Issue
+                                                </label>
+                                                <input
+                                                    type="number"
+                                                    min="1"
+                                                    max={selectedItem.quantity || 999}
+                                                    className="w-full px-3.5 py-2 text-sm font-bold rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all shadow-sm"
+                                                    value={data.quantity}
+                                                    onChange={(e) => setData('quantity', e.target.value)}
+                                                />
                                             </div>
-                                            <div className="text-sm font-black text-slate-900 dark:text-white">
-                                                {selectedItem.type === 'serialized'
-                                                    ? `${selectedItem.product?.brand?.name || ''} ${selectedItem.product?.model_name || ''}`.trim()
-                                                    : `${selectedItem.brand?.name || ''} ${selectedItem.model_name || ''}`.trim()}
-                                            </div>
-                                            <div className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                                                {selectedItem.type === 'serialized'
-                                                    ? `IMEI: ${selectedItem.imei} • Condition: ${selectedItem.condition || 'Brand New'}`
-                                                    : `SKU: ${selectedItem.sku || 'N/A'} • Available in Stock: ${selectedItem.quantity} units`}
+                                        )}
+
+                                        <div className={selectedItem.type === 'bulk' ? 'space-y-1' : 'space-y-1 sm:col-span-2'}>
+                                            <label className="block text-xs font-bold text-slate-700 dark:text-slate-300">
+                                                Agreed Dealer Price (UGX) *
+                                            </label>
+                                            <div className="relative">
+                                                <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400">UGX</span>
+                                                <input
+                                                    type="number"
+                                                    min="0"
+                                                    step="500"
+                                                    className="w-full pl-12 pr-3.5 py-2 text-sm font-bold text-indigo-600 dark:text-indigo-400 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all shadow-sm"
+                                                    placeholder="Agreed payout upon sale"
+                                                    value={data.dealer_price}
+                                                    onChange={(e) => setData('dealer_price', e.target.value)}
+                                                />
                                             </div>
                                         </div>
                                     </div>
+
                                     <button
                                         type="button"
-                                        onClick={handleClearItem}
-                                        className="text-xs font-bold text-indigo-600 dark:text-indigo-400 hover:text-indigo-800 dark:hover:text-indigo-300 bg-white dark:bg-slate-900 border border-indigo-200 dark:border-indigo-800 px-3 py-1.5 rounded-lg transition-colors"
+                                        onClick={handleAddCurrentToSlip}
+                                        disabled={!data.dealer_price || Number(data.dealer_price) <= 0}
+                                        className="w-full py-2.5 px-4 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition-all shadow-sm disabled:opacity-50"
                                     >
-                                        Change Item
+                                        <Plus size={16} /> Add This Item to Consignment Slip
                                     </button>
                                 </div>
                             )}
@@ -358,113 +519,6 @@ export default function IssueStockModal({
                             {errors.device_imei_id && <p className="text-xs text-rose-500 font-bold">{errors.device_imei_id}</p>}
                             {errors.product_id && <p className="text-xs text-rose-500 font-bold">{errors.product_id}</p>}
                         </div>
-
-                        {/* 3. Deal Terms */}
-                        <div className="pt-2 border-t border-slate-100 dark:border-slate-800 space-y-4">
-                            <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">
-                                3. Consignment Terms & Return Timeline
-                            </label>
-
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                {data.type === 'bulk' && (
-                                    <div className="space-y-1.5">
-                                        <label className="block text-xs font-bold text-slate-700 dark:text-slate-300">
-                                            Quantity to Issue *
-                                        </label>
-                                        <input
-                                            type="number"
-                                            min="1"
-                                            max={selectedItem?.quantity || 999}
-                                            className="w-full px-3.5 py-2.5 text-sm font-black rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:bg-white dark:focus:bg-slate-800 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all shadow-sm"
-                                            value={data.quantity}
-                                            onChange={(e) => setData('quantity', e.target.value)}
-                                            required
-                                        />
-                                        {selectedItem && (
-                                            <span className="text-[11px] text-slate-500 block">
-                                                Max available: <strong className="text-indigo-600 dark:text-indigo-400">{selectedItem.quantity}</strong> units
-                                            </span>
-                                        )}
-                                        {errors.quantity && <p className="text-xs text-rose-500 font-bold">{errors.quantity}</p>}
-                                    </div>
-                                )}
-
-                                <div className={data.type === 'bulk' ? 'space-y-1.5' : 'space-y-1.5 col-span-1'}>
-                                    <label className="block text-xs font-bold text-slate-700 dark:text-slate-300">
-                                        Agreed Dealer Price (UGX) *
-                                    </label>
-                                    <div className="relative">
-                                        <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400">UGX</span>
-                                        <input
-                                            type="number"
-                                            min="0"
-                                            step="500"
-                                            className="w-full pl-12 pr-3.5 py-2.5 text-sm font-bold text-indigo-600 dark:text-indigo-400 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 focus:bg-white dark:focus:bg-slate-800 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all shadow-sm"
-                                            placeholder="Agreed payout upon sale"
-                                            value={data.dealer_price}
-                                            onChange={(e) => setData('dealer_price', e.target.value)}
-                                            required
-                                        />
-                                    </div>
-                                    <span className="text-[11px] text-slate-500 block">Amount dealer must pay your shop when sold</span>
-                                    {errors.dealer_price && <p className="text-xs text-rose-500 font-bold">{errors.dealer_price}</p>}
-                                </div>
-
-                                <div className={data.type === 'bulk' ? 'space-y-1.5 col-span-2 md:col-span-2' : 'space-y-1.5 col-span-1'}>
-                                    <div className="flex justify-between items-center">
-                                        <label className="block text-xs font-bold text-slate-700 dark:text-slate-300">
-                                            Expected Return Date <span className="text-slate-400 font-normal">(Optional)</span>
-                                        </label>
-                                        <div className="flex gap-1.5">
-                                            <button
-                                                type="button"
-                                                onClick={() => setQuickDueDate(3)}
-                                                className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:text-indigo-600"
-                                            >
-                                                +3d
-                                            </button>
-                                            <button
-                                                type="button"
-                                                onClick={() => setQuickDueDate(7)}
-                                                className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:text-indigo-600"
-                                            >
-                                                +7d
-                                            </button>
-                                            <button
-                                                type="button"
-                                                onClick={() => setQuickDueDate(14)}
-                                                className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:text-indigo-600"
-                                            >
-                                                +14d
-                                            </button>
-                                        </div>
-                                    </div>
-                                    <div className="relative">
-                                        <input
-                                            type="date"
-                                            className="w-full px-3.5 py-2.5 text-sm font-semibold rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:bg-white dark:focus:bg-slate-800 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all shadow-sm"
-                                            value={data.expected_return_date}
-                                            onChange={(e) => setData('expected_return_date', e.target.value)}
-                                        />
-                                    </div>
-                                    <span className="text-[11px] text-slate-500 block">Triggers overdue alert if not settled or returned by this date</span>
-                                    {errors.expected_return_date && <p className="text-xs text-rose-500 font-bold">{errors.expected_return_date}</p>}
-                                </div>
-                            </div>
-
-                            {/* Add to Slip Button (Allows adding multiple items to same dealer) */}
-                            {selectedItem && (
-                                <div className="pt-2">
-                                    <button
-                                        type="button"
-                                        onClick={handleAddCurrentToSlip}
-                                        disabled={!selectedItem || !data.dealer_price || Number(data.dealer_price) <= 0}
-                                        className="w-full py-2.5 px-4 bg-indigo-50 dark:bg-indigo-950/60 hover:bg-indigo-100 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition-all disabled:opacity-50"
-                                    >
-                                        <Plus size={16} /> Add This Item to Consignment Slip
-                                    </button>
-                                </div>
-                            )}
 
                             {/* Staged Consignment Slip Table */}
                             {stagedItems.length > 0 && (
@@ -529,8 +583,6 @@ export default function IssueStockModal({
                                 />
                             </div>
                         </div>
-
-                    </div>
 
                     {/* Fixed / Sticky Footer Actions */}
                     <div className="px-6 py-4 border-t border-slate-100 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-900/80 shrink-0 flex items-center justify-between gap-2.5">

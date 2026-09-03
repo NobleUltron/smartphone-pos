@@ -457,7 +457,10 @@ class DealerController extends Controller
                 return redirect()->back()->with('success', "{$count} items issued to dealer in batch successfully.");
             } catch (\Exception $e) {
                 DB::rollBack();
-                return redirect()->back()->with('error', 'Error issuing items: ' . $e->getMessage());
+                \Log::error('Batch storeIssue error: ' . $e->getMessage());
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                    'items' => 'Error issuing items: ' . $e->getMessage()
+                ]);
             }
         }
 
@@ -641,7 +644,10 @@ class DealerController extends Controller
                 return redirect()->back()->with('success', "{$count} items received from dealer into inventory successfully in batch.");
             } catch (\Exception $e) {
                 DB::rollBack();
-                return redirect()->back()->with('error', 'Error receiving items: ' . $e->getMessage());
+                \Log::error('Batch storeInward error: ' . $e->getMessage());
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                    'items' => 'Error receiving items: ' . $e->getMessage()
+                ]);
             }
         }
 

@@ -16,6 +16,7 @@ export default function ReceiveStockModal({
     const [searchTerm, setSearchTerm] = useState('');
     const [selectedProduct, setSelectedProduct] = useState(null);
     const [stagedItems, setStagedItems] = useState([]);
+    const [submitError, setSubmitError] = useState(null);
 
     const { data, setData, post, processing, reset, errors, clearErrors } = useForm({
         dealer_id: preselectedDealerId || '',
@@ -43,28 +44,27 @@ export default function ReceiveStockModal({
     // Filter products based on search term
     const filteredProducts = useMemo(() => {
         if (!searchTerm.trim()) return [];
-        const term = searchTerm.toLowerCase();
-        return products.filter(p => {
-            const brandName = p.brand?.name?.toLowerCase() || '';
-            const modelName = p.model_name?.toLowerCase() || '';
-            const catName = p.category?.name?.toLowerCase() || '';
-            return brandName.includes(term) || modelName.includes(term) || catName.includes(term);
-        }).slice(0, 10);
-    }, [searchTerm, products]);
+        return products.filter(p =>
+            p.model_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            p.sku?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            p.brand?.name?.toLowerCase().includes(searchTerm.toLowerCase())
+        ).slice(0, 8);
+    }, [products, searchTerm]);
 
     const handleSelectProduct = (prod) => {
         setSelectedProduct(prod);
         setData(prev => ({
             ...prev,
             product_id: prod.id,
-            type: prod.type,
-            brand_id: prod.brand_id || '',
             category_id: prod.category_id || '',
-            model_name: prod.model_name || '',
-            wholesale_cost: prev.wholesale_cost || (prod.cost_price > 0 ? prod.cost_price : ''),
-            retail_price: prev.retail_price || (prod.selling_price > 0 ? prod.selling_price : '')
+            brand_id: prod.brand_id || '',
+            model_name: prod.model_name,
+            type: prod.type || 'serialized',
+            retail_price: prod.selling_price || '',
+            wholesale_cost: prod.cost_price || ''
         }));
         setSearchTerm('');
+        setSubmitError(null);
     };
 
     const handleClearProduct = () => {
@@ -72,9 +72,12 @@ export default function ReceiveStockModal({
         setData(prev => ({
             ...prev,
             product_id: '',
-            model_name: '',
+            category_id: '',
             brand_id: '',
-            category_id: ''
+            model_name: '',
+            wholesale_cost: '',
+            retail_price: '',
+            quantity: 1
         }));
     };
 
@@ -89,66 +92,58 @@ export default function ReceiveStockModal({
     };
 
     const handleAddCurrentToBatch = () => {
+        // Validation before staging
         if (mode === 'existing' && !selectedProduct && !data.product_id) {
-            alert('Please select a product first.');
+            alert('Please select an existing catalog product first.');
             return;
         }
         if (mode === 'new' && !data.model_name.trim()) {
-            alert('Please specify the product model name.');
+            alert('Please enter a product model name.');
             return;
         }
         if (!data.wholesale_cost || Number(data.wholesale_cost) < 0) {
-            alert('Please enter a valid dealer wholesale cost.');
+            alert('Please enter dealer wholesale cost.');
             return;
         }
         if (!data.retail_price || Number(data.retail_price) <= 0) {
-            alert('Please enter a valid shop retail price.');
-            return;
-        }
-        if (data.type === 'serialized' && !data.imei_number.trim()) {
-            alert('Please enter an IMEI / Serial number for this serialized device.');
+            alert('Please enter target retail price.');
             return;
         }
 
         const isSerialized = data.type === 'serialized';
-        const brandObj = brands.find(b => String(b.id) === String(data.brand_id));
-        const catObj = categories.find(c => String(c.id) === String(data.category_id));
-
-        const title = mode === 'existing'
-            ? `${selectedProduct?.brand?.name || ''} ${selectedProduct?.model_name || ''}`.trim()
-            : `${brandObj?.name || ''} ${data.model_name}`.trim();
-
+        const cat = categories.find(c => String(c.id) === String(data.category_id));
+        const br = brands.find(b => String(b.id) === String(data.brand_id));
+        const title = mode === 'existing' && selectedProduct 
+            ? `${selectedProduct.brand?.name || ''} ${selectedProduct.model_name || ''}`.trim()
+            : `${br?.name || ''} ${data.model_name}`.trim();
         const detail = isSerialized
-            ? `IMEI: ${data.imei_number.trim()} • ${data.condition || 'Brand New'}`
-            : `Bulk Stock • Qty: ${Number(data.quantity || 1)}`;
-
-        // Check duplicate IMEI in staged batch
-        if (isSerialized && stagedItems.some(i => i.imei_number === data.imei_number.trim())) {
-            alert('This IMEI number has already been added to the intake slip.');
-            return;
-        }
+            ? (data.imei_number ? `IMEI: ${data.imei_number}` : 'Serialized Device')
+            : (cat?.name ? `Category: ${cat.name}` : 'Bulk Item');
 
         const newItem = {
             title,
             detail,
-            mode,
             type: data.type,
-            product_id: mode === 'existing' ? data.product_id : null,
-            brand_id: data.brand_id,
-            category_id: data.category_id,
-            model_name: data.model_name,
-            imei_number: isSerialized ? data.imei_number.trim() : null,
-            condition: data.condition,
+            product_id: mode === 'existing' ? (selectedProduct ? selectedProduct.id : data.product_id) : null,
+            category_id: mode === 'new' ? data.category_id : null,
+            brand_id: mode === 'new' ? data.brand_id : null,
+            model_name: mode === 'new' ? data.model_name : null,
+            imei_number: isSerialized ? data.imei_number : null,
+            condition: isSerialized ? data.condition : null,
             storage_capacity: data.storage_capacity,
             color: data.color,
             wholesale_cost: Number(data.wholesale_cost),
             retail_price: Number(data.retail_price),
-            quantity: isSerialized ? 1 : Number(data.quantity || 1),
-            notes: data.notes || ''
+            quantity: isSerialized ? 1 : Number(data.quantity || 1)
         };
 
-        setStagedItems(prev => [...prev, newItem]);
+        if (isSerialized && newItem.imei_number && stagedItems.some(i => i.imei_number === newItem.imei_number)) {
+            alert('This IMEI is already in the intake batch slip.');
+            return;
+        }
 
+        setStagedItems(prev => [...prev, newItem]);
+        
         // Reset item fields for the next entry
         handleClearProduct();
         setData(prev => ({
@@ -171,31 +166,109 @@ export default function ReceiveStockModal({
         setStagedItems([]);
         setSearchTerm('');
         setMode('existing');
+        setSubmitError(null);
         clearErrors();
         onClose();
     };
 
     const handleSubmit = (e) => {
         e.preventDefault();
+        setSubmitError(null);
 
-        // If user has staged items, submit the batch via router.post
-        if (stagedItems.length > 0) {
+        let finalItems = [...stagedItems];
+
+        // Auto-include currently configured item in form if user filled in fields and clicked submit
+        const hasValidItem = (mode === 'existing' && (selectedProduct || data.product_id)) || (mode === 'new' && data.model_name?.trim());
+        const hasPrices = data.wholesale_cost !== '' && Number(data.wholesale_cost) >= 0 && data.retail_price !== '' && Number(data.retail_price) > 0;
+
+        if (hasValidItem && hasPrices) {
+            const isSerialized = data.type === 'serialized';
+            const cat = categories.find(c => String(c.id) === String(data.category_id));
+            const br = brands.find(b => String(b.id) === String(data.brand_id));
+            const title = mode === 'existing' && selectedProduct
+                ? `${selectedProduct.brand?.name || ''} ${selectedProduct.model_name || ''}`.trim()
+                : `${br?.name || ''} ${data.model_name}`.trim();
+            const detail = isSerialized
+                ? (data.imei_number ? `IMEI: ${data.imei_number}` : 'Serialized Device')
+                : (cat?.name ? `Category: ${cat.name}` : 'Bulk Item');
+
+            const autoItem = {
+                title,
+                detail,
+                type: data.type,
+                product_id: mode === 'existing' ? (selectedProduct ? selectedProduct.id : data.product_id) : null,
+                category_id: mode === 'new' ? data.category_id : null,
+                brand_id: mode === 'new' ? data.brand_id : null,
+                model_name: mode === 'new' ? data.model_name : null,
+                imei_number: isSerialized ? data.imei_number : null,
+                condition: isSerialized ? data.condition : null,
+                storage_capacity: data.storage_capacity,
+                color: data.color,
+                wholesale_cost: Number(data.wholesale_cost),
+                retail_price: Number(data.retail_price),
+                quantity: isSerialized ? 1 : Number(data.quantity || 1)
+            };
+
+            if (!finalItems.some(i => isSerialized && i.imei_number && i.imei_number === autoItem.imei_number)) {
+                finalItems.push(autoItem);
+            }
+        }
+
+        // If batch has items ready
+        if (finalItems.length > 0) {
+            if (!data.dealer_id) {
+                setSubmitError('Please select a partner dealer.');
+                return;
+            }
+
             router.post(route('dealers.store-inward'), {
                 dealer_id: data.dealer_id,
-                notes: data.notes,
-                items: stagedItems
+                notes: data.notes || null,
+                items: finalItems
             }, {
-                onSuccess: () => {
+                onSuccess: (page) => {
+                    if (page?.props?.flash?.error) {
+                        setSubmitError(page.props.flash.error);
+                        return;
+                    }
                     handleClose();
+                },
+                onError: (errs) => {
+                    console.error('Batch inward errors:', errs);
+                    setSubmitError(errs.items || Object.values(errs)[0] || 'Error receiving stock into inventory.');
                 }
             });
             return;
         }
 
         // Single item fallback
+        if (mode === 'existing' && !selectedProduct && !data.product_id) {
+            setSubmitError('Please select an existing catalog product.');
+            return;
+        }
+        if (mode === 'new' && !data.model_name?.trim()) {
+            setSubmitError('Please enter a product model name.');
+            return;
+        }
+        if (data.wholesale_cost === '' || Number(data.wholesale_cost) < 0) {
+            setSubmitError('Please enter dealer wholesale cost.');
+            return;
+        }
+        if (!data.retail_price || Number(data.retail_price) <= 0) {
+            setSubmitError('Please enter target retail price.');
+            return;
+        }
+
         post(route('dealers.store-inward'), {
-            onSuccess: () => {
+            onSuccess: (page) => {
+                if (page?.props?.flash?.error) {
+                    setSubmitError(page.props.flash.error);
+                    return;
+                }
                 handleClose();
+            },
+            onError: (errs) => {
+                setSubmitError(errs.items || Object.values(errs)[0] || 'Error receiving stock into inventory.');
             }
         });
     };
@@ -237,10 +310,10 @@ export default function ReceiveStockModal({
                 <form onSubmit={handleSubmit} className="flex flex-col flex-1 overflow-hidden">
                     <div className="p-6 space-y-5 overflow-y-auto flex-1">
                     {/* Error Banner */}
-                    {Object.keys(errors).length > 0 && (
+                    {(submitError || Object.keys(errors).length > 0) && (
                         <div className="p-3 bg-rose-50 dark:bg-rose-950/60 border border-rose-200 dark:border-rose-800 rounded-xl text-xs text-rose-600 dark:text-rose-400 font-bold flex items-center gap-2">
                             <AlertCircle size={16} className="shrink-0" />
-                            <span>{errors.items || errors.error || Object.values(errors)[0]}</span>
+                            <span>{submitError || errors.items || errors.error || Object.values(errors)[0]}</span>
                         </div>
                     )}
                     {/* Dealer Selection */}
@@ -548,7 +621,6 @@ export default function ReceiveStockModal({
                                     placeholder="Price owed to dealer upon sale"
                                     value={data.wholesale_cost}
                                     onChange={(e) => setData('wholesale_cost', e.target.value)}
-                                    required
                                 />
                             </div>
                             <span className="text-[11px] text-slate-500 block">Amount owed to dealer upon sale</span>
@@ -569,7 +641,6 @@ export default function ReceiveStockModal({
                                     placeholder="POS shelf price"
                                     value={data.retail_price}
                                     onChange={(e) => setData('retail_price', e.target.value)}
-                                    required
                                 />
                             </div>
                             <span className="text-[11px] text-slate-500 block">Selling price at shop checkout</span>
