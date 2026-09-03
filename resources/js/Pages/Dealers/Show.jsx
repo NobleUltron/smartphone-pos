@@ -652,116 +652,133 @@ export default function Show({ dealer, metrics, settings, monthlyTrends = [], an
             {/* Action Modal */}
             <Modal show={actionItem !== null} onClose={closeActionModal} maxWidth="md">
                 {actionItem && (
-                    <form onSubmit={submitAction} className="p-6">
-                        <div className="flex items-center justify-between mb-5 pb-4 border-b border-slate-100">
-                            <h2 className="text-lg font-bold text-slate-900 flex items-center gap-2">
+                    <div className="p-6 bg-white dark:bg-slate-900 text-slate-900 dark:text-white rounded-2xl">
+                        <div className="flex items-center justify-between mb-5 pb-4 border-b border-slate-100 dark:border-slate-800">
+                            <h2 className="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
                                 {actionType === 'sold' ? <><CheckCircle className="text-emerald-500"/> Mark Item as Sold</> : <><RotateCcw className="text-blue-500"/> Return Item to Stock</>}
                             </h2>
-                            <button type="button" onClick={closeActionModal} className="text-slate-400 hover:text-slate-600">
+                            <button type="button" onClick={closeActionModal} className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
                                 <X size={20} />
                             </button>
                         </div>
 
-                        <div className="bg-slate-50 rounded-xl p-4 mb-6 border border-slate-200">
-                            <p className="text-sm font-bold text-slate-900">
+                        <div className="bg-slate-50 dark:bg-slate-800/50 rounded-xl p-4 mb-6 border border-slate-200 dark:border-slate-700">
+                            <p className="text-sm font-bold text-slate-900 dark:text-white">
                                 {actionItem.type === 'serialized' ? `${actionItem.device_imei?.product?.model_name}` : `${actionItem.product?.model_name}`}
                             </p>
-                            <p className="text-xs text-slate-500">
+                            <p className="text-xs text-slate-500 dark:text-slate-400">
                                 {actionItem.type === 'serialized' ? `IMEI: ${actionItem.device_imei?.imei}` : `SKU: ${actionItem.product?.sku || 'N/A'}`}
                             </p>
                             
                             {actionType === 'sold' && (
-                                <div className="mt-3 pt-3 border-t border-slate-200 flex justify-between items-center">
-                                    <span className="text-sm text-slate-600 font-medium">Sale Amount:</span>
-                                    <span className="text-lg font-bold text-emerald-600">{formatCurrency(actionItem.dealer_price * data.quantity)}</span>
+                                <div className="mt-3 pt-3 border-t border-slate-200 dark:border-slate-700 flex justify-between items-center">
+                                    <span className="text-sm text-slate-600 dark:text-slate-300 font-medium">Sale Amount:</span>
+                                    <span className="text-lg font-bold text-emerald-600 dark:text-emerald-400">{formatCurrency(actionItem.dealer_price * data.quantity)}</span>
                                 </div>
                             )}
                         </div>
 
-                        <div className="mb-4">
-                            <label className="block text-sm font-medium text-slate-700 mb-1">Quantity</label>
-                            <input
-                                type="number"
-                                className="w-full rounded-xl border-slate-300 focus:border-indigo-500 focus:ring-indigo-500 disabled:opacity-75 disabled:bg-slate-100"
-                                value={data.quantity}
-                                onChange={e => setData('quantity', e.target.value)}
-                                required
-                                min="1"
-                                max={getAvailableQuantity(actionItem)}
-                                disabled={actionItem.type === 'serialized'}
-                            />
-                            {errors.quantity && <p className="text-rose-500 text-xs mt-1">{errors.quantity}</p>}
-                            <p className="text-xs text-slate-500 mt-1">Available to resolve: {getAvailableQuantity(actionItem)}</p>
-                        </div>
-
-                        {actionType === 'sold' ? (
-                            <div className="space-y-4">
-                                <div className="p-3 bg-amber-50 text-amber-700 text-sm rounded-lg border border-amber-200 flex items-start gap-2 mb-4">
-                                    <DollarSign size={18} className="shrink-0 mt-0.5" />
-                                    <p>This action will record a sale of <strong>{formatCurrency(actionItem.dealer_price * data.quantity)}</strong> to your current Cash Drawer.</p>
-                                </div>
-
-                                <div>
-                                    <label className="block text-sm font-medium text-slate-700 mb-1">Payment Method</label>
-                                    <select
-                                        className="w-full rounded-xl border-slate-300 focus:border-indigo-500 focus:ring-indigo-500"
-                                        value={data.payment_method}
-                                        onChange={e => setData('payment_method', e.target.value)}
-                                        required
-                                    >
-                                        <option value="Cash">Cash</option>
-                                        <option value="MTN MoMo">MTN MoMo</option>
-                                        <option value="Airtel Money">Airtel Money</option>
-                                        <option value="Bank Transfer">Bank Transfer</option>
-                                    </select>
-                                </div>
-                                
-                                <div className="grid grid-cols-2 gap-3">
-                                    <div>
-                                        <label className="block text-sm font-medium text-slate-700 mb-1">Customer Name (Optional)</label>
-                                        <input
-                                            type="text"
-                                            className="w-full rounded-xl border-slate-300 focus:border-indigo-500 focus:ring-indigo-500"
-                                            placeholder="Walk-in Customer"
-                                            value={data.customer_name}
-                                            onChange={e => setData('customer_name', e.target.value)}
-                                        />
-                                    </div>
-                                    <div>
-                                        <label className="block text-sm font-medium text-slate-700 mb-1">Customer Phone (Optional)</label>
-                                        <input
-                                            type="text"
-                                            className="w-full rounded-xl border-slate-300 focus:border-indigo-500 focus:ring-indigo-500"
-                                            placeholder="07..."
-                                            value={data.customer_phone}
-                                            onChange={e => setData('customer_phone', e.target.value)}
-                                        />
-                                    </div>
-                                </div>
-                                <p className="text-xs text-slate-500">The receipt will be issued to this customer. If left blank, it defaults to the Dealer.</p>
+                        <form onSubmit={submitAction}>
+                            <div className="mb-4">
+                                <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300 mb-1.5">Quantity</label>
+                                <input
+                                    type="number"
+                                    className="w-full px-3.5 py-2.5 text-sm font-semibold rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:bg-white dark:focus:bg-slate-800 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 disabled:opacity-75 disabled:bg-slate-100 dark:disabled:bg-slate-800/50 shadow-sm transition-all"
+                                    value={data.quantity}
+                                    onChange={e => setData('quantity', e.target.value)}
+                                    required
+                                    min="1"
+                                    max={getAvailableQuantity(actionItem)}
+                                    disabled={actionItem.type === 'serialized'}
+                                />
+                                {errors.quantity && <p className="text-rose-500 text-xs mt-1 font-bold">{errors.quantity}</p>}
+                                <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">Available to resolve: {getAvailableQuantity(actionItem)}</p>
                             </div>
-                        ) : (
-                            <div className="space-y-4">
-                                <div>
-                                    <label className="block text-sm font-medium text-slate-700 mb-1">Return Notes (Optional)</label>
-                                    <textarea
-                                        className="w-full rounded-xl border-slate-300 focus:border-indigo-500 focus:ring-indigo-500"
-                                        rows="3"
-                                        value={data.notes}
-                                        onChange={e => setData('notes', e.target.value)}
-                                        placeholder="Reason for return, condition of item..."
-                                    ></textarea>
-                                </div>
-                            </div>
-                        )}
 
-                        <div className="mt-8 flex justify-end gap-3 pt-4 border-t border-slate-100">
-                            <Button variant="secondary" onClick={closeActionModal}>Cancel</Button>
-                            <Button variant={actionType === 'sold' ? 'primary' : 'secondary'} type="submit" disabled={processing} icon={actionType === 'sold' ? CheckCircle : RotateCcw}>
-                                {actionType === 'sold' ? 'Confirm Sale' : 'Confirm Return'}
-                            </Button>
-                        </div>
-                    </form>
+                            {actionType === 'sold' ? (
+                                <div className="space-y-4">
+                                    <div className="p-3 bg-amber-50 dark:bg-amber-950/40 text-amber-800 dark:text-amber-300 text-xs rounded-xl border border-amber-200 dark:border-amber-900/60 flex items-start gap-2 mb-4">
+                                        <DollarSign size={16} className="shrink-0 mt-0.5 text-amber-600 dark:text-amber-400" />
+                                        <p>This action will record a sale of <strong>{formatCurrency(actionItem.dealer_price * data.quantity)}</strong> to your current Cash Drawer.</p>
+                                    </div>
+
+                                    <div>
+                                        <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300 mb-1.5">Payment Method</label>
+                                        <select
+                                            className="w-full px-3.5 py-2.5 text-sm font-semibold rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:bg-white dark:focus:bg-slate-800 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 shadow-sm transition-all"
+                                            value={data.payment_method}
+                                            onChange={e => setData('payment_method', e.target.value)}
+                                            required
+                                        >
+                                            <option value="Cash">Cash</option>
+                                            <option value="MTN MoMo">MTN MoMo</option>
+                                            <option value="Airtel Money">Airtel Money</option>
+                                            <option value="Bank Transfer">Bank Transfer</option>
+                                        </select>
+                                    </div>
+                                    
+                                    <div className="grid grid-cols-2 gap-3">
+                                        <div>
+                                            <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300 mb-1.5">Customer Name (Optional)</label>
+                                            <input
+                                                type="text"
+                                                className="w-full px-3.5 py-2.5 text-sm font-semibold rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white placeholder-slate-400 focus:bg-white dark:focus:bg-slate-800 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 shadow-sm transition-all"
+                                                placeholder="Walk-in Customer"
+                                                value={data.customer_name}
+                                                onChange={e => setData('customer_name', e.target.value)}
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300 mb-1.5">Customer Phone (Optional)</label>
+                                            <input
+                                                type="text"
+                                                className="w-full px-3.5 py-2.5 text-sm font-semibold rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white placeholder-slate-400 focus:bg-white dark:focus:bg-slate-800 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 shadow-sm transition-all"
+                                                placeholder="07..."
+                                                value={data.customer_phone}
+                                                onChange={e => setData('customer_phone', e.target.value)}
+                                            />
+                                        </div>
+                                    </div>
+                                    <p className="text-xs text-slate-500 dark:text-slate-400">The receipt will be issued to this customer. If left blank, it defaults to the Dealer.</p>
+                                </div>
+                            ) : (
+                                <div className="space-y-4">
+                                    <div>
+                                        <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300 mb-1.5">Return Notes (Optional)</label>
+                                        <textarea
+                                            className="w-full px-3.5 py-2 text-sm rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white placeholder-slate-400 focus:bg-white dark:focus:bg-slate-800 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 shadow-sm transition-all"
+                                            rows="3"
+                                            value={data.notes}
+                                            onChange={e => setData('notes', e.target.value)}
+                                            placeholder="Reason for return, condition of item..."
+                                        ></textarea>
+                                    </div>
+                                </div>
+                            )}
+
+                            <div className="mt-8 flex justify-end gap-2.5 pt-4 border-t border-slate-100 dark:border-slate-800">
+                                <button
+                                    type="button"
+                                    onClick={closeActionModal}
+                                    className="px-4 py-2.5 text-xs font-bold text-slate-700 dark:text-slate-300 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 rounded-xl transition-colors"
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    type="submit"
+                                    disabled={processing}
+                                    className={`px-5 py-2.5 text-xs font-bold text-white rounded-xl shadow-md transition-all flex items-center gap-1.5 ${
+                                        actionType === 'sold'
+                                            ? 'bg-emerald-600 hover:bg-emerald-700 shadow-emerald-500/20'
+                                            : 'bg-indigo-600 hover:bg-indigo-700 shadow-indigo-500/20'
+                                    }`}
+                                >
+                                    {actionType === 'sold' ? <CheckCircle size={16} /> : <RotateCcw size={16} />}
+                                    {actionType === 'sold' ? 'Confirm Sale' : 'Confirm Return'}
+                                </button>
+                            </div>
+                        </form>
+                    </div>
                 )}
             </Modal>
 

@@ -271,8 +271,21 @@ h1, h2, h3, h4, h5, h6 {
 }
 .saas-input-icon-wrapper .saas-input:focus ~ .saas-input-icon { color: var(--primary); }
 
-/* Dark mode — native form control colour scheme */
+/* Dark mode — native form control colour scheme & global contrast safeguard */
 .dark input, .dark select, .dark textarea { color-scheme: dark; }
+
+.dark input:not([type="checkbox"]):not([type="radio"]):not([type="submit"]):not([type="button"]):not([type="reset"]):not([type="file"]),
+.dark select,
+.dark textarea {
+    background-color: #1e293b;
+    color: #f8fafc;
+    border-color: #334155;
+}
+
+.dark input::placeholder,
+.dark textarea::placeholder {
+    color: #94a3b8;
+}
 
 /* Loading Spinners */
 .spin-anim { animation: spin 1s linear infinite; }
