@@ -161,7 +161,15 @@ class DealerController extends Controller
 
     public function show(Dealer $dealer)
     {
-        $dealer->load(['dealerItems.deviceImei.product.brand', 'dealerItems.product.brand', 'dealerItems.user', 'dealerItems.sale']);
+        $dealer->load([
+            'dealerItems' => function ($q) {
+                $q->orderByDesc('id');
+            },
+            'dealerItems.deviceImei.product.brand',
+            'dealerItems.product.brand',
+            'dealerItems.user',
+            'dealerItems.sale'
+        ]);
         
         $outwardItems = $dealer->dealerItems()->where('direction', 'outward');
         $inwardItems = $dealer->dealerItems()->where('direction', 'inward');

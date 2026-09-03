@@ -20,6 +20,6 @@ class Dealer extends Model
 
     public function dealerItems()
     {
-        return $this->hasMany(DealerItem::class);
+        return $this->hasMany(DealerItem::class)->orderByDesc('id');
     }
 }

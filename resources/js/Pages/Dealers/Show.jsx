@@ -1,7 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import { Head, Link, useForm, router } from '@inertiajs/react';
-import { Handshake, Phone, MapPin, PackageOpen, CheckCircle, RotateCcw, X, DollarSign, Edit2, Receipt, Printer, Eye, MessageCircle, FileText, Download, TrendingUp, Clock, ShieldCheck, Award, BarChart2, Trash2, Wallet, AlertCircle } from 'lucide-react';
+import { Handshake, Phone, MapPin, PackageOpen, CheckCircle, RotateCcw, X, DollarSign, Edit2, Receipt, Printer, Eye, MessageCircle, FileText, Download, TrendingUp, Clock, ShieldCheck, Award, BarChart2, Trash2, Wallet, AlertCircle, Search } from 'lucide-react';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend, BarChart, Bar } from 'recharts';
 import Barcode from 'react-barcode';
 import dayjs from 'dayjs';
@@ -40,8 +40,40 @@ export default function Show({
     const [isEditing, setIsEditing] = useState(false);
     const [voidItem, setVoidItem] = useState(null);
 
-    // Direction Filter State ('all', 'outward', 'inward')
+    // Filter States
     const [directionTab, setDirectionTab] = useState('all');
+    const [statusTab, setStatusTab] = useState('all');
+    const [historySearch, setHistorySearch] = useState('');
+
+    const pendingCount = useMemo(() => (dealer.dealer_items || []).filter(i => i.status === 'Pending').length, [dealer.dealer_items]);
+    const soldCount = useMemo(() => (dealer.dealer_items || []).filter(i => i.status === 'Sold').length, [dealer.dealer_items]);
+    const returnedCount = useMemo(() => (dealer.dealer_items || []).filter(i => i.status === 'Returned').length, [dealer.dealer_items]);
+
+    const filteredAndSortedItems = useMemo(() => {
+        let list = [...(dealer.dealer_items || [])].sort((a, b) => b.id - a.id);
+
+        if (directionTab !== 'all') {
+            list = list.filter(i => (i.direction || 'outward') === directionTab);
+        }
+
+        if (statusTab !== 'all') {
+            list = list.filter(i => i.status === statusTab);
+        }
+
+        if (historySearch.trim()) {
+            const q = historySearch.toLowerCase();
+            list = list.filter(i => {
+                const model = i.type === 'serialized' 
+                    ? `${i.device_imei?.product?.brand?.name || ''} ${i.device_imei?.product?.model_name || ''}`
+                    : `${i.product?.brand?.name || ''} ${i.product?.model_name || ''}`;
+                const imei = i.device_imei?.imei || i.device_imei?.imei_number || '';
+                const sku = i.product?.sku || '';
+                return model.toLowerCase().includes(q) || imei.toLowerCase().includes(q) || sku.toLowerCase().includes(q);
+            });
+        }
+
+        return list;
+    }, [dealer.dealer_items, directionTab, statusTab, historySearch]);
 
     // Inward Intake Modal State
     const [showInwardModal, setShowInwardModal] = useState(false);
@@ -418,27 +450,88 @@ export default function Show({
 
             {/* History Table */}
             <Card>
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 border-b border-slate-100 pb-4">
-                    <h3 className="text-lg font-bold text-slate-900">Dealer Item Consignment History</h3>
-                    <div className="flex items-center gap-2 bg-slate-100 p-1 rounded-xl">
-                        <button 
-                            onClick={() => setDirectionTab('all')}
-                            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${directionTab === 'all' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-600 hover:text-slate-900'}`}
-                        >
-                            All ({dealer.dealer_items.length})
-                        </button>
-                        <button 
-                            onClick={() => setDirectionTab('outward')}
-                            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${directionTab === 'outward' ? 'bg-amber-500 text-white shadow-sm' : 'text-slate-600 hover:text-slate-900'}`}
-                        >
-                            Issued Outward ({dealer.dealer_items.filter(i => (i.direction || 'outward') === 'outward').length})
-                        </button>
-                        <button 
-                            onClick={() => setDirectionTab('inward')}
-                            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${directionTab === 'inward' ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-600 hover:text-slate-900'}`}
-                        >
-                            Received Inward ({dealer.dealer_items.filter(i => i.direction === 'inward').length})
-                        </button>
+                <div className="space-y-4 mb-6 border-b border-slate-100 dark:border-slate-800 pb-4">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                        <div>
+                            <h3 className="text-lg font-bold text-slate-900 dark:text-white">Dealer Item Consignment History</h3>
+                            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                                Showing all items ordered newest first.
+                            </p>
+                        </div>
+                        
+                        {/* Direction Tabs */}
+                        <div className="flex items-center gap-1.5 bg-slate-100 dark:bg-slate-800 p-1 rounded-xl">
+                            <button 
+                                onClick={() => setDirectionTab('all')}
+                                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${directionTab === 'all' ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-sm' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'}`}
+                            >
+                                All ({dealer.dealer_items.length})
+                            </button>
+                            <button 
+                                onClick={() => setDirectionTab('outward')}
+                                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${directionTab === 'outward' ? 'bg-amber-500 text-white shadow-sm' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'}`}
+                            >
+                                Issued Outward ({dealer.dealer_items.filter(i => (i.direction || 'outward') === 'outward').length})
+                            </button>
+                            <button 
+                                onClick={() => setDirectionTab('inward')}
+                                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${directionTab === 'inward' ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'}`}
+                            >
+                                Received Inward ({dealer.dealer_items.filter(i => i.direction === 'inward').length})
+                            </button>
+                        </div>
+                    </div>
+
+                    {/* Secondary Filter: Status & Search */}
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-2">
+                        <div className="flex flex-wrap items-center gap-1.5">
+                            <button
+                                onClick={() => setStatusTab('all')}
+                                className={`px-2.5 py-1 text-xs font-bold rounded-lg transition-colors ${statusTab === 'all' ? 'bg-slate-800 dark:bg-slate-200 text-white dark:text-slate-900' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700'}`}
+                            >
+                                All Statuses ({dealer.dealer_items.length})
+                            </button>
+                            <button
+                                onClick={() => setStatusTab('Pending')}
+                                className={`px-2.5 py-1 text-xs font-bold rounded-lg transition-colors flex items-center gap-1.5 ${statusTab === 'Pending' ? 'bg-amber-500 text-white' : 'bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 hover:bg-amber-100'}`}
+                            >
+                                <span className="w-1.5 h-1.5 rounded-full bg-amber-400"></span>
+                                Active / Pending ({pendingCount})
+                            </button>
+                            <button
+                                onClick={() => setStatusTab('Sold')}
+                                className={`px-2.5 py-1 text-xs font-bold rounded-lg transition-colors flex items-center gap-1.5 ${statusTab === 'Sold' ? 'bg-emerald-600 text-white' : 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100'}`}
+                            >
+                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+                                Sold ({soldCount})
+                            </button>
+                            <button
+                                onClick={() => setStatusTab('Returned')}
+                                className={`px-2.5 py-1 text-xs font-bold rounded-lg transition-colors flex items-center gap-1.5 ${statusTab === 'Returned' ? 'bg-blue-600 text-white' : 'bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 hover:bg-blue-100'}`}
+                            >
+                                <span className="w-1.5 h-1.5 rounded-full bg-blue-400"></span>
+                                Returned ({returnedCount})
+                            </button>
+                        </div>
+
+                        <div className="relative min-w-[220px]">
+                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={14} />
+                            <input
+                                type="text"
+                                placeholder="Search IMEI, SKU, Model..."
+                                className="w-full pl-8 pr-3 py-1.5 text-xs rounded-lg border border-slate-200 dark:border-slate-700 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 bg-white dark:bg-slate-900 text-slate-900 dark:text-white"
+                                value={historySearch}
+                                onChange={(e) => setHistorySearch(e.target.value)}
+                            />
+                            {historySearch && (
+                                <button
+                                    onClick={() => setHistorySearch('')}
+                                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 text-xs"
+                                >
+                                    ×
+                                </button>
+                            )}
+                        </div>
                     </div>
                 </div>
                 <div className="overflow-x-auto">
@@ -453,15 +546,14 @@ export default function Show({
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100">
-                            {dealer.dealer_items.length === 0 ? (
+                            {filteredAndSortedItems.length === 0 ? (
                                 <tr>
                                     <td colSpan="5" className="px-6 py-8 text-center text-slate-500">
-                                        No items have been issued to this dealer yet.
+                                        No consignment items found matching the selected filters.
                                     </td>
                                 </tr>
                              ) : (
-                                dealer.dealer_items
-                                    .filter(item => directionTab === 'all' || (item.direction || 'outward') === directionTab)
+                                filteredAndSortedItems
                                     .map((item) => {
                                         const unitCost = Number(item.wholesale_cost || item.dealer_price || 0);
                                         const qtyTotal = Number(item.quantity || 1);
