@@ -342,16 +342,24 @@
     <div class="section-body">
         <table class="summary-table">
             <tr>
-                <td class="row-label">MoMo / Airtel Money Sales</td>
-                <td class="row-value text-gray">UGX {{ number_format($summary['momo_sales']) }}</td>
+                <td class="row-label">MTN Mobile Money Sales</td>
+                <td class="row-value text-gray">UGX {{ number_format($summary['momo_sales'] ?? 0) }}</td>
+            </tr>
+            <tr>
+                <td class="row-label">Airtel Money Sales</td>
+                <td class="row-value text-gray">UGX {{ number_format($summary['airtel_sales'] ?? 0) }}</td>
             </tr>
             <tr>
                 <td class="row-label">Bank / Card Sales</td>
-                <td class="row-value text-gray">UGX {{ number_format($summary['bank_sales']) }}</td>
+                <td class="row-value text-gray">UGX {{ number_format($summary['bank_sales'] ?? 0) }}</td>
             </tr>
             <tr class="subtotal-row">
                 <td class="row-label">Total Non-Cash Revenue</td>
-                <td class="row-value">UGX {{ number_format($summary['momo_sales'] + $summary['bank_sales']) }}</td>
+                <td class="row-value">UGX {{ number_format(($summary['momo_sales'] ?? 0) + ($summary['airtel_sales'] ?? 0) + ($summary['bank_sales'] ?? 0)) }}</td>
+            </tr>
+            <tr class="total-row">
+                <td class="row-label" style="color:#fff;">Gross Shift Revenue (Cash + Digital)</td>
+                <td class="row-value" style="color:#fff;">UGX {{ number_format(($summary['cash_product_sales'] ?? 0) + ($summary['cash_repair_payments'] ?? 0) + ($summary['momo_sales'] ?? 0) + ($summary['airtel_sales'] ?? 0) + ($summary['bank_sales'] ?? 0)) }}</td>
             </tr>
         </table>
     </div>

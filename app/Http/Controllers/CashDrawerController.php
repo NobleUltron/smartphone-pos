@@ -20,7 +20,7 @@ class CashDrawerController extends Controller
             ->where('status', 'open')
             ->first();
 
-        // Calculate expected cash and actual gross cash sales dynamically if a drawer is open
+        // Calculate expected cash and sales across all payment channels if a drawer is open
         if ($activeDrawer) {
             $activeDrawer->calculated_expected = $activeDrawer->calculateExpectedCash();
 
@@ -33,7 +33,33 @@ class CashDrawerController extends Controller
                 ->where('payment_method', 'Cash')
                 ->sum('amount_paid');
 
+            $momoSales = Sale::where('cash_drawer_id', $activeDrawer->id)
+                ->whereIn('payment_method', ['MTN MoMo', 'MoMo'])
+                ->whereIn('payment_status', ['Paid'])
+                ->sum('final_amount');
+
+            $airtelSales = Sale::where('cash_drawer_id', $activeDrawer->id)
+                ->where('payment_method', 'Airtel Money')
+                ->whereIn('payment_status', ['Paid'])
+                ->sum('final_amount');
+
+            $bankSales = Sale::where('cash_drawer_id', $activeDrawer->id)
+                ->whereIn('payment_method', ['Bank Transfer', 'Card'])
+                ->whereIn('payment_status', ['Paid'])
+                ->sum('final_amount');
+
+            $totalSalesCount = Sale::where('cash_drawer_id', $activeDrawer->id)->count();
+
             $activeDrawer->cash_sales = $cashSales + $layawayCash;
+            $activeDrawer->momo_sales = $momoSales;
+            $activeDrawer->airtel_sales = $airtelSales;
+            $activeDrawer->bank_sales = $bankSales;
+            $activeDrawer->total_shift_sales = ($cashSales + $layawayCash) + $momoSales + $airtelSales + $bankSales;
+            $activeDrawer->total_sales_count = $totalSalesCount;
+
+            $openedAt = Carbon::parse($activeDrawer->opened_at);
+            $activeDrawer->hours_open = round($openedAt->diffInMinutes(now()) / 60, 1);
+            $activeDrawer->is_stale = $openedAt->diffInHours(now()) >= 24;
         }
 
         return Inertia::render('CashDrawer/Index', [

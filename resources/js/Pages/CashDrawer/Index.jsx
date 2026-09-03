@@ -162,6 +162,7 @@ export default function Index({ auth, activeDrawer }) {
                     <div className="space-y-8">
                         
                         {/* Active Shift Status Bar */}
+                        {/* Active Shift Status Bar */}
                         <Card className="p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
                             <div className="flex items-center gap-3">
                                 <div className="relative flex h-3 w-3">
@@ -176,7 +177,7 @@ export default function Index({ auth, activeDrawer }) {
                                     <p className="text-xs text-slate-500">Opened by <span className="font-semibold text-slate-700 dark:text-slate-200">{auth.user.name}</span> at {new Date(activeDrawer.opened_at).toLocaleString()}</p>
                                 </div>
                             </div>
-                            <div className="flex items-center gap-3">
+                            <div className="flex flex-wrap items-center gap-2.5">
                                 <div className="text-xs text-slate-500 dark:text-slate-300 bg-slate-50 dark:bg-slate-800 px-3 py-1.5 rounded-lg border border-slate-200/60 dark:border-slate-700 font-mono">
                                     Drawer ID: #{activeDrawer.id}
                                 </div>
@@ -190,8 +191,42 @@ export default function Index({ auth, activeDrawer }) {
                                     <FileDown size={14} />
                                     Download PDF Report
                                 </a>
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        const el = document.getElementById('close-shift-section');
+                                        if (el) el.scrollIntoView({ behavior: 'smooth' });
+                                    }}
+                                    className="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 shadow-sm transition-colors"
+                                >
+                                    <XCircle size={14} />
+                                    End & Close Shift
+                                </button>
                             </div>
                         </Card>
+
+                        {/* Stale Shift Reminder Alert */}
+                        {activeDrawer.is_stale && (
+                            <div className="p-4 rounded-2xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 text-amber-800 dark:text-amber-200 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-sm">
+                                <div className="flex items-center gap-3">
+                                    <AlertTriangle size={22} className="text-amber-600 shrink-0" />
+                                    <div>
+                                        <h4 className="text-sm font-bold">Shift has been open for {activeDrawer.hours_open || 24}+ hours</h4>
+                                        <p className="text-xs opacity-90 mt-0.5">Shifts are designed to be reconciled at the end of each business day to keep accounting, cash counts, and daily profit/loss audits distinct.</p>
+                                    </div>
+                                </div>
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        const el = document.getElementById('close-shift-section');
+                                        if (el) el.scrollIntoView({ behavior: 'smooth' });
+                                    }}
+                                    className="px-3.5 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-bold shrink-0 transition-colors shadow-sm"
+                                >
+                                    Reconcile Actual Cash Now
+                                </button>
+                            </div>
+                        )}
 
                         {/* 4 Metric Overview Cards */}
                         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
@@ -201,7 +236,7 @@ export default function Index({ auth, activeDrawer }) {
                                     <div>
                                         <h6 className="text-slate-500 font-semibold text-xs uppercase tracking-wider mb-1">Starting Cash</h6>
                                         <div className="flex items-baseline gap-1">
-                                            <h3 className="text-2xl font-bold text-slate-900 dark:text-white">{(startingCash + cashIns).toLocaleString()}</h3>
+                                            <h3 className="text-2xl font-bold text-slate-900 dark:text-white">{startingCash.toLocaleString()}</h3>
                                             <span className="text-xs text-slate-500 font-medium">UGX</span>
                                         </div>
                                     </div>
@@ -210,8 +245,8 @@ export default function Index({ auth, activeDrawer }) {
                                     </div>
                                 </div>
                                 <div className="flex items-center gap-1 text-xs text-slate-500 font-medium">
-                                    <Badge variant="default">Drawer Total</Badge> 
-                                    {cashIns > 0 ? `Includes +${cashIns.toLocaleString()} added` : 'Initial Balance'}
+                                    <Badge variant="default">Opening Float</Badge> 
+                                    {cashIns > 0 ? `+${cashIns.toLocaleString()} top-up added` : 'Initial Balance'}
                                 </div>
                             </Card>
 
@@ -238,7 +273,7 @@ export default function Index({ auth, activeDrawer }) {
                                     <div>
                                         <h6 className="text-slate-500 font-semibold text-xs uppercase tracking-wider mb-1">Shift Expenses</h6>
                                         <div className="flex items-baseline gap-1">
-                                            <h3 className="text-2xl font-bold text-rose-600">-{operatingExpenses.toLocaleString()}</h3>
+                                            <h3 className="text-2xl font-bold text-rose-600">{operatingExpenses > 0 ? `-${operatingExpenses.toLocaleString()}` : '0'}</h3>
                                             <span className="text-xs text-rose-600 font-medium">UGX</span>
                                         </div>
                                     </div>
@@ -269,6 +304,50 @@ export default function Index({ auth, activeDrawer }) {
                                 </div>
                             </Card>
 
+                        </div>
+
+                        {/* Multi-Channel Shift Revenue Breakdown Strip */}
+                        <div className="bg-slate-900 text-white rounded-2xl p-5 shadow-xl border border-slate-800">
+                            <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 border-b border-slate-800 pb-4 mb-4">
+                                <div>
+                                    <div className="flex items-center gap-2">
+                                        <TrendingUp size={18} className="text-emerald-400" />
+                                        <h3 className="text-base font-bold">Shift Revenue Across All Payment Channels</h3>
+                                    </div>
+                                    <p className="text-xs text-slate-400 mt-0.5">
+                                        Combined sales collected during this shift ({activeDrawer.total_sales_count || 0} completed transaction{activeDrawer.total_sales_count === 1 ? '' : 's'})
+                                    </p>
+                                </div>
+                                <div className="text-left md:text-right">
+                                    <span className="text-xs text-slate-400 block font-medium">Total Shift Gross Sales</span>
+                                    <span className="text-2xl font-extrabold text-emerald-400 tracking-tight">
+                                        UGX {Number(activeDrawer.total_shift_sales || 0).toLocaleString()}
+                                    </span>
+                                </div>
+                            </div>
+
+                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                                <div className="bg-slate-800/80 p-3.5 rounded-xl border border-slate-700/60">
+                                    <span className="text-[11px] font-bold text-emerald-400 uppercase tracking-wider block mb-1">Cash Inflow</span>
+                                    <span className="text-base sm:text-lg font-bold text-white block">UGX {cashSales.toLocaleString()}</span>
+                                    <span className="text-[10px] text-slate-400">Physical Register Till</span>
+                                </div>
+                                <div className="bg-slate-800/80 p-3.5 rounded-xl border border-slate-700/60">
+                                    <span className="text-[11px] font-bold text-yellow-400 uppercase tracking-wider block mb-1">MTN Mobile Money</span>
+                                    <span className="text-base sm:text-lg font-bold text-white block">UGX {Number(activeDrawer.momo_sales || 0).toLocaleString()}</span>
+                                    <span className="text-[10px] text-slate-400">Treasury Digital Float</span>
+                                </div>
+                                <div className="bg-slate-800/80 p-3.5 rounded-xl border border-slate-700/60">
+                                    <span className="text-[11px] font-bold text-rose-400 uppercase tracking-wider block mb-1">Airtel Money</span>
+                                    <span className="text-base sm:text-lg font-bold text-white block">UGX {Number(activeDrawer.airtel_sales || 0).toLocaleString()}</span>
+                                    <span className="text-[10px] text-slate-400">Treasury Digital Float</span>
+                                </div>
+                                <div className="bg-slate-800/80 p-3.5 rounded-xl border border-slate-700/60">
+                                    <span className="text-[11px] font-bold text-indigo-400 uppercase tracking-wider block mb-1">Bank / Card</span>
+                                    <span className="text-base sm:text-lg font-bold text-white block">UGX {Number(activeDrawer.bank_sales || 0).toLocaleString()}</span>
+                                    <span className="text-[10px] text-slate-400">Direct Bank Settlement</span>
+                                </div>
+                            </div>
                         </div>
 
                         {/* Main Grid: Expenses Table & Actions Column */}
@@ -413,7 +492,7 @@ export default function Index({ auth, activeDrawer }) {
                                 </Card>
 
                                 {/* Close Shift Form Card */}
-                                <Card className="border-rose-200/80 dark:border-rose-900/40 space-y-4">
+                                <Card id="close-shift-section" className="border-rose-200/80 dark:border-rose-900/40 space-y-4 scroll-mt-6">
                                     <div className="flex items-center justify-between border-b border-slate-100 pb-3.5">
                                         <div className="flex items-center gap-2.5">
                                             <div className="w-8 h-8 rounded-lg bg-rose-50 border border-rose-100 flex items-center justify-center text-rose-600">

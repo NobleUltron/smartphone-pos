@@ -38,7 +38,12 @@ class ShiftReportController extends Controller
             ->sum('amount_paid');
 
         $momoSales = Sale::where('cash_drawer_id', $drawer->id)
-            ->whereIn('payment_method', ['MoMo', 'Airtel Money'])
+            ->whereIn('payment_method', ['MTN MoMo', 'MoMo'])
+            ->whereIn('payment_status', ['Paid'])
+            ->sum('final_amount');
+
+        $airtelSales = Sale::where('cash_drawer_id', $drawer->id)
+            ->where('payment_method', 'Airtel Money')
             ->whereIn('payment_status', ['Paid'])
             ->sum('final_amount');
 
@@ -59,6 +64,7 @@ class ShiftReportController extends Controller
             'cash_product_sales'  => $cashProductSales,
             'cash_repair_payments'=> $cashRepairPayments,
             'momo_sales'          => $momoSales,
+            'airtel_sales'        => $airtelSales,
             'bank_sales'          => $bankSales,
             'cash_ins'            => $cashIns,
             'refunds'             => $refunds,
