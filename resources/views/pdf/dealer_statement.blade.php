@@ -358,8 +358,13 @@
 
                         $itemDetail = ($item->type === 'serialized' || $imei)
                             ? ('IMEI: ' . ($imei ?: 'N/A') . (count(array_filter([$storage, $color, $condition])) ? ' • ' . implode(' • ', array_filter([$storage, $color, $condition])) : ''))
-                            : ('Quantity: ' . $item->quantity . ' pcs');
-                        $wholesale = $item->settlement_amount > 0 ? $item->settlement_amount : ($item->wholesale_cost ?? $item->dealer_price ?? 0);
+                            : ('Quantity: ' . $item->quantity . ' pcs' . ($item->quantity_sold > 0 ? ' (' . $item->quantity_sold . ' Sold)' : ''));
+                        
+                        $unitCost = floatval($item->wholesale_cost ?? $item->dealer_price ?? 0);
+                        $totalIntake = $unitCost * $item->quantity;
+                        $totalOwedForSold = $unitCost * $item->quantity_sold;
+                        $paidAmount = floatval($item->settlement_amount ?? 0);
+                        $remainingOwed = max(0, $totalOwedForSold - $paidAmount);
                     @endphp
                     <tr>
                         <td>{{ $idx + 1 }}</td>
@@ -368,16 +373,35 @@
                             <span style="font-size: 7pt; color: #64748b;">{{ $itemDetail }}</span>
                         </td>
                         <td>{{ $item->created_at ? \Carbon\Carbon::parse($item->created_at)->format('d M Y') : '—' }}</td>
-                        <td>{{ $item->sold_at ? \Carbon\Carbon::parse($item->sold_at)->format('d M Y') : 'In Shop (Unsold)' }}</td>
-                        <td class="text-right font-bold">{{ $settings['currency_symbol'] }} {{ number_format($wholesale) }}</td>
+                        <td>
+                            @if($item->quantity_sold > 0)
+                                {{ $item->sold_at ? \Carbon\Carbon::parse($item->sold_at)->format('d M Y') : 'Partial Sold' }}
+                            @else
+                                In Shop (Unsold)
+                            @endif
+                        </td>
+                        <td class="text-right font-bold">
+                            @if($item->quantity > 1)
+                                {{ $settings['currency_symbol'] }} {{ number_format($totalIntake) }}
+                                <br/><span style="font-size: 6.5pt; font-weight: normal; color: #64748b;">({{ number_format($unitCost) }}/ea)</span>
+                            @else
+                                {{ $settings['currency_symbol'] }} {{ number_format($unitCost) }}
+                            @endif
+                        </td>
                         <td class="text-right">
-                            @if($item->settlement_status === 'Settled')
-                                <span class="badge badge-settled">Paid: {{ $item->settlement_method }}</span>
-                                @if($item->settled_at)
-                                    <br/><span style="font-size: 6.5pt; color: #059669;">{{ \Carbon\Carbon::parse($item->settled_at)->format('d M Y') }}</span>
+                            @if($item->settlement_status === 'Settled' || ($remainingOwed <= 0 && $item->quantity_sold > 0))
+                                <span class="badge badge-settled">Paid: {{ $item->settlement_method ?: 'Settled' }}</span>
+                                @if($paidAmount > 0)
+                                    <br/><span style="font-size: 6.5pt; color: #059669;">{{ $settings['currency_symbol'] }} {{ number_format($paidAmount) }}</span>
                                 @endif
-                            @elseif($item->status === 'Sold')
-                                <span class="badge badge-owed">OWED (Unsettled)</span>
+                                @if($item->settled_at)
+                                    <br/><span style="font-size: 6.5pt; color: #64748b;">{{ \Carbon\Carbon::parse($item->settled_at)->format('d M Y') }}</span>
+                                @endif
+                            @elseif($remainingOwed > 0)
+                                <span class="badge badge-owed">OWED: {{ $settings['currency_symbol'] }} {{ number_format($remainingOwed) }}</span>
+                                @if($item->quantity > 1)
+                                    <br/><span style="font-size: 6.5pt; color: #dc2626;">({{ $item->quantity_sold }} of {{ $item->quantity }} sold)</span>
+                                @endif
                             @else
                                 <span class="badge badge-pending">In Shop</span>
                             @endif

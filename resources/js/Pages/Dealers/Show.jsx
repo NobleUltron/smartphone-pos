@@ -181,11 +181,17 @@ export default function Show({ dealer, metrics, settings, monthlyTrends = [], an
     });
 
     const openSettleModal = (item) => {
+        const unitCost = Number(item.wholesale_cost || item.dealer_price || 0);
+        const qtySold = Number(item.quantity_sold || (item.status === 'Sold' ? (item.quantity || 1) : 0));
+        const totalOwedForSold = unitCost * qtySold;
+        const alreadyPaid = Number(item.settlement_amount || 0);
+        const remainingOwed = Math.max(0, totalOwedForSold - alreadyPaid);
+
         setSettleItem(item);
         setSettleData({
             payment_method: 'Cash',
-            amount: item.wholesale_cost || item.dealer_price || '',
-            notes: ''
+            amount: remainingOwed || unitCost,
+            notes: `Consignment payout for ${qtySold} unit(s) sold`
         });
     };
 
@@ -440,7 +446,16 @@ export default function Show({ dealer, metrics, settings, monthlyTrends = [], an
                              ) : (
                                 dealer.dealer_items
                                     .filter(item => directionTab === 'all' || (item.direction || 'outward') === directionTab)
-                                    .map((item) => (
+                                    .map((item) => {
+                                        const unitCost = Number(item.wholesale_cost || item.dealer_price || 0);
+                                        const qtyTotal = Number(item.quantity || 1);
+                                        const qtySold = Number(item.quantity_sold || (item.status === 'Sold' ? qtyTotal : 0));
+                                        const totalIntakeCost = unitCost * qtyTotal;
+                                        const totalOwedForSold = unitCost * qtySold;
+                                        const alreadyPaid = Number(item.settlement_amount || 0);
+                                        const remainingOwed = Math.max(0, totalOwedForSold - alreadyPaid);
+
+                                        return (
                                     <tr key={item.id} className="hover:bg-slate-50 transition-colors">
                                         <td className="px-6 py-4">
                                             <div className="mb-1">
@@ -489,34 +504,39 @@ export default function Show({ dealer, metrics, settings, monthlyTrends = [], an
                                         <td className="px-6 py-4">
                                             {item.direction === 'inward' ? (
                                                 <div>
-                                                    {item.settlement_status === 'Settled' ? (
-                                                        <>
-                                                            <div className="font-bold text-emerald-600" title="Settlement Payout Completed">
-                                                                Paid: {formatCurrency(item.settlement_amount || item.wholesale_cost || item.dealer_price)}
-                                                            </div>
-                                                            <div className="text-[10px] text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 px-1.5 py-0.5 rounded uppercase font-semibold tracking-wide inline-block mt-1">
-                                                                Settled ({item.settlement_method || 'Paid'})
-                                                            </div>
-                                                        </>
-                                                    ) : item.status === 'Sold' ? (
-                                                        <>
-                                                            <div className="font-bold text-rose-600" title="Wholesale Cost Owed to Dealer">
-                                                                Owe: {formatCurrency(item.wholesale_cost || item.dealer_price)}
-                                                            </div>
-                                                            <div className="text-[10px] text-slate-500 uppercase tracking-wide mt-1">
-                                                                POS Retail: {formatCurrency(item.retail_price || item.device_imei?.selling_price)}
-                                                            </div>
-                                                        </>
-                                                    ) : (
-                                                        <>
-                                                            <div className="font-bold text-slate-900 dark:text-white" title="Consignment Wholesale Cost">
-                                                                Cost: {formatCurrency(item.wholesale_cost || item.dealer_price)}
-                                                            </div>
-                                                            <div className="text-[10px] text-slate-500 uppercase tracking-wide mt-1">
-                                                                POS Retail: {formatCurrency(item.retail_price || item.device_imei?.selling_price)}
-                                                            </div>
-                                                        </>
-                                                    )}
+                                                    <div className="font-bold text-slate-900 dark:text-white" title="Consignment Wholesale Cost">
+                                                         {qtyTotal > 1 ? (
+                                                             <>
+                                                                 <div className="text-sm">Cost: {formatCurrency(totalIntakeCost)}</div>
+                                                                 <div className="text-[11px] text-slate-500 font-normal mt-0.5">
+                                                                     ({formatCurrency(unitCost)} / unit • {qtyTotal} units)
+                                                                 </div>
+                                                             </>
+                                                         ) : (
+                                                             <div className="text-sm">Cost: {formatCurrency(unitCost)}</div>
+                                                         )}
+                                                    </div>
+                                                    {qtySold > 0 && (
+                                                         <div className="mt-1.5 pt-1.5 border-t border-slate-100 dark:border-slate-800">
+                                                             {remainingOwed > 0 ? (
+                                                                 <div>
+                                                                     <div className="text-xs font-bold text-rose-600 dark:text-rose-400">
+                                                                         Owe: {formatCurrency(remainingOwed)}
+                                                                     </div>
+                                                                     <div className="text-[10px] text-slate-500 dark:text-slate-400">
+                                                                         {qtySold} sold of {qtyTotal}{alreadyPaid > 0 ? ` (${formatCurrency(alreadyPaid)} paid)` : ''}
+                                                                     </div>
+                                                                 </div>
+                                                             ) : (
+                                                                 <div className="text-xs font-bold text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
+                                                                     <CheckCircle size={12} /> Paid: {formatCurrency(alreadyPaid)}
+                                                                 </div>
+                                                             )}
+                                                         </div>
+                                                     )}
+                                                    <div className="text-[10px] text-slate-400 uppercase tracking-wide mt-1">
+                                                        POS Retail: {formatCurrency(item.retail_price || item.device_imei?.selling_price)}
+                                                    </div>
                                                 </div>
                                             ) : (
                                                 <div>
@@ -547,35 +567,37 @@ export default function Show({ dealer, metrics, settings, monthlyTrends = [], an
                                                         <Edit2 size={16} />
                                                     </button>
                                                 )}
-                                                {item.direction === 'inward' && item.status === 'Sold' && (
-                                                    <>
-                                                        {item.settlement_status === 'Settled' ? (
-                                                            <div className="flex items-center gap-1.5">
-                                                                <span className="px-2 py-1 bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 rounded-lg text-xs font-bold flex items-center gap-1">
-                                                                    <CheckCircle size={13} /> Settled
-                                                                </span>
-                                                                <a
-                                                                    href={`/dealers/items/${item.id}/voucher?mode=stream`}
-                                                                    target="_blank"
-                                                                    rel="noreferrer"
-                                                                    className="px-2.5 py-1 bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950/50 dark:hover:bg-indigo-900 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 rounded-lg text-xs font-bold flex items-center gap-1 transition-colors"
-                                                                    title="View / Print Official Payout Voucher (PDF)"
-                                                                >
-                                                                    <FileText size={13} /> Voucher
-                                                                </a>
-                                                            </div>
-                                                        ) : (
-                                                            <button 
-                                                                onClick={() => openSettleModal(item)}
-                                                                className="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-xs font-bold transition-colors flex items-center gap-1 shadow-sm"
-                                                                title="Pay Sourcing Dealer for this sold consignment phone"
-                                                            >
-                                                                <DollarSign size={14} /> Pay Dealer
-                                                            </button>
-                                                        )}
-                                                    </>
+                                                {item.direction === 'inward' && (
+                                                     <>
+                                                         {qtySold > 0 && remainingOwed > 0 && (
+                                                             <button 
+                                                                 type="button"
+                                                                 onClick={() => openSettleModal(item)}
+                                                                 className="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-xs font-bold transition-colors flex items-center gap-1 shadow-sm"
+                                                                 title={`Pay dealer for ${qtySold} unit(s) sold (${formatCurrency(remainingOwed)} due)`}
+                                                             >
+                                                                 <DollarSign size={14} /> Pay Dealer ({formatCurrency(remainingOwed)})
+                                                             </button>
+                                                         )}
+                                                         {qtySold > 0 && remainingOwed <= 0 && alreadyPaid > 0 && (
+                                                             <div className="flex items-center gap-1.5">
+                                                                 <span className="px-2 py-1 bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 rounded-lg text-xs font-bold flex items-center gap-1">
+                                                                     <CheckCircle size={13} /> {qtySold >= qtyTotal ? 'Settled' : 'Paid for Sold'}
+                                                                 </span>
+                                                                 <a
+                                                                     href={`/dealers/items/${item.id}/voucher?mode=stream`}
+                                                                     target="_blank"
+                                                                     rel="noreferrer"
+                                                                     className="px-2.5 py-1 bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950/50 dark:hover:bg-indigo-900 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 rounded-lg text-xs font-bold flex items-center gap-1 transition-colors"
+                                                                     title="View / Print Official Payout Voucher (PDF)"
+                                                                 >
+                                                                     <FileText size={13} /> Voucher
+                                                                 </a>
+                                                             </div>
+                                                         )}
+                                                     </>
                                                 )}
-                                                {item.status === 'Pending' && getAvailableQuantity(item) > 0 && (
+                                                {getAvailableQuantity(item) > 0 && (
                                                     <>
                                                         {item.direction !== 'inward' && (
                                                             <button 
@@ -592,14 +614,16 @@ export default function Show({ dealer, metrics, settings, monthlyTrends = [], an
                                                         >
                                                             <RotateCcw size={14} /> {item.direction === 'inward' ? 'Return to Dealer' : 'Restock'}
                                                         </button>
-                                                        <button 
-                                                            type="button"
-                                                            onClick={() => setVoidItem(item)}
-                                                            className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/60 rounded-lg transition-colors"
-                                                            title="Void / Delete Transaction (Rollback Stock)"
-                                                        >
-                                                            <Trash2 size={15} />
-                                                        </button>
+                                                        {item.status === 'Pending' && qtySold === 0 && (
+                                                            <button 
+                                                                type="button"
+                                                                onClick={() => setVoidItem(item)}
+                                                                className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/60 rounded-lg transition-colors"
+                                                                title="Void / Delete Transaction (Rollback Stock)"
+                                                            >
+                                                                <Trash2 size={15} />
+                                                            </button>
+                                                        )}
                                                     </>
                                                 )}
                                                 {item.status === 'Sold' && item.sale_id && (
@@ -608,13 +632,14 @@ export default function Show({ dealer, metrics, settings, monthlyTrends = [], an
                                                         className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors flex items-center justify-center"
                                                         title="View Receipt"
                                                     >
-                                                        {previewLoading ? <span className="text-xs">...</span> : <Printer size={16} />}
+                                                        <Printer size={16} />
                                                     </button>
                                                 )}
                                             </div>
                                         </td>
                                     </tr>
-                                ))
+                                 );
+                             })
                             )}
                         </tbody>
                     </table>
@@ -1022,23 +1047,46 @@ export default function Show({ dealer, metrics, settings, monthlyTrends = [], an
                                     {settleItem.type === 'serialized' ? `${settleItem.device_imei?.product?.model_name || 'Phone'}` : `${settleItem.product?.model_name || 'Item'}`}
                                 </span>
                             </div>
-                            {settleItem.type === 'serialized' && (
+                            {settleItem.type === 'serialized' ? (
                                 <div className="flex justify-between items-center text-xs">
                                     <span className="text-slate-500">IMEI:</span>
                                     <span className="font-mono text-slate-700 dark:text-slate-300">{settleItem.device_imei?.imei}</span>
                                 </div>
+                            ) : (
+                                <div className="flex justify-between items-center text-xs">
+                                    <span className="text-slate-500">Consignment Batch:</span>
+                                    <span className="font-bold text-slate-700 dark:text-slate-300">
+                                        {settleItem.quantity_sold} Sold of {settleItem.quantity} Received
+                                    </span>
+                                </div>
                             )}
                             <div className="border-t border-slate-200 dark:border-slate-700 pt-2 mt-2 flex justify-between items-center text-xs">
-                                <span className="text-slate-500">Customer Sold For:</span>
-                                <span className="font-semibold text-emerald-600">{formatCurrency(settleItem.retail_price || settleItem.device_imei?.selling_price)}</span>
+                                <span className="text-slate-500">Unit Wholesale Cost:</span>
+                                <span className="font-semibold text-slate-800 dark:text-slate-200">{formatCurrency(settleItem.wholesale_cost || settleItem.dealer_price)}</span>
                             </div>
-                            <div className="flex justify-between items-center text-sm font-bold">
-                                <span className="text-rose-600">Amount Owed to Dealer:</span>
-                                <span className="text-rose-600">{formatCurrency(settleItem.wholesale_cost || settleItem.dealer_price)}</span>
+                            {settleItem.quantity > 1 && (
+                                <div className="flex justify-between items-center text-xs">
+                                    <span className="text-slate-500">Total Owed for {settleItem.quantity_sold} Sold:</span>
+                                    <span className="font-semibold text-slate-900 dark:text-white">
+                                        {formatCurrency(Number(settleItem.wholesale_cost || settleItem.dealer_price || 0) * Number(settleItem.quantity_sold || 1))}
+                                    </span>
+                                </div>
+                            )}
+                            {Number(settleItem.settlement_amount) > 0 && (
+                                <div className="flex justify-between items-center text-xs text-emerald-600 font-semibold">
+                                    <span>Already Settled to Dealer:</span>
+                                    <span>-{formatCurrency(settleItem.settlement_amount)}</span>
+                                </div>
+                            )}
+                            <div className="flex justify-between items-center text-sm font-bold pt-1 border-t border-slate-200/60 dark:border-slate-700/60">
+                                <span className="text-rose-600">Remaining Balance Owed:</span>
+                                <span className="text-rose-600 font-black">
+                                    {formatCurrency(Math.max(0, (Number(settleItem.wholesale_cost || settleItem.dealer_price || 0) * Number(settleItem.quantity_sold || 1)) - Number(settleItem.settlement_amount || 0)))}
+                                </span>
                             </div>
                             {settleItem.retail_price && settleItem.wholesale_cost && (
                                 <div className="flex justify-between items-center text-[11px] text-indigo-600 dark:text-indigo-400 font-medium">
-                                    <span>Your Shop Net Margin:</span>
+                                    <span>Unit Shop Margin:</span>
                                     <span>+{formatCurrency(Number(settleItem.retail_price) - Number(settleItem.wholesale_cost))}</span>
                                 </div>
                             )}

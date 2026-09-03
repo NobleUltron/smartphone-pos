@@ -125,11 +125,18 @@ Route::get('/dashboard', function () {
         ->limit(5)
         ->get();
 
-    $dealerPendingInwardCount = \App\Models\DealerItem::where('direction', 'inward')->where('status', 'Pending')->count();
+    $dealerPendingInwardCount = \App\Models\DealerItem::where('direction', 'inward')
+        ->whereRaw('(quantity - quantity_sold - quantity_returned) > 0')
+        ->count();
     $dealerOwedAmount = (float) \App\Models\DealerItem::where('direction', 'inward')
-        ->where('status', 'Sold')
-        ->where('settlement_status', '!=', 'Settled')
-        ->sum(\Illuminate\Support\Facades\DB::raw('COALESCE(wholesale_cost, dealer_price, 0)'));
+        ->where('quantity_sold', '>', 0)
+        ->get()
+        ->sum(function ($item) {
+            $unitCost = floatval($item->wholesale_cost ?? $item->dealer_price ?? 0);
+            $totalOwed = $unitCost * $item->quantity_sold;
+            $alreadyPaid = floatval($item->settlement_amount ?? 0);
+            return max(0, $totalOwed - $alreadyPaid);
+        });
     $dealerOutwardPendingCount = \App\Models\DealerItem::where('direction', '!=', 'inward')->where('status', 'Pending')->count();
     $dealerOutwardOverdueCount = \App\Models\DealerItem::where('direction', '!=', 'inward')
         ->where('status', 'Pending')

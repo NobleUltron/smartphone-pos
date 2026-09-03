@@ -322,7 +322,10 @@
                             {{ implode(' • ', array_filter([$storage, $color, $condition])) }}
                         </div>
                     @else
-                        <div style="color: #64748b;">Quantity: {{ $item->quantity }} pcs</div>
+                        <div style="color: #4f46e5; font-weight: bold; font-size: 8.5pt;">Quantity Sold: {{ $item->quantity_sold }} of {{ $item->quantity }} pcs</div>
+                        <div style="font-size: 7.5pt; color: #475569; margin-top: 2px;">
+                            Unit Wholesale Cost: UGX {{ number_format($item->wholesale_cost ?? $item->dealer_price ?? 0) }}
+                        </div>
                     @endif
                 </td>
                 <td class="text-right font-bold text-slate-700">

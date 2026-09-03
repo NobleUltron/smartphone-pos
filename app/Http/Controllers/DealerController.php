@@ -167,7 +167,16 @@ class DealerController extends Controller
         $inwardItems = $dealer->dealerItems()->where('direction', 'inward');
 
         $dealerOwesUs = (float)$outwardItems->clone()->where('status', 'Pending')->sum(DB::raw('dealer_price * (quantity - quantity_sold - quantity_returned)'));
-        $weOweDealer = (float)$inwardItems->clone()->where('status', 'Sold')->sum(DB::raw('wholesale_cost * quantity_sold'));
+        
+        $weOweDealer = (float)$inwardItems->clone()
+            ->where('quantity_sold', '>', 0)
+            ->get()
+            ->sum(function ($item) {
+                $unitCost = floatval($item->wholesale_cost ?? $item->dealer_price ?? 0);
+                $totalOwed = $unitCost * $item->quantity_sold;
+                $alreadyPaid = floatval($item->settlement_amount ?? 0);
+                return max(0, $totalOwed - $alreadyPaid);
+            });
 
         $metrics = [
             // Outward Consignment (Issued to dealer)
@@ -180,8 +189,8 @@ class DealerController extends Controller
 
             // Inward Consignment (Sourced from dealer)
             'inward_total' => (int)$inwardItems->clone()->sum('quantity'),
-            'inward_sold' => (int)$inwardItems->clone()->where('status', 'Sold')->sum('quantity_sold'),
-            'inward_pending' => (int)$inwardItems->clone()->where('status', 'Pending')->sum(DB::raw('quantity - quantity_sold - quantity_returned')),
+            'inward_sold' => (int)$inwardItems->clone()->sum('quantity_sold'),
+            'inward_pending' => (int)$inwardItems->clone()->sum(DB::raw('quantity - quantity_sold - quantity_returned')),
             'we_owe_dealer' => $weOweDealer,
 
             'net_balance' => $dealerOwesUs - $weOweDealer,
@@ -690,17 +699,22 @@ class DealerController extends Controller
             return redirect()->back()->with('error', 'Only inward consignment items received from dealers can be settled.');
         }
 
-        if ($item->status !== 'Sold') {
-            return redirect()->back()->with('error', 'Only sold consignment items can be settled.');
+        if ($item->quantity_sold <= 0) {
+            return redirect()->back()->with('error', 'No units of this consignment item have been sold yet.');
         }
 
-        if ($item->settlement_status === 'Settled') {
-            return redirect()->back()->with('error', 'This consignment item has already been settled and paid.');
+        $unitCost = floatval($item->wholesale_cost ?? $item->dealer_price ?? 0);
+        $totalOwedForSold = $unitCost * $item->quantity_sold;
+        $alreadyPaid = floatval($item->settlement_amount ?? 0);
+        $remainingOwed = max(0, $totalOwedForSold - $alreadyPaid);
+
+        if ($remainingOwed <= 0) {
+            return redirect()->back()->with('error', 'All sold units for this consignment item have already been settled and paid.');
         }
 
         $validated = $request->validate([
             'payment_method' => 'required|string|in:Cash,Bank Transfer,MTN MoMo,Airtel Money',
-            'amount' => 'required|numeric|min:1',
+            'amount' => 'required|numeric|min:1|max:' . $remainingOwed,
             'notes' => 'nullable|string',
         ]);
 
@@ -757,13 +771,24 @@ class DealerController extends Controller
                 $user->id
             );
 
-            // Update item settlement status
+            // Update item settlement status and accumulated payout amount
+            $newSettledAmount = $alreadyPaid + floatval($validated['amount']);
+            $isFullySettledForCurrentSold = ($newSettledAmount >= $totalOwedForSold);
+            $isAllBatchSoldAndSettled = $isFullySettledForCurrentSold && ($item->quantity_sold >= $item->quantity);
+
+            $newStatus = $isAllBatchSoldAndSettled ? 'Settled' : ($isFullySettledForCurrentSold ? 'Settled' : 'Partial');
+
+            $noteEntry = "[" . now()->format('Y-m-d H:i') . "] Paid UGX " . number_format($validated['amount']) . " via " . $validated['payment_method'];
+            if (!empty($validated['notes'])) {
+                $noteEntry .= " ({$validated['notes']})";
+            }
+
             $item->update([
-                'settlement_status' => 'Settled',
+                'settlement_status' => $newStatus,
                 'settled_at' => now(),
                 'settlement_method' => $validated['payment_method'],
-                'settlement_amount' => $validated['amount'],
-                'settlement_notes' => $validated['notes'],
+                'settlement_amount' => $newSettledAmount,
+                'settlement_notes' => $item->settlement_notes ? $item->settlement_notes . "\n" . $noteEntry : $noteEntry,
             ]);
 
             DB::commit();
@@ -944,14 +969,19 @@ class DealerController extends Controller
         $items = $query->orderBy('created_at', 'desc')->get();
 
         // Inward Consignments Summary
-        $inwardTotalCount = $dealer->dealerItems()->where('direction', 'inward')->count();
-        $inwardPendingCount = $dealer->dealerItems()->where('direction', 'inward')->where('status', 'Pending')->count();
-        $inwardSoldCount = $dealer->dealerItems()->where('direction', 'inward')->where('status', 'Sold')->count();
-        $inwardSettledAmount = (float) $dealer->dealerItems()->where('direction', 'inward')->where('settlement_status', 'Settled')->sum('settlement_amount');
+        $inwardTotalCount = $dealer->dealerItems()->where('direction', 'inward')->sum('quantity');
+        $inwardPendingCount = $dealer->dealerItems()->where('direction', 'inward')->sum(DB::raw('quantity - quantity_sold - quantity_returned'));
+        $inwardSoldCount = $dealer->dealerItems()->where('direction', 'inward')->sum('quantity_sold');
+        $inwardSettledAmount = (float) $dealer->dealerItems()->where('direction', 'inward')->sum('settlement_amount');
         $inwardOwedAmount = (float) $dealer->dealerItems()->where('direction', 'inward')
-            ->where('status', 'Sold')
-            ->where('settlement_status', '!=', 'Settled')
-            ->sum(DB::raw('COALESCE(wholesale_cost, dealer_price, 0)'));
+            ->where('quantity_sold', '>', 0)
+            ->get()
+            ->sum(function ($item) {
+                $unitCost = floatval($item->wholesale_cost ?? $item->dealer_price ?? 0);
+                $totalOwed = $unitCost * $item->quantity_sold;
+                $alreadyPaid = floatval($item->settlement_amount ?? 0);
+                return max(0, $totalOwed - $alreadyPaid);
+            });
 
         // Outward Consignments Summary
         $outwardTotalCount = $dealer->dealerItems()->where('direction', '!=', 'inward')->sum('quantity');
