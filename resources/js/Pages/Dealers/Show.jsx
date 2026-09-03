@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import { Head, Link, useForm, router } from '@inertiajs/react';
-import { Handshake, Phone, MapPin, PackageOpen, CheckCircle, RotateCcw, X, DollarSign, Edit2, Receipt, Printer, Eye, MessageCircle, FileText, Download, TrendingUp, Clock, ShieldCheck, Award, BarChart2, Trash2 } from 'lucide-react';
+import { Handshake, Phone, MapPin, PackageOpen, CheckCircle, RotateCcw, X, DollarSign, Edit2, Receipt, Printer, Eye, MessageCircle, FileText, Download, TrendingUp, Clock, ShieldCheck, Award, BarChart2, Trash2, Wallet, AlertCircle } from 'lucide-react';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend, BarChart, Bar } from 'recharts';
 import Barcode from 'react-barcode';
 import dayjs from 'dayjs';
@@ -17,7 +17,20 @@ import VoidConsignmentModal from './Partials/VoidConsignmentModal';
 
 dayjs.extend(relativeTime);
 
-export default function Show({ dealer, metrics, settings, monthlyTrends = [], analytics = {}, topProducts = [], categories = [], brands = [], products = [] }) {
+export default function Show({ 
+    dealer, 
+    metrics, 
+    settings, 
+    monthlyTrends = [], 
+    analytics = {}, 
+    topProducts = [], 
+    categories = [], 
+    brands = [], 
+    products = [],
+    hasActiveDrawer = false,
+    activeDrawerCash = 0,
+    paymentAccounts = []
+}) {
     const [actionItem, setActionItem] = useState(null);
     const [actionType, setActionType] = useState(null); // 'sold' or 'returned'
 
@@ -204,7 +217,10 @@ export default function Show({ dealer, metrics, settings, monthlyTrends = [], an
         e.preventDefault();
         const currentItem = settleItem;
         postSettle(route('dealers.settle', settleItem.id), {
-            onSuccess: () => {
+            onSuccess: (page) => {
+                if (page?.props?.flash?.error) {
+                    return;
+                }
                 closeSettleModal();
                 setSettledSuccessItem(currentItem);
             }
@@ -1093,6 +1109,74 @@ export default function Show({ dealer, metrics, settings, monthlyTrends = [], an
                         </div>
 
                         <form onSubmit={submitSettle} className="space-y-4">
+                            {/* Live Balance Indicator Box */}
+                            {settleData.payment_method === 'Cash' ? (
+                                <div className={`p-3 rounded-xl border text-xs flex items-center justify-between ${
+                                    !hasActiveDrawer 
+                                        ? 'bg-rose-50 dark:bg-rose-950/40 border-rose-200 dark:border-rose-800 text-rose-700 dark:text-rose-300' 
+                                        : activeDrawerCash < Number(settleData.amount)
+                                            ? 'bg-amber-50 dark:bg-amber-950/40 border-amber-200 dark:border-amber-800 text-amber-800 dark:text-amber-300'
+                                            : 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300'
+                                }`}>
+                                    <div className="flex items-center gap-2">
+                                        <Wallet size={16} />
+                                        <div>
+                                            <span className="font-bold block">Active Cash Drawer Shift</span>
+                                            <span className="text-[11px] opacity-80">
+                                                {!hasActiveDrawer ? 'No active shift open for your cashier account' : 'Physical cash available in drawer'}
+                                            </span>
+                                        </div>
+                                    </div>
+                                    <div className="text-right">
+                                        <span className="font-black text-sm block">
+                                            UGX {Number(activeDrawerCash).toLocaleString()}
+                                        </span>
+                                        {hasActiveDrawer && activeDrawerCash < Number(settleData.amount) && (
+                                            <span className="text-[10px] text-rose-600 dark:text-rose-400 font-bold block">
+                                                Insufficient Cash
+                                            </span>
+                                        )}
+                                    </div>
+                                </div>
+                            ) : (
+                                (() => {
+                                    const matchingAcc = paymentAccounts.find(a => 
+                                        (settleData.payment_method === 'MTN MoMo' && a.provider === 'MTN') ||
+                                        (settleData.payment_method === 'Airtel Money' && a.provider === 'Airtel') ||
+                                        (settleData.payment_method === 'Bank Transfer' && a.type === 'bank') ||
+                                        a.name.toLowerCase().includes(settleData.payment_method.toLowerCase())
+                                    );
+                                    const accBalance = Number(matchingAcc?.current_balance || 0);
+                                    const isLow = accBalance < Number(settleData.amount);
+
+                                    return (
+                                        <div className={`p-3 rounded-xl border text-xs flex items-center justify-between ${
+                                            isLow 
+                                                ? 'bg-amber-50 dark:bg-amber-950/40 border-amber-200 dark:border-amber-800 text-amber-800 dark:text-amber-300' 
+                                                : 'bg-indigo-50 dark:bg-indigo-950/40 border-indigo-200 dark:border-indigo-800 text-indigo-700 dark:text-indigo-300'
+                                        }`}>
+                                            <div className="flex items-center gap-2">
+                                                <Wallet size={16} />
+                                                <div>
+                                                    <span className="font-bold block">{matchingAcc?.name || settleData.payment_method} Float</span>
+                                                    <span className="text-[11px] opacity-80">Payment Account Balance</span>
+                                                </div>
+                                            </div>
+                                            <div className="text-right">
+                                                <span className="font-black text-sm block">
+                                                    UGX {accBalance.toLocaleString()}
+                                                </span>
+                                                {isLow && (
+                                                    <span className="text-[10px] text-rose-600 dark:text-rose-400 font-bold block">
+                                                        Low Float
+                                                    </span>
+                                                )}
+                                            </div>
+                                        </div>
+                                    );
+                                })()
+                            )}
+
                             <div>
                                 <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase mb-1">
                                     Payout Payment Method *
@@ -1108,6 +1192,7 @@ export default function Show({ dealer, metrics, settings, monthlyTrends = [], an
                                     <option value="Airtel Money">Airtel Money</option>
                                     <option value="Bank Transfer">Bank Transfer</option>
                                 </select>
+                                {settleErrors.payment_method && <p className="text-rose-500 text-xs mt-1">{settleErrors.payment_method}</p>}
                             </div>
 
                             <div>
@@ -1140,7 +1225,15 @@ export default function Show({ dealer, metrics, settings, monthlyTrends = [], an
 
                             <div className="mt-6 flex justify-end gap-3 pt-4 border-t border-slate-100 dark:border-slate-800">
                                 <Button variant="secondary" onClick={closeSettleModal}>Cancel</Button>
-                                <Button variant="success" type="submit" disabled={processingSettle} icon={CheckCircle}>
+                                <Button 
+                                    variant="success" 
+                                    type="submit" 
+                                    disabled={
+                                        processingSettle || 
+                                        (settleData.payment_method === 'Cash' && (!hasActiveDrawer || activeDrawerCash < Number(settleData.amount)))
+                                    } 
+                                    icon={CheckCircle}
+                                >
                                     Confirm Payout & Settle
                                 </Button>
                             </div>

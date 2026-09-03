@@ -320,6 +320,12 @@ class DealerController extends Controller
         $brands = \App\Models\Brand::all();
         $products = \App\Models\Product::with(['brand', 'category'])->orderBy('model_name')->get();
 
+        $userActiveDrawer = \App\Models\CashDrawer::where('user_id', auth()->id())
+            ->where('status', 'open')
+            ->first();
+        $activeDrawerCash = $userActiveDrawer ? floatval($userActiveDrawer->calculateExpectedCash()) : 0;
+        $paymentAccounts = \App\Models\PaymentAccount::where('status', 'active')->get(['id', 'name', 'type', 'provider', 'current_balance']);
+
         return Inertia::render('Dealers/Show', [
             'dealer' => $dealer,
             'metrics' => $metrics,
@@ -330,6 +336,9 @@ class DealerController extends Controller
             'categories' => $categories,
             'brands' => $brands,
             'products' => $products,
+            'hasActiveDrawer' => !is_null($userActiveDrawer),
+            'activeDrawerCash' => $activeDrawerCash,
+            'paymentAccounts' => $paymentAccounts,
         ]);
     }
 
@@ -727,12 +736,23 @@ class DealerController extends Controller
                 ->first();
 
             if (!$activeDrawer) {
-                return redirect()->back()->with('error', 'You must have an open shift (Cash Drawer) to pay cash to the dealer.');
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                    'payment_method' => 'You must have an open Cash Drawer shift to pay cash to the dealer. Please open a shift first or select Mobile Money / Bank Transfer.'
+                ]);
             }
 
-            $availableCash = $activeDrawer->calculateExpectedCash();
+            $availableCash = floatval($activeDrawer->calculateExpectedCash());
             if ($validated['amount'] > $availableCash) {
-                return redirect()->back()->with('error', 'Insufficient cash in active drawer shift! Available cash is ' . number_format(max(0, $availableCash)) . ' UGX.');
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                    'amount' => 'Insufficient cash in active drawer shift! Available cash is ' . number_format(max(0, $availableCash)) . ' UGX. Please add starting cash float or pay via Mobile Money / Bank Transfer.'
+                ]);
+            }
+        } else {
+            $account = \App\Models\PaymentAccount::getForMethod($validated['payment_method']);
+            if ($account && $validated['amount'] > floatval($account->current_balance)) {
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                    'amount' => "Insufficient funds in {$account->name}! Available balance is " . number_format(max(0, $account->current_balance)) . " UGX."
+                ]);
             }
         }
 
