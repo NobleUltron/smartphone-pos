@@ -12,6 +12,7 @@ import Card from '@/Components/SaaS/Card';
 import Button from '@/Components/SaaS/Button';
 import Badge from '@/Components/SaaS/Badge';
 import ReceiveStockModal from './Partials/ReceiveStockModal';
+import IssueStockModal from './Partials/IssueStockModal';
 
 dayjs.extend(relativeTime);
 
@@ -29,6 +30,7 @@ export default function Show({ dealer, metrics, settings, monthlyTrends = [], an
 
     // Inward Intake Modal State
     const [showInwardModal, setShowInwardModal] = useState(false);
+    const [showIssueModal, setShowIssueModal] = useState(false);
 
     // Statement Modal States
     const [showStatementModal, setShowStatementModal] = useState(false);
@@ -221,7 +223,7 @@ export default function Show({ dealer, metrics, settings, monthlyTrends = [], an
                         <Button variant="success" icon={Download} onClick={() => setShowInwardModal(true)}>
                             Receive Item
                         </Button>
-                        <Button variant="primary" icon={PackageOpen} onClick={() => router.visit(route('dealers.issue', { dealer_id: dealer.id }))}>
+                        <Button variant="primary" icon={PackageOpen} onClick={() => setShowIssueModal(true)}>
                             Issue Item
                         </Button>
                     </div>
@@ -1504,6 +1506,14 @@ export default function Show({ dealer, metrics, settings, monthlyTrends = [], an
                 categories={categories}
                 brands={brands}
                 products={products}
+            />
+
+            {/* Issue Outward Item Modal */}
+            <IssueStockModal
+                isOpen={showIssueModal}
+                onClose={() => setShowIssueModal(false)}
+                dealers={[dealer]}
+                preselectedDealerId={dealer.id}
             />
             
         </AuthenticatedLayout>

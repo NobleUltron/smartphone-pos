@@ -425,7 +425,11 @@ class DealerController extends Controller
 
             DB::commit();
 
-            return redirect()->route('dealers.dashboard')->with('success', 'Item(s) issued to dealer successfully.');
+            if (url()->previous() === route('dealers.issue')) {
+                return redirect()->route('dealers.dashboard')->with('success', 'Item(s) issued to dealer successfully.');
+            }
+
+            return redirect()->back()->with('success', 'Item(s) issued to dealer successfully.');
         } catch (\Exception $e) {
             DB::rollBack();
             return redirect()->back()->with('error', 'Error issuing item: ' . $e->getMessage());

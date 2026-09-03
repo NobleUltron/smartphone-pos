@@ -11,6 +11,7 @@ import Button from '@/Components/SaaS/Button';
 import Badge from '@/Components/SaaS/Badge';
 import Modal from '@/Components/Modal';
 import ReceiveStockModal from './Partials/ReceiveStockModal';
+import IssueStockModal from './Partials/IssueStockModal';
 
 dayjs.extend(relativeTime);
 
@@ -21,6 +22,7 @@ export default function Dashboard({ metrics, pendingItems, recentSold, recentRet
     const isDealerIntakeLocked = isCashier && permissions?.allow_cashier_dealer_intake === false;
 
     const [showInwardModal, setShowInwardModal] = useState(false);
+    const [showIssueModal, setShowIssueModal] = useState(false);
     const formatCurrency = (amount) => {
         const val = new Intl.NumberFormat('en-UG', {
             minimumFractionDigits: 0
@@ -65,7 +67,7 @@ export default function Dashboard({ metrics, pendingItems, recentSold, recentRet
                         >
                             Receive Item {isDealerIntakeLocked && "🔒"}
                         </Button>
-                        <Button variant="primary" icon={Plus} onClick={() => router.visit(route('dealers.issue'))}>
+                        <Button variant="primary" icon={Plus} onClick={() => setShowIssueModal(true)}>
                             Issue Item
                         </Button>
                     </div>
@@ -295,6 +297,13 @@ export default function Dashboard({ metrics, pendingItems, recentSold, recentRet
                 categories={categories}
                 brands={brands}
                 products={products}
+            />
+
+            {/* Issue Outward Item Modal */}
+            <IssueStockModal
+                isOpen={showIssueModal}
+                onClose={() => setShowIssueModal(false)}
+                dealers={dealers}
             />
 
         </AuthenticatedLayout>
