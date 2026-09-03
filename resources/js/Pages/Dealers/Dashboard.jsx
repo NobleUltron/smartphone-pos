@@ -10,42 +10,17 @@ import Card from '@/Components/SaaS/Card';
 import Button from '@/Components/SaaS/Button';
 import Badge from '@/Components/SaaS/Badge';
 import Modal from '@/Components/Modal';
+import ReceiveStockModal from './Partials/ReceiveStockModal';
 
 dayjs.extend(relativeTime);
 
-export default function Dashboard({ metrics, pendingItems, recentSold, recentReturned, topDealers = [], networkTrends = [], dealers = [], categories = [], brands = [] }) {
+export default function Dashboard({ metrics, pendingItems, recentSold, recentReturned, topDealers = [], networkTrends = [], dealers = [], categories = [], brands = [], products = [] }) {
     const { auth, permissions } = usePage().props;
     const userRole = auth?.user?.role || 'cashier';
     const isCashier = userRole === 'cashier';
     const isDealerIntakeLocked = isCashier && permissions?.allow_cashier_dealer_intake === false;
 
     const [showInwardModal, setShowInwardModal] = useState(false);
-    const { data: inwardData, setData: setInwardData, post: postInward, processing: processingInward, reset: resetInward } = useForm({
-        dealer_id: '',
-        type: 'serialized',
-        product_id: '',
-        category_id: '',
-        brand_id: '',
-        model_name: '',
-        imei_number: '',
-        condition: 'Brand New',
-        storage_capacity: '',
-        color: '',
-        wholesale_cost: '',
-        retail_price: '',
-        quantity: 1,
-        notes: ''
-    });
-
-    const handleInwardSubmit = (e) => {
-        e.preventDefault();
-        postInward(route('dealers.store-inward'), {
-            onSuccess: () => {
-                setShowInwardModal(false);
-                resetInward();
-            }
-        });
-    };
     const formatCurrency = (amount) => {
         const val = new Intl.NumberFormat('en-UG', {
             minimumFractionDigits: 0
@@ -313,212 +288,14 @@ export default function Dashboard({ metrics, pendingItems, recentSold, recentRet
             </Card>
 
             {/* Receive Inward Item Modal */}
-            <Modal show={showInwardModal} onClose={() => setShowInwardModal(false)} maxWidth="2xl">
-                <div className="p-6">
-                    <div className="flex justify-between items-center mb-6 pb-3 border-b border-slate-100">
-                        <div>
-                            <h3 className="text-lg font-bold text-slate-900 flex items-center gap-2">
-                                <Download className="text-emerald-600" size={20} /> Receive Stock from Partner Dealer (Inward Intake)
-                            </h3>
-                            <p className="text-xs text-slate-500 mt-1">
-                                Source a device from another shop/dealer into your active shop inventory to sell on their behalf.
-                            </p>
-                        </div>
-                        <button onClick={() => setShowInwardModal(false)} className="text-slate-400 hover:text-slate-600">
-                            <X size={20} />
-                        </button>
-                    </div>
-
-                    <form onSubmit={handleInwardSubmit} className="space-y-4">
-                        <div>
-                            <label className="saas-label">Select Partner Dealer (Source Shop)</label>
-                            <select 
-                                className="saas-input font-bold" 
-                                value={inwardData.dealer_id} 
-                                onChange={(e) => setInwardData('dealer_id', e.target.value)}
-                                required
-                            >
-                                <option value="">-- Choose Partner Dealer --</option>
-                                {dealers.map(d => (
-                                    <option key={d.id} value={d.id}>{d.name} ({d.phone})</option>
-                                ))}
-                            </select>
-                        </div>
-
-                        <div className="grid grid-cols-2 gap-4">
-                            <div>
-                                <label className="saas-label">Device Type</label>
-                                <select 
-                                    className="saas-input" 
-                                    value={inwardData.type} 
-                                    onChange={(e) => setInwardData('type', e.target.value)}
-                                >
-                                    <option value="serialized">Serialized (Phone / Tablet / Laptop with IMEI)</option>
-                                    <option value="bulk">Bulk Accessory / Non-serialized</option>
-                                </select>
-                            </div>
-
-                            <div>
-                                <label className="saas-label">Brand</label>
-                                <select 
-                                    className="saas-input" 
-                                    value={inwardData.brand_id} 
-                                    onChange={(e) => setInwardData('brand_id', e.target.value)}
-                                    required
-                                >
-                                    <option value="">-- Select Brand --</option>
-                                    {brands.map(b => (
-                                        <option key={b.id} value={b.id}>{b.name}</option>
-                                    ))}
-                                </select>
-                            </div>
-                        </div>
-
-                        <div className="grid grid-cols-2 gap-4">
-                            <div>
-                                <label className="saas-label">Category</label>
-                                <select 
-                                    className="saas-input" 
-                                    value={inwardData.category_id} 
-                                    onChange={(e) => setInwardData('category_id', e.target.value)}
-                                    required
-                                >
-                                    <option value="">-- Select Category --</option>
-                                    {categories.map(c => (
-                                        <option key={c.id} value={c.id}>{c.name}</option>
-                                    ))}
-                                </select>
-                            </div>
-
-                            <div>
-                                <label className="saas-label">Model Name</label>
-                                <input 
-                                    type="text" 
-                                    className="saas-input" 
-                                    placeholder="e.g. iPhone 14 Pro Max 256GB" 
-                                    value={inwardData.model_name}
-                                    onChange={(e) => setInwardData('model_name', e.target.value)}
-                                    required
-                                />
-                            </div>
-                        </div>
-
-                        {inwardData.type === 'serialized' ? (
-                            <>
-                                <div>
-                                    <label className="saas-label">IMEI / Serial Number</label>
-                                    <input 
-                                        type="text" 
-                                        className="saas-input font-mono" 
-                                        placeholder="e.g. 354891029384210" 
-                                        value={inwardData.imei_number}
-                                        onChange={(e) => setInwardData('imei_number', e.target.value)}
-                                        required
-                                    />
-                                </div>
-
-                                <div className="grid grid-cols-3 gap-3">
-                                    <div>
-                                        <label className="saas-label">Condition</label>
-                                        <select 
-                                            className="saas-input"
-                                            value={inwardData.condition}
-                                            onChange={(e) => setInwardData('condition', e.target.value)}
-                                        >
-                                            <option value="Brand New">Brand New</option>
-                                            <option value="Refurbished">Refurbished</option>
-                                            <option value="Used Grade A">Used Grade A</option>
-                                            <option value="Used Grade B">Used Grade B</option>
-                                        </select>
-                                    </div>
-                                    <div>
-                                        <label className="saas-label">Storage</label>
-                                        <input 
-                                            type="text" 
-                                            className="saas-input" 
-                                            placeholder="e.g. 128GB, 256GB" 
-                                            value={inwardData.storage_capacity}
-                                            onChange={(e) => setInwardData('storage_capacity', e.target.value)}
-                                        />
-                                    </div>
-                                    <div>
-                                        <label className="saas-label">Color</label>
-                                        <input 
-                                            type="text" 
-                                            className="saas-input" 
-                                            placeholder="e.g. Black, Gold, Silver" 
-                                            value={inwardData.color}
-                                            onChange={(e) => setInwardData('color', e.target.value)}
-                                        />
-                                    </div>
-                                </div>
-                            </>
-                        ) : (
-                            <div>
-                                <label className="saas-label">Quantity Received</label>
-                                <input 
-                                    type="number" 
-                                    min="1"
-                                    className="saas-input" 
-                                    value={inwardData.quantity}
-                                    onChange={(e) => setInwardData('quantity', e.target.value)}
-                                    required
-                                />
-                            </div>
-                        )}
-
-                        <div className="grid grid-cols-2 gap-4">
-                            <div>
-                                <label className="saas-label">Dealer Wholesale Cost (UGX)</label>
-                                <input 
-                                    type="number" 
-                                    min="0"
-                                    className="saas-input font-bold text-rose-600" 
-                                    placeholder="Price owed to dealer upon sale" 
-                                    value={inwardData.wholesale_cost}
-                                    onChange={(e) => setInwardData('wholesale_cost', e.target.value)}
-                                    required
-                                />
-                                <span className="text-[10px] text-slate-500 block mt-1">Amount owed to dealer once sold</span>
-                            </div>
-
-                            <div>
-                                <label className="saas-label">Target Retail Price (UGX)</label>
-                                <input 
-                                    type="number" 
-                                    min="0"
-                                    className="saas-input font-bold text-emerald-600" 
-                                    placeholder="Selling price at shop POS" 
-                                    value={inwardData.retail_price}
-                                    onChange={(e) => setInwardData('retail_price', e.target.value)}
-                                    required
-                                />
-                                <span className="text-[10px] text-slate-500 block mt-1">What your cashier sells it for at POS</span>
-                            </div>
-                        </div>
-
-                        <div>
-                            <label className="saas-label">Notes (Optional)</label>
-                            <textarea 
-                                className="saas-input" 
-                                rows="2"
-                                placeholder="Condition details, color, warranty terms..."
-                                value={inwardData.notes}
-                                onChange={(e) => setInwardData('notes', e.target.value)}
-                            />
-                        </div>
-
-                        <div className="flex justify-end gap-3 pt-4 border-t border-slate-100">
-                            <Button type="button" variant="secondary" onClick={() => setShowInwardModal(false)}>
-                                Cancel
-                            </Button>
-                            <Button type="submit" variant="primary" isLoading={processingInward} icon={Download}>
-                                Receive into Shop Stock
-                            </Button>
-                        </div>
-                    </form>
-                </div>
-            </Modal>
+            <ReceiveStockModal
+                isOpen={showInwardModal}
+                onClose={() => setShowInwardModal(false)}
+                dealers={dealers}
+                categories={categories}
+                brands={brands}
+                products={products}
+            />
 
         </AuthenticatedLayout>
     );

@@ -87,6 +87,7 @@ class DealerController extends Controller
         $dealers = Dealer::orderBy('name')->get();
         $categories = \App\Models\Category::all();
         $brands = \App\Models\Brand::all();
+        $products = \App\Models\Product::with(['brand', 'category'])->orderBy('model_name')->get();
 
         return Inertia::render('Dealers/Dashboard', [
             'metrics' => $metrics,
@@ -98,6 +99,7 @@ class DealerController extends Controller
             'dealers' => $dealers,
             'categories' => $categories,
             'brands' => $brands,
+            'products' => $products,
         ]);
     }
 
@@ -307,7 +309,7 @@ class DealerController extends Controller
 
         $categories = \App\Models\Category::all();
         $brands = \App\Models\Brand::all();
-        $products = \App\Models\Product::with('brand')->get();
+        $products = \App\Models\Product::with(['brand', 'category'])->orderBy('model_name')->get();
 
         return Inertia::render('Dealers/Show', [
             'dealer' => $dealer,
@@ -460,15 +462,31 @@ class DealerController extends Controller
             if (!empty($validated['product_id'])) {
                 $product = \App\Models\Product::findOrFail($validated['product_id']);
             } else {
-                $product = \App\Models\Product::create([
-                    'category_id' => $validated['category_id'],
-                    'brand_id' => $validated['brand_id'],
-                    'model_name' => $validated['model_name'],
-                    'type' => $validated['type'],
-                    'cost_price' => $validated['wholesale_cost'],
-                    'selling_price' => $validated['retail_price'],
-                    'quantity' => 0,
-                ]);
+                // Safeguard against duplicates: check if this model already exists under the brand (case-insensitive & trimmed)
+                $cleanModelName = trim(preg_replace('/\s+/', ' ', $validated['model_name'] ?? ''));
+                $existingProduct = null;
+
+                if ($cleanModelName !== '') {
+                    $query = \App\Models\Product::query();
+                    if (!empty($validated['brand_id'])) {
+                        $query->where('brand_id', $validated['brand_id']);
+                    }
+                    $existingProduct = $query->whereRaw('LOWER(TRIM(model_name)) = ?', [strtolower($cleanModelName)])->first();
+                }
+
+                if ($existingProduct) {
+                    $product = $existingProduct;
+                } else {
+                    $product = \App\Models\Product::create([
+                        'category_id' => $validated['category_id'],
+                        'brand_id' => $validated['brand_id'],
+                        'model_name' => $cleanModelName,
+                        'type' => $validated['type'],
+                        'cost_price' => $validated['wholesale_cost'],
+                        'selling_price' => $validated['retail_price'],
+                        'quantity' => 0,
+                    ]);
+                }
             }
 
             $deviceImei = null;
