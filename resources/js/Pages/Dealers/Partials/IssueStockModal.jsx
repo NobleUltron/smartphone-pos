@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useForm } from '@inertiajs/react';
 import Modal from '@/Components/Modal';
-import { Handshake, X, Search, Package, Check, Smartphone, Layers, Calendar, ArrowUpRight, AlertCircle, Loader2 } from 'lucide-react';
+import { Handshake, X, Search, Package, Check, Smartphone, Layers, Calendar, ArrowUpRight, AlertCircle, Loader2, Trash2, Plus } from 'lucide-react';
 import axios from 'axios';
 import { debounce } from 'lodash';
 import dayjs from 'dayjs';
@@ -16,6 +16,7 @@ export default function IssueStockModal({
     const [searchResults, setSearchResults] = useState([]);
     const [isSearching, setIsSearching] = useState(false);
     const [selectedItem, setSelectedItem] = useState(null);
+    const [stagedItems, setStagedItems] = useState([]);
 
     const { data, setData, post, processing, reset, errors, clearErrors } = useForm({
         dealer_id: preselectedDealerId || '',
@@ -25,7 +26,8 @@ export default function IssueStockModal({
         quantity: 1,
         dealer_price: '',
         expected_return_date: '',
-        notes: ''
+        notes: '',
+        items: []
     });
 
     useEffect(() => {
@@ -88,6 +90,44 @@ export default function IssueStockModal({
         }));
     };
 
+    const handleAddCurrentToSlip = () => {
+        if (!selectedItem || !data.dealer_price || Number(data.dealer_price) <= 0) {
+            return;
+        }
+
+        const isSerialized = selectedItem.type === 'serialized';
+        const title = isSerialized
+            ? `${selectedItem.product?.brand?.name || ''} ${selectedItem.product?.model_name || ''}`.trim()
+            : `${selectedItem.brand?.name || ''} ${selectedItem.model_name || ''}`.trim();
+        const detail = isSerialized
+            ? `IMEI: ${selectedItem.imei}`
+            : `SKU: ${selectedItem.sku || 'N/A'}`;
+
+        const newItem = {
+            title,
+            detail,
+            type: selectedItem.type,
+            device_imei_id: isSerialized ? selectedItem.id : null,
+            product_id: !isSerialized ? selectedItem.id : null,
+            quantity: isSerialized ? 1 : Number(data.quantity || 1),
+            dealer_price: Number(data.dealer_price),
+            notes: data.notes || ''
+        };
+
+        // Prevent adding duplicate IMEI
+        if (isSerialized && stagedItems.some(i => i.device_imei_id === newItem.device_imei_id)) {
+            alert('This device IMEI is already in the consignment slip.');
+            return;
+        }
+
+        setStagedItems(prev => [...prev, newItem]);
+        handleClearItem();
+    };
+
+    const handleRemoveFromSlip = (index) => {
+        setStagedItems(prev => prev.filter((_, i) => i !== index));
+    };
+
     const setQuickDueDate = (days) => {
         const target = dayjs().add(days, 'day').format('YYYY-MM-DD');
         setData('expected_return_date', target);
@@ -96,6 +136,7 @@ export default function IssueStockModal({
     const handleClose = () => {
         reset();
         setSelectedItem(null);
+        setStagedItems([]);
         setSearchQuery('');
         setSearchResults([]);
         clearErrors();
@@ -104,11 +145,32 @@ export default function IssueStockModal({
 
     const handleSubmit = (e) => {
         e.preventDefault();
-        post(route('dealers.store-issue'), {
-            onSuccess: () => {
-                handleClose();
-            }
-        });
+
+        // If user has staged items, submit the batch
+        if (stagedItems.length > 0) {
+            post(route('dealers.store-issue'), {
+                data: {
+                    dealer_id: data.dealer_id,
+                    expected_return_date: data.expected_return_date,
+                    notes: data.notes,
+                    items: stagedItems
+                },
+                onSuccess: () => {
+                    handleClose();
+                }
+            });
+            return;
+        }
+
+        // If single item is selected but not added to slip yet
+        if (selectedItem) {
+            post(route('dealers.store-issue'), {
+                onSuccess: () => {
+                    handleClose();
+                }
+            });
+            return;
+        }
     };
 
     const formatCurrency = (val) => {
@@ -384,10 +446,73 @@ export default function IssueStockModal({
                                 </div>
                             </div>
 
+                            {/* Add to Slip Button (Allows adding multiple items to same dealer) */}
+                            {selectedItem && (
+                                <div className="pt-2">
+                                    <button
+                                        type="button"
+                                        onClick={handleAddCurrentToSlip}
+                                        disabled={!selectedItem || !data.dealer_price || Number(data.dealer_price) <= 0}
+                                        className="w-full py-2.5 px-4 bg-indigo-50 dark:bg-indigo-950/60 hover:bg-indigo-100 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition-all disabled:opacity-50"
+                                    >
+                                        <Plus size={16} /> Add This Item to Consignment Slip
+                                    </button>
+                                </div>
+                            )}
+
+                            {/* Staged Consignment Slip Table */}
+                            {stagedItems.length > 0 && (
+                                <div className="pt-4 border-t border-slate-200 dark:border-slate-800 space-y-2.5">
+                                    <div className="flex items-center justify-between">
+                                        <span className="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+                                            <Handshake size={14} className="text-indigo-600" />
+                                            Consignment Slip ({stagedItems.length} {stagedItems.length === 1 ? 'item' : 'items'})
+                                        </span>
+                                        <span className="text-xs font-black text-indigo-600 dark:text-indigo-400">
+                                            Slip Total: {formatCurrency(stagedItems.reduce((acc, i) => acc + (i.dealer_price * i.quantity), 0))}
+                                        </span>
+                                    </div>
+
+                                    <div className="border border-slate-200 dark:border-slate-700 rounded-xl divide-y divide-slate-100 dark:divide-slate-800 overflow-hidden bg-slate-50/50 dark:bg-slate-800/40 max-h-48 overflow-y-auto">
+                                        {stagedItems.map((staged, idx) => (
+                                            <div key={idx} className="p-3 flex items-center justify-between hover:bg-white dark:hover:bg-slate-800/80 transition-colors">
+                                                <div className="flex items-center gap-2.5">
+                                                    <div className={`p-1.5 rounded-lg ${staged.type === 'serialized' ? 'bg-amber-100 text-amber-700' : 'bg-blue-100 text-blue-700'}`}>
+                                                        {staged.type === 'serialized' ? <Smartphone size={14} /> : <Layers size={14} />}
+                                                    </div>
+                                                    <div>
+                                                        <div className="text-xs font-bold text-slate-900 dark:text-white">{staged.title}</div>
+                                                        <div className="text-[11px] text-slate-500 dark:text-slate-400">
+                                                            {staged.detail} • Qty: {staged.quantity} × {formatCurrency(staged.dealer_price)}
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                                <div className="flex items-center gap-3">
+                                                    <span className="text-xs font-bold text-slate-900 dark:text-white">
+                                                        {formatCurrency(staged.dealer_price * staged.quantity)}
+                                                    </span>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => handleRemoveFromSlip(idx)}
+                                                        className="p-1 text-slate-400 hover:text-rose-600 rounded transition-colors"
+                                                        title="Remove item from slip"
+                                                    >
+                                                        <Trash2 size={15} />
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                    <p className="text-[11px] text-slate-400 italic">
+                                        Search and select another item above to add more items to this same consignment slip.
+                                    </p>
+                                </div>
+                            )}
+
                             {/* Notes */}
-                            <div className="space-y-1.5">
+                            <div className="space-y-1.5 pt-2 border-t border-slate-100 dark:border-slate-800">
                                 <label className="block text-xs font-bold text-slate-700 dark:text-slate-300">
-                                    Notes <span className="text-slate-400 font-normal">(Optional)</span>
+                                    General Notes <span className="text-slate-400 font-normal">(Optional)</span>
                                 </label>
                                 <textarea
                                     className="w-full px-3.5 py-2 text-sm rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white placeholder-slate-400 focus:bg-white dark:focus:bg-slate-800 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all shadow-sm"
@@ -402,22 +527,38 @@ export default function IssueStockModal({
                     </div>
 
                     {/* Fixed / Sticky Footer Actions */}
-                    <div className="px-6 py-4 border-t border-slate-100 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-900/80 shrink-0 flex items-center justify-end gap-2.5">
-                        <button
-                            type="button"
-                            onClick={handleClose}
-                            className="px-4 py-2.5 text-xs font-bold text-slate-700 dark:text-slate-300 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700 rounded-xl transition-colors"
-                        >
-                            Cancel
-                        </button>
-                        <button
-                            type="submit"
-                            disabled={processing || !data.dealer_id || (!data.device_imei_id && !data.product_id)}
-                            className="px-5 py-2.5 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl shadow-md shadow-indigo-500/20 transition-all disabled:opacity-50 flex items-center gap-1.5"
-                        >
-                            <ArrowUpRight size={16} />
-                            {processing ? 'Issuing Stock...' : 'Confirm Issue to Dealer'}
-                        </button>
+                    <div className="px-6 py-4 border-t border-slate-100 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-900/80 shrink-0 flex items-center justify-between gap-2.5">
+                        <div className="text-xs text-slate-500 font-medium">
+                            {stagedItems.length > 0 ? (
+                                <span>
+                                    Slip contains <strong className="text-indigo-600 dark:text-indigo-400">{stagedItems.length} items</strong> (worth {formatCurrency(stagedItems.reduce((acc, i) => acc + (i.dealer_price * i.quantity), 0))})
+                                </span>
+                            ) : (
+                                <span>Ready to issue</span>
+                            )}
+                        </div>
+                        <div className="flex items-center gap-2">
+                            <button
+                                type="button"
+                                onClick={handleClose}
+                                className="px-4 py-2.5 text-xs font-bold text-slate-700 dark:text-slate-300 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700 rounded-xl transition-colors"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                type="submit"
+                                disabled={processing || !data.dealer_id || (stagedItems.length === 0 && (!data.device_imei_id && !data.product_id))}
+                                className="px-5 py-2.5 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl shadow-md shadow-indigo-500/20 transition-all disabled:opacity-50 flex items-center gap-1.5"
+                            >
+                                <ArrowUpRight size={16} />
+                                {processing 
+                                    ? 'Issuing Stock...' 
+                                    : stagedItems.length > 0 
+                                        ? `Confirm & Issue All (${stagedItems.length} Items)`
+                                        : 'Confirm Issue to Dealer'
+                                }
+                            </button>
+                        </div>
                     </div>
                 </form>
             </div>

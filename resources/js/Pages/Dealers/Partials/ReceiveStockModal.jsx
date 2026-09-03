@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useForm } from '@inertiajs/react';
 import Modal from '@/Components/Modal';
-import { Download, X, Search, Plus, Package, Check, Sparkles, CheckCircle2 } from 'lucide-react';
+import { Download, X, Search, Plus, Package, Check, Sparkles, CheckCircle2, Trash2, Smartphone, Layers } from 'lucide-react';
 
 export default function ReceiveStockModal({
     isOpen,
@@ -15,6 +15,7 @@ export default function ReceiveStockModal({
     const [mode, setMode] = useState('existing'); // 'existing' | 'new'
     const [searchTerm, setSearchTerm] = useState('');
     const [selectedProduct, setSelectedProduct] = useState(null);
+    const [stagedItems, setStagedItems] = useState([]);
 
     const { data, setData, post, processing, reset, errors, clearErrors } = useForm({
         dealer_id: preselectedDealerId || '',
@@ -30,7 +31,8 @@ export default function ReceiveStockModal({
         wholesale_cost: '',
         retail_price: '',
         quantity: 1,
-        notes: ''
+        notes: '',
+        items: []
     });
 
     useEffect(() => {
@@ -87,9 +89,87 @@ export default function ReceiveStockModal({
         handleClearProduct();
     };
 
+    const handleAddCurrentToBatch = () => {
+        if (mode === 'existing' && !selectedProduct && !data.product_id) {
+            alert('Please select a product first.');
+            return;
+        }
+        if (mode === 'new' && !data.model_name.trim()) {
+            alert('Please specify the product model name.');
+            return;
+        }
+        if (!data.wholesale_cost || Number(data.wholesale_cost) < 0) {
+            alert('Please enter a valid dealer wholesale cost.');
+            return;
+        }
+        if (!data.retail_price || Number(data.retail_price) <= 0) {
+            alert('Please enter a valid shop retail price.');
+            return;
+        }
+        if (data.type === 'serialized' && !data.imei_number.trim()) {
+            alert('Please enter an IMEI / Serial number for this serialized device.');
+            return;
+        }
+
+        const isSerialized = data.type === 'serialized';
+        const brandObj = brands.find(b => String(b.id) === String(data.brand_id));
+        const catObj = categories.find(c => String(c.id) === String(data.category_id));
+
+        const title = mode === 'existing'
+            ? `${selectedProduct?.brand?.name || ''} ${selectedProduct?.model_name || ''}`.trim()
+            : `${brandObj?.name || ''} ${data.model_name}`.trim();
+
+        const detail = isSerialized
+            ? `IMEI: ${data.imei_number.trim()} • ${data.condition || 'Brand New'}`
+            : `Bulk Stock • Qty: ${Number(data.quantity || 1)}`;
+
+        // Check duplicate IMEI in staged batch
+        if (isSerialized && stagedItems.some(i => i.imei_number === data.imei_number.trim())) {
+            alert('This IMEI number has already been added to the intake slip.');
+            return;
+        }
+
+        const newItem = {
+            title,
+            detail,
+            mode,
+            type: data.type,
+            product_id: mode === 'existing' ? data.product_id : null,
+            brand_id: data.brand_id,
+            category_id: data.category_id,
+            model_name: data.model_name,
+            imei_number: isSerialized ? data.imei_number.trim() : null,
+            condition: data.condition,
+            storage_capacity: data.storage_capacity,
+            color: data.color,
+            wholesale_cost: Number(data.wholesale_cost),
+            retail_price: Number(data.retail_price),
+            quantity: isSerialized ? 1 : Number(data.quantity || 1),
+            notes: data.notes || ''
+        };
+
+        setStagedItems(prev => [...prev, newItem]);
+
+        // Reset item fields for the next entry
+        handleClearProduct();
+        setData(prev => ({
+            ...prev,
+            imei_number: '',
+            wholesale_cost: '',
+            retail_price: '',
+            quantity: 1,
+            model_name: ''
+        }));
+    };
+
+    const handleRemoveFromBatch = (index) => {
+        setStagedItems(prev => prev.filter((_, i) => i !== index));
+    };
+
     const handleClose = () => {
         reset();
         setSelectedProduct(null);
+        setStagedItems([]);
         setSearchTerm('');
         setMode('existing');
         clearErrors();
@@ -98,6 +178,23 @@ export default function ReceiveStockModal({
 
     const handleSubmit = (e) => {
         e.preventDefault();
+
+        // If user has staged items, submit the batch
+        if (stagedItems.length > 0) {
+            post(route('dealers.store-inward'), {
+                data: {
+                    dealer_id: data.dealer_id,
+                    notes: data.notes,
+                    items: stagedItems
+                },
+                onSuccess: () => {
+                    handleClose();
+                }
+            });
+            return;
+        }
+
+        // Single item fallback
         post(route('dealers.store-inward'), {
             onSuccess: () => {
                 handleClose();
@@ -485,10 +582,70 @@ export default function ReceiveStockModal({
                         </div>
                     )}
 
+                    {/* Add to Batch Button */}
+                    <div className="pt-2">
+                        <button
+                            type="button"
+                            onClick={handleAddCurrentToBatch}
+                            className="w-full py-2.5 px-4 bg-emerald-50 dark:bg-emerald-950/60 hover:bg-emerald-100 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition-all shadow-sm"
+                        >
+                            <Plus size={16} /> Add This Item to Intake Batch Slip
+                        </button>
+                    </div>
+
+                    {/* Staged Intake Batch Slip Table */}
+                    {stagedItems.length > 0 && (
+                        <div className="pt-4 border-t border-slate-200 dark:border-slate-800 space-y-2.5">
+                            <div className="flex items-center justify-between">
+                                <span className="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+                                    <Download size={14} className="text-emerald-600" />
+                                    Intake Batch Slip ({stagedItems.length} {stagedItems.length === 1 ? 'item' : 'items'})
+                                </span>
+                                <span className="text-xs font-black text-emerald-600 dark:text-emerald-400">
+                                    Total Dealer Cost: {formatCurrency(stagedItems.reduce((acc, i) => acc + (i.wholesale_cost * i.quantity), 0))}
+                                </span>
+                            </div>
+
+                            <div className="border border-slate-200 dark:border-slate-700 rounded-xl divide-y divide-slate-100 dark:divide-slate-800 overflow-hidden bg-slate-50/50 dark:bg-slate-800/40 max-h-48 overflow-y-auto">
+                                {stagedItems.map((staged, idx) => (
+                                    <div key={idx} className="p-3 flex items-center justify-between hover:bg-white dark:hover:bg-slate-800/80 transition-colors">
+                                        <div className="flex items-center gap-2.5">
+                                            <div className={`p-1.5 rounded-lg ${staged.type === 'serialized' ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700'}`}>
+                                                {staged.type === 'serialized' ? <Smartphone size={14} /> : <Layers size={14} />}
+                                            </div>
+                                            <div>
+                                                <div className="text-xs font-bold text-slate-900 dark:text-white">{staged.title}</div>
+                                                <div className="text-[11px] text-slate-500 dark:text-slate-400">
+                                                    {staged.detail} • Cost: {formatCurrency(staged.wholesale_cost)} • Shelf: {formatCurrency(staged.retail_price)}
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div className="flex items-center gap-3">
+                                            <span className="text-xs font-bold text-slate-900 dark:text-white">
+                                                {formatCurrency(staged.wholesale_cost * staged.quantity)}
+                                            </span>
+                                            <button
+                                                type="button"
+                                                onClick={() => handleRemoveFromBatch(idx)}
+                                                className="p-1 text-slate-400 hover:text-rose-600 rounded transition-colors"
+                                                title="Remove item from batch"
+                                            >
+                                                <Trash2 size={15} />
+                                            </button>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                            <p className="text-[11px] text-slate-400 italic">
+                                Fill in another product above to add more items to this same consignment intake batch.
+                            </p>
+                        </div>
+                    )}
+
                     {/* Notes */}
-                    <div className="space-y-1.5">
+                    <div className="space-y-1.5 pt-2 border-t border-slate-100 dark:border-slate-800">
                         <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">
-                            Notes <span className="text-slate-400 font-normal">(Optional)</span>
+                            Batch Notes <span className="text-slate-400 font-normal">(Optional)</span>
                         </label>
                         <textarea
                             className="w-full px-3.5 py-2 text-sm rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white placeholder-slate-400 focus:bg-white dark:focus:bg-slate-800 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 shadow-sm transition-all"
@@ -501,7 +658,17 @@ export default function ReceiveStockModal({
                 </div>
 
                 {/* Fixed / Sticky Footer Actions */}
-                    <div className="px-6 py-4 border-t border-slate-100 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-900/80 shrink-0 flex items-center justify-end gap-2.5">
+                <div className="px-6 py-4 border-t border-slate-100 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-900/80 shrink-0 flex items-center justify-between gap-2.5">
+                    <div className="text-xs text-slate-500 font-medium">
+                        {stagedItems.length > 0 ? (
+                            <span>
+                                Slip contains <strong className="text-emerald-600 dark:text-emerald-400">{stagedItems.length} items</strong> (Cost: {formatCurrency(stagedItems.reduce((acc, i) => acc + (i.wholesale_cost * i.quantity), 0))})
+                            </span>
+                        ) : (
+                            <span>Ready to intake</span>
+                        )}
+                    </div>
+                    <div className="flex items-center gap-2">
                         <button
                             type="button"
                             onClick={handleClose}
@@ -511,13 +678,19 @@ export default function ReceiveStockModal({
                         </button>
                         <button
                             type="submit"
-                            disabled={processing || (mode === 'existing' && !selectedProduct && !data.product_id)}
-                            className="px-5 py-2.5 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl shadow-md shadow-indigo-500/20 transition-all disabled:opacity-50 flex items-center gap-1.5"
+                            disabled={processing || !data.dealer_id || (stagedItems.length === 0 && ((mode === 'existing' && !selectedProduct && !data.product_id) || (mode === 'new' && !data.model_name)))}
+                            className="px-5 py-2.5 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-xl shadow-md shadow-emerald-500/20 transition-all disabled:opacity-50 flex items-center gap-1.5"
                         >
                             <Download size={16} />
-                            {processing ? 'Receiving...' : 'Receive into Shop Stock'}
+                            {processing 
+                                ? 'Receiving...' 
+                                : stagedItems.length > 0 
+                                    ? `Receive All (${stagedItems.length} Items)`
+                                    : 'Receive into Shop Stock'
+                            }
                         </button>
                     </div>
+                </div>
                 </form>
             </div>
         </Modal>

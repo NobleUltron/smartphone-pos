@@ -1,7 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import { Head, Link, router, useForm, usePage } from '@inertiajs/react';
-import { Handshake, Plus, PackageOpen, ArrowUpRight, RotateCcw, AlertCircle, Trophy, TrendingUp, BarChart2, Download, X, BookOpen, Trash2 } from 'lucide-react';
+import { Handshake, Plus, PackageOpen, ArrowUpRight, RotateCcw, AlertCircle, Trophy, TrendingUp, BarChart2, Download, X, BookOpen, Trash2, ChevronDown, ChevronUp, Users, ListFilter, Smartphone, Layers } from 'lucide-react';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, Cell } from 'recharts';
 import dayjs from 'dayjs';
 import relativeTime from 'dayjs/plugin/relativeTime';
@@ -16,7 +16,7 @@ import VoidConsignmentModal from './Partials/VoidConsignmentModal';
 
 dayjs.extend(relativeTime);
 
-export default function Dashboard({ metrics, pendingItems, recentSold, recentReturned, topDealers = [], networkTrends = [], dealers = [], categories = [], brands = [], products = [] }) {
+export default function Dashboard({ metrics, pendingItems = [], recentSold = [], recentReturned = [], topDealers = [], networkTrends = [], dealers = [], categories = [], brands = [], products = [] }) {
     const { auth, permissions } = usePage().props;
     const userRole = auth?.user?.role || 'cashier';
     const isCashier = userRole === 'cashier';
@@ -25,6 +25,35 @@ export default function Dashboard({ metrics, pendingItems, recentSold, recentRet
     const [showInwardModal, setShowInwardModal] = useState(false);
     const [showIssueModal, setShowIssueModal] = useState(false);
     const [voidItem, setVoidItem] = useState(null);
+    const [viewMode, setViewMode] = useState('grouped'); // 'grouped' | 'flat'
+    const [collapsedDealers, setCollapsedDealers] = useState({});
+
+    const toggleDealerCollapse = (dealerId) => {
+        setCollapsedDealers(prev => ({
+            ...prev,
+            [dealerId]: !prev[dealerId]
+        }));
+    };
+
+    const groupedByDealer = useMemo(() => {
+        const groups = {};
+        pendingItems.forEach(item => {
+            const dId = item.dealer?.id || 'unknown';
+            if (!groups[dId]) {
+                groups[dId] = {
+                    dealer: item.dealer,
+                    items: [],
+                    totalValue: 0,
+                    totalUnits: 0
+                };
+            }
+            groups[dId].items.push(item);
+            const effectiveQty = item.type === 'serialized' ? 1 : Math.max(1, (item.quantity - item.quantity_sold - item.quantity_returned));
+            groups[dId].totalUnits += effectiveQty;
+            groups[dId].totalValue += (Number(item.dealer_price) || 0) * (item.type === 'serialized' ? 1 : effectiveQty);
+        });
+        return Object.values(groups);
+    }, [pendingItems]);
     const formatCurrency = (amount) => {
         const val = new Intl.NumberFormat('en-UG', {
             minimumFractionDigits: 0
@@ -228,16 +257,171 @@ export default function Dashboard({ metrics, pendingItems, recentSold, recentRet
 
             {/* Main Table: Items Currently Out */}
             <Card>
-                <div className="flex justify-between items-center mb-6">
-                    <h3 className="text-lg font-bold text-slate-900">Items Currently Out</h3>
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6">
+                    <div>
+                        <h3 className="text-lg font-bold text-slate-900 dark:text-white">Items Currently Out</h3>
+                        <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                            Active consignments held across {groupedByDealer.length} partner shops ({pendingItems.length} total items out)
+                        </p>
+                    </div>
+
+                    {pendingItems.length > 0 && (
+                        <div className="flex items-center bg-slate-100 dark:bg-slate-800 p-1 rounded-xl border border-slate-200/80 dark:border-slate-700 self-start sm:self-auto">
+                            <button
+                                type="button"
+                                onClick={() => setViewMode('grouped')}
+                                className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all ${
+                                    viewMode === 'grouped'
+                                        ? 'bg-white dark:bg-slate-900 text-indigo-600 dark:text-indigo-400 shadow-sm'
+                                        : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                                }`}
+                            >
+                                <Users size={14} /> Grouped by Dealer
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => setViewMode('flat')}
+                                className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all ${
+                                    viewMode === 'flat'
+                                        ? 'bg-white dark:bg-slate-900 text-indigo-600 dark:text-indigo-400 shadow-sm'
+                                        : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                                }`}
+                            >
+                                <ListFilter size={14} /> Itemized List
+                            </button>
+                        </div>
+                    )}
                 </div>
                 
                 {pendingItems.length === 0 ? (
-                    <div className="p-12 text-center border border-dashed border-slate-200 rounded-xl">
-                        <PackageOpen className="mx-auto text-slate-300 mb-3" size={48} />
-                        <p className="text-slate-500 font-medium">No items currently out with dealers.</p>
+                    <div className="p-12 text-center border border-dashed border-slate-200 dark:border-slate-800 rounded-xl">
+                        <PackageOpen className="mx-auto text-slate-300 dark:text-slate-600 mb-3" size={48} />
+                        <p className="text-slate-500 dark:text-slate-400 font-medium">No items currently out with dealers.</p>
+                    </div>
+                ) : viewMode === 'grouped' ? (
+                    /* Grouped by Dealer Accordion View (Clean & No Duplicate Dealer Rows) */
+                    <div className="space-y-4">
+                        {groupedByDealer.map((group) => {
+                            const isCollapsed = !!collapsedDealers[group.dealer?.id];
+                            return (
+                                <div
+                                    key={group.dealer?.id || Math.random()}
+                                    className="border border-slate-200/80 dark:border-slate-800 rounded-2xl overflow-hidden bg-white dark:bg-slate-900/60 shadow-sm transition-all"
+                                >
+                                    {/* Dealer Group Summary Header */}
+                                    <div className="p-4 bg-slate-50/70 dark:bg-slate-800/50 flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 dark:border-slate-800/80">
+                                        <div className="flex items-center gap-3">
+                                            <div className="w-10 h-10 rounded-xl bg-indigo-100 dark:bg-indigo-950/80 text-indigo-600 dark:text-indigo-400 flex items-center justify-center font-black text-sm shrink-0">
+                                                {group.dealer?.name ? group.dealer.name.charAt(0).toUpperCase() : 'D'}
+                                            </div>
+                                            <div>
+                                                <div className="flex items-center gap-2">
+                                                    <Link
+                                                        href={route('dealers.show', group.dealer?.id)}
+                                                        className="font-bold text-slate-900 dark:text-white hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors"
+                                                    >
+                                                        {group.dealer?.name}
+                                                    </Link>
+                                                    <span className="text-xs px-2 py-0.5 rounded-full font-bold bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 border border-indigo-200/60 dark:border-indigo-800/60">
+                                                        {group.items.length} {group.items.length === 1 ? 'item' : 'items'} ({group.totalUnits} {group.totalUnits === 1 ? 'unit' : 'units'})
+                                                    </span>
+                                                </div>
+                                                <div className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                                                    {group.dealer?.phone || 'No phone'} {group.dealer?.address ? `• ${group.dealer.address}` : ''}
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <div className="flex items-center justify-between sm:justify-end gap-3 self-end sm:self-auto w-full sm:w-auto">
+                                            <div className="text-right">
+                                                <div className="text-[11px] uppercase tracking-wider text-slate-400 font-bold">Consignment Total</div>
+                                                <div className="text-base font-black text-slate-900 dark:text-white">
+                                                    {formatCurrency(group.totalValue)}
+                                                </div>
+                                            </div>
+
+                                            <div className="flex items-center gap-1.5 pl-2 border-l border-slate-200 dark:border-slate-700">
+                                                <Link
+                                                    href={route('dealers.show', group.dealer?.id)}
+                                                    className="text-xs font-bold text-indigo-600 dark:text-indigo-400 hover:text-indigo-800 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:border-indigo-300 px-3 py-1.5 rounded-xl transition-all shadow-sm"
+                                                >
+                                                    Manage Dealer
+                                                </Link>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => toggleDealerCollapse(group.dealer?.id)}
+                                                    className="p-1.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-200/60 dark:hover:bg-slate-800 rounded-lg transition-colors"
+                                                    title={isCollapsed ? 'Expand items' : 'Collapse items'}
+                                                >
+                                                    {isCollapsed ? <ChevronDown size={18} /> : <ChevronUp size={18} />}
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {/* Items List Inside Accordion */}
+                                    {!isCollapsed && (
+                                        <div className="overflow-x-auto">
+                                            <table className="w-full text-sm text-left">
+                                                <thead className="text-[11px] text-slate-400 uppercase bg-slate-50/40 dark:bg-slate-800/30 border-b border-slate-100 dark:border-slate-800">
+                                                    <tr>
+                                                        <th className="px-6 py-3 font-semibold">Item & Identity</th>
+                                                        <th className="px-6 py-3 font-semibold">Taken Date</th>
+                                                        <th className="px-6 py-3 font-semibold">Due Status</th>
+                                                        <th className="px-6 py-3 font-semibold">Agreed Price</th>
+                                                        <th className="px-6 py-3 font-semibold text-right">Actions</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                                                    {group.items.map((item) => (
+                                                        <tr key={item.id} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/40 transition-colors">
+                                                            <td className="px-6 py-3.5">
+                                                                <div className="flex items-center gap-2.5">
+                                                                    <div className={`p-1.5 rounded-lg ${item.type === 'serialized' ? 'bg-amber-100 text-amber-700 dark:bg-amber-950/60 dark:text-amber-400' : 'bg-blue-100 text-blue-700 dark:bg-blue-950/60 dark:text-blue-400'}`}>
+                                                                        {item.type === 'serialized' ? <Smartphone size={14} /> : <Layers size={14} />}
+                                                                    </div>
+                                                                    <div>
+                                                                        <div className="font-bold text-slate-900 dark:text-white">
+                                                                            {item.type === 'serialized' ? `${item.device_imei?.product?.brand?.name || ''} ${item.device_imei?.product?.model_name}` : `${item.product?.brand?.name || ''} ${item.product?.model_name}`}
+                                                                        </div>
+                                                                        <div className="text-xs text-slate-500 dark:text-slate-400 font-medium">
+                                                                            {item.type === 'serialized' ? `IMEI: ${item.device_imei?.imei}` : `SKU: ${item.product?.sku || 'N/A'} • Qty Out: ${item.quantity - item.quantity_sold - item.quantity_returned}`}
+                                                                        </div>
+                                                                    </div>
+                                                                </div>
+                                                            </td>
+                                                            <td className="px-6 py-3.5 text-slate-600 dark:text-slate-300 whitespace-nowrap text-xs">
+                                                                {dayjs(item.issued_at).format('DD MMM YYYY')}
+                                                            </td>
+                                                            <td className="px-6 py-3.5 text-slate-600 whitespace-nowrap text-xs">
+                                                                <DueDateBadge date={item.expected_return_date} />
+                                                            </td>
+                                                            <td className="px-6 py-3.5 font-bold text-slate-900 dark:text-white whitespace-nowrap">
+                                                                {formatCurrency(item.dealer_price)}
+                                                            </td>
+                                                            <td className="px-6 py-3.5 text-right">
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => setVoidItem(item)}
+                                                                    className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/60 rounded-lg transition-colors inline-flex items-center gap-1 text-xs font-semibold"
+                                                                    title="Void / Delete Transaction (Rollback Stock)"
+                                                                >
+                                                                    <Trash2 size={15} />
+                                                                    <span className="hidden sm:inline">Void</span>
+                                                                </button>
+                                                            </td>
+                                                        </tr>
+                                                    ))}
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    )}
+                                </div>
+                            );
+                        })}
                     </div>
                 ) : (
+                    /* Flat Itemized Table */
                     <div className="overflow-x-auto">
                         <table className="w-full text-sm text-left">
                             <thead className="text-xs text-slate-500 uppercase bg-slate-50/50 border-b border-slate-200">

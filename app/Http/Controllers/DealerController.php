@@ -393,6 +393,75 @@ class DealerController extends Controller
 
     public function storeIssue(Request $request)
     {
+        // Check if multi-item batch request
+        if ($request->has('items') && is_array($request->input('items'))) {
+            $validated = $request->validate([
+                'dealer_id' => 'required|exists:dealers,id',
+                'expected_return_date' => 'nullable|date',
+                'notes' => 'nullable|string',
+                'items' => 'required|array|min:1',
+                'items.*.type' => 'required|in:serialized,bulk',
+                'items.*.device_imei_id' => 'nullable|exists:device_imeis,id',
+                'items.*.product_id' => 'nullable|exists:products,id',
+                'items.*.quantity' => 'required|integer|min:1',
+                'items.*.dealer_price' => 'required|numeric|min:0',
+                'items.*.notes' => 'nullable|string'
+            ]);
+
+            try {
+                \App\Services\DatabaseSequenceService::syncTable('products');
+                \App\Services\DatabaseSequenceService::syncTable('device_imeis');
+                \App\Services\DatabaseSequenceService::syncTable('dealer_items');
+
+                DB::beginTransaction();
+
+                foreach ($validated['items'] as $itemData) {
+                    $retailPrice = 0;
+                    if ($itemData['type'] === 'serialized') {
+                        $device = DeviceImei::findOrFail($itemData['device_imei_id']);
+                        if ($device->status !== 'In Stock') {
+                            throw new \Exception("Device {$device->imei} is not currently in stock.");
+                        }
+                        $device->update(['status' => 'With Dealer']);
+                        $retailPrice = $device->selling_price ?? $device->cost_price;
+                        $itemData['quantity'] = 1;
+                    } else {
+                        $product = \App\Models\Product::findOrFail($itemData['product_id']);
+                        if ($product->quantity < $itemData['quantity']) {
+                            throw new \Exception("Only {$product->quantity} of {$product->model_name} left in stock.");
+                        }
+                        $product->decrement('quantity', $itemData['quantity']);
+                        $retailPrice = $product->selling_price ?? $product->cost_price;
+                    }
+
+                    DealerItem::create([
+                        'dealer_id' => $validated['dealer_id'],
+                        'direction' => 'outward',
+                        'type' => $itemData['type'],
+                        'device_imei_id' => $itemData['type'] === 'serialized' ? $itemData['device_imei_id'] : null,
+                        'product_id' => $itemData['type'] === 'bulk' ? $itemData['product_id'] : null,
+                        'quantity' => $itemData['quantity'],
+                        'retail_price' => $retailPrice,
+                        'dealer_price' => $itemData['dealer_price'],
+                        'user_id' => auth()->id(),
+                        'issued_at' => now(),
+                        'expected_return_date' => $validated['expected_return_date'],
+                        'status' => 'Pending',
+                        'notes' => $itemData['notes'] ?? $validated['notes'] ?? null
+                    ]);
+                }
+
+                DB::commit();
+
+                $count = count($validated['items']);
+                return redirect()->back()->with('success', "{$count} items issued to dealer in batch successfully.");
+            } catch (\Exception $e) {
+                DB::rollBack();
+                return redirect()->back()->with('error', 'Error issuing items: ' . $e->getMessage());
+            }
+        }
+
+        // Single item fallback
         $validated = $request->validate([
             'dealer_id' => 'required|exists:dealers,id',
             'type' => 'required|in:serialized,bulk',
@@ -428,6 +497,7 @@ class DealerController extends Controller
 
             DealerItem::create([
                 'dealer_id' => $validated['dealer_id'],
+                'direction' => 'outward',
                 'type' => $validated['type'],
                 'device_imei_id' => $validated['type'] === 'serialized' ? $validated['device_imei_id'] : null,
                 'product_id' => $validated['type'] === 'bulk' ? $validated['product_id'] : null,
@@ -456,6 +526,126 @@ class DealerController extends Controller
 
     public function storeInward(Request $request)
     {
+        // Check if multi-item batch request
+        if ($request->has('items') && is_array($request->input('items'))) {
+            $validated = $request->validate([
+                'dealer_id' => 'required|exists:dealers,id',
+                'notes' => 'nullable|string',
+                'items' => 'required|array|min:1',
+                'items.*.type' => 'required|in:serialized,bulk',
+                'items.*.product_id' => 'nullable|exists:products,id',
+                'items.*.category_id' => 'nullable|exists:categories,id',
+                'items.*.brand_id' => 'nullable|exists:brands,id',
+                'items.*.model_name' => 'nullable|string|max:255',
+                'items.*.imei_number' => 'nullable|string|max:255',
+                'items.*.condition' => 'nullable|string',
+                'items.*.storage_capacity' => 'nullable|string|max:50',
+                'items.*.color' => 'nullable|string|max:50',
+                'items.*.wholesale_cost' => 'required|numeric|min:0',
+                'items.*.retail_price' => 'required|numeric|min:0',
+                'items.*.quantity' => 'required|integer|min:1',
+                'items.*.notes' => 'nullable|string',
+            ]);
+
+            try {
+                \App\Services\DatabaseSequenceService::syncTable('products');
+                \App\Services\DatabaseSequenceService::syncTable('device_imeis');
+                \App\Services\DatabaseSequenceService::syncTable('dealer_items');
+
+                DB::beginTransaction();
+
+                foreach ($validated['items'] as $itemData) {
+                    $product = null;
+                    if (!empty($itemData['product_id'])) {
+                        $product = \App\Models\Product::findOrFail($itemData['product_id']);
+                    } else {
+                        $cleanModelName = trim(preg_replace('/\s+/', ' ', $itemData['model_name'] ?? ''));
+                        $query = \App\Models\Product::query();
+                        if (!empty($itemData['brand_id'])) {
+                            $query->where('brand_id', $itemData['brand_id']);
+                        }
+                        $existingProduct = $query->whereRaw('LOWER(TRIM(model_name)) = ?', [strtolower($cleanModelName)])->first();
+
+                        if ($existingProduct) {
+                            $product = $existingProduct;
+                        } else {
+                            $product = \App\Models\Product::create([
+                                'category_id' => $itemData['category_id'],
+                                'brand_id' => $itemData['brand_id'],
+                                'model_name' => $cleanModelName,
+                                'type' => $itemData['type'],
+                                'cost_price' => $itemData['wholesale_cost'],
+                                'selling_price' => $itemData['retail_price'],
+                                'quantity' => 0,
+                            ]);
+                        }
+                    }
+
+                    $deviceImei = null;
+                    if ($itemData['type'] === 'serialized') {
+                        if (empty($itemData['imei_number'])) {
+                            throw new \Exception("IMEI number required for serialized device ({$product->model_name}).");
+                        }
+                        $existing = DeviceImei::where('imei', $itemData['imei_number'])->first();
+                        if ($existing && $existing->status === 'In Stock') {
+                            throw new \Exception("Device IMEI {$itemData['imei_number']} already exists in shop inventory.");
+                        }
+                        if ($existing) {
+                            $existing->update([
+                                'product_id' => $product->id,
+                                'status' => 'In Stock',
+                                'condition' => $itemData['condition'] ?? 'Brand New',
+                                'cost_price' => $itemData['wholesale_cost'],
+                                'selling_price' => $itemData['retail_price'],
+                            ]);
+                            $deviceImei = $existing;
+                        } else {
+                            $deviceImei = DeviceImei::create([
+                                'product_id' => $product->id,
+                                'imei' => $itemData['imei_number'],
+                                'condition' => $itemData['condition'] ?? 'Brand New',
+                                'cost_price' => $itemData['wholesale_cost'],
+                                'selling_price' => $itemData['retail_price'],
+                                'status' => 'In Stock',
+                                'storage_capacity' => $itemData['storage_capacity'] ?? null,
+                                'color' => $itemData['color'] ?? null,
+                            ]);
+                        }
+                        $product->increment('quantity', 1);
+                    } else {
+                        $product->increment('quantity', $itemData['quantity']);
+                    }
+
+                    DealerItem::create([
+                        'dealer_id' => $validated['dealer_id'],
+                        'direction' => 'inward',
+                        'product_id' => $product->id,
+                        'device_imei_id' => $deviceImei ? $deviceImei->id : null,
+                        'type' => $itemData['type'],
+                        'quantity' => $itemData['type'] === 'serialized' ? 1 : $itemData['quantity'],
+                        'quantity_sold' => 0,
+                        'quantity_returned' => 0,
+                        'wholesale_cost' => $itemData['wholesale_cost'],
+                        'retail_price' => $itemData['retail_price'],
+                        'dealer_price' => $itemData['wholesale_cost'],
+                        'user_id' => auth()->id(),
+                        'issued_at' => now(),
+                        'status' => 'Pending',
+                        'settlement_status' => 'unsettled',
+                        'notes' => $itemData['notes'] ?? $validated['notes'] ?? null,
+                    ]);
+                }
+
+                DB::commit();
+                $count = count($validated['items']);
+                return redirect()->back()->with('success', "{$count} items received from dealer into inventory successfully in batch.");
+            } catch (\Exception $e) {
+                DB::rollBack();
+                return redirect()->back()->with('error', 'Error receiving items: ' . $e->getMessage());
+            }
+        }
+
+        // Single item fallback
         $validated = $request->validate([
             'dealer_id' => 'required|exists:dealers,id',
             'type' => 'required|in:serialized,bulk',
