@@ -4,7 +4,8 @@ import { Head, useForm, Link } from '@inertiajs/react';
 import { 
     Wallet, Banknote, Calculator, Receipt, ArrowRight, 
     XCircle, Clock, Plus, ShieldCheck, History as HistoryIcon,
-    DollarSign, TrendingUp, AlertTriangle, CheckCircle2, FileDown
+    DollarSign, TrendingUp, AlertTriangle, CheckCircle2, FileDown,
+    CreditCard, Smartphone, Building2
 } from 'lucide-react';
 import PageHeader from '@/Components/SaaS/PageHeader';
 import Card from '@/Components/SaaS/Card';
@@ -231,10 +232,33 @@ export default function Index({ auth, activeDrawer }) {
                         {/* 4 Metric Overview Cards */}
                         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
                             
+                            {/* Card 1: Total Shift Revenue (All Channels) */}
+                            <Card className="relative overflow-hidden group border-emerald-200/60 dark:border-emerald-800/40">
+                                <div className="flex justify-between items-start mb-2">
+                                    <div>
+                                        <h6 className="text-slate-500 font-semibold text-xs uppercase tracking-wider mb-1">Total Shift Revenue</h6>
+                                        <div className="flex items-baseline gap-1">
+                                            <h3 className="text-2xl font-bold text-emerald-600 dark:text-emerald-400">
+                                                {Number(activeDrawer?.total_shift_sales || 0).toLocaleString()}
+                                            </h3>
+                                            <span className="text-xs text-emerald-600 dark:text-emerald-400 font-medium">UGX</span>
+                                        </div>
+                                    </div>
+                                    <div className="w-10 h-10 rounded-xl flex items-center justify-center bg-gradient-to-br from-emerald-500 to-teal-600 text-white shadow-md shadow-emerald-500/20 group-hover:scale-105 transition-transform">
+                                        <TrendingUp size={20} />
+                                    </div>
+                                </div>
+                                <div className="flex items-center gap-1.5 text-xs text-slate-500 font-medium">
+                                    <Badge variant="success">Gross Sales</Badge> 
+                                    <span>{activeDrawer?.total_sales_count || 0} completed sale{activeDrawer?.total_sales_count === 1 ? '' : 's'}</span>
+                                </div>
+                            </Card>
+
+                            {/* Card 2: Opening Cash Float */}
                             <Card className="relative overflow-hidden group">
                                 <div className="flex justify-between items-start mb-2">
                                     <div>
-                                        <h6 className="text-slate-500 font-semibold text-xs uppercase tracking-wider mb-1">Starting Cash</h6>
+                                        <h6 className="text-slate-500 font-semibold text-xs uppercase tracking-wider mb-1">Opening Cash Float</h6>
                                         <div className="flex items-baseline gap-1">
                                             <h3 className="text-2xl font-bold text-slate-900 dark:text-white">{startingCash.toLocaleString()}</h3>
                                             <span className="text-xs text-slate-500 font-medium">UGX</span>
@@ -245,33 +269,16 @@ export default function Index({ auth, activeDrawer }) {
                                     </div>
                                 </div>
                                 <div className="flex items-center gap-1 text-xs text-slate-500 font-medium">
-                                    <Badge variant="default">Opening Float</Badge> 
+                                    <Badge variant="default">Drawer Float</Badge> 
                                     {cashIns > 0 ? `+${cashIns.toLocaleString()} top-up added` : 'Initial Balance'}
                                 </div>
                             </Card>
 
+                            {/* Card 3: Till Cash Outflows */}
                             <Card className="relative overflow-hidden group">
                                 <div className="flex justify-between items-start mb-2">
                                     <div>
-                                        <h6 className="text-slate-500 font-semibold text-xs uppercase tracking-wider mb-1">Cash Sales</h6>
-                                        <div className="flex items-baseline gap-1">
-                                            <h3 className="text-2xl font-bold text-emerald-600">{cashSales > 0 ? '+' : ''}{cashSales.toLocaleString()}</h3>
-                                            <span className="text-xs text-emerald-600 font-medium">UGX</span>
-                                        </div>
-                                    </div>
-                                    <div className="w-10 h-10 rounded-xl flex items-center justify-center bg-gradient-to-br from-emerald-500 to-teal-600 text-white shadow-md shadow-emerald-500/20 group-hover:scale-105 transition-transform">
-                                        <Banknote size={20} />
-                                    </div>
-                                </div>
-                                <div className="flex items-center gap-1 text-xs text-slate-500 font-medium">
-                                    <Badge variant="success">Register Inflow</Badge> Today's Cash
-                                </div>
-                            </Card>
-
-                            <Card className="relative overflow-hidden group">
-                                <div className="flex justify-between items-start mb-2">
-                                    <div>
-                                        <h6 className="text-slate-500 font-semibold text-xs uppercase tracking-wider mb-1">Shift Expenses</h6>
+                                        <h6 className="text-slate-500 font-semibold text-xs uppercase tracking-wider mb-1">Till Cash Outflows</h6>
                                         <div className="flex items-baseline gap-1">
                                             <h3 className="text-2xl font-bold text-rose-600">{operatingExpenses > 0 ? `-${operatingExpenses.toLocaleString()}` : '0'}</h3>
                                             <span className="text-xs text-rose-600 font-medium">UGX</span>
@@ -282,17 +289,18 @@ export default function Index({ auth, activeDrawer }) {
                                     </div>
                                 </div>
                                 <div className="flex items-center gap-1 text-xs text-slate-500 font-medium">
-                                    <Badge variant="danger">Register Outflow</Badge> Operating Expenses
+                                    <Badge variant="danger">Register Outflow</Badge> Expenses & Payouts
                                 </div>
                             </Card>
 
+                            {/* Card 4: Expected Cash in Till */}
                             <Card className="relative overflow-hidden group">
                                 <div className="flex justify-between items-start mb-2">
                                     <div>
-                                        <h6 className="text-slate-500 font-semibold text-xs uppercase tracking-wider mb-1">Expected Cash</h6>
+                                        <h6 className="text-slate-500 font-semibold text-xs uppercase tracking-wider mb-1">Expected Cash in Till</h6>
                                         <div className="flex items-baseline gap-1">
-                                            <h3 className="text-2xl font-bold text-indigo-600">{expectedCash.toLocaleString()}</h3>
-                                            <span className="text-xs text-indigo-600 font-medium">UGX</span>
+                                            <h3 className="text-2xl font-bold text-indigo-600 dark:text-indigo-400">{expectedCash.toLocaleString()}</h3>
+                                            <span className="text-xs text-indigo-600 dark:text-indigo-400 font-medium">UGX</span>
                                         </div>
                                     </div>
                                     <div className="w-10 h-10 rounded-xl flex items-center justify-center bg-gradient-to-br from-indigo-500 to-blue-600 text-white shadow-md shadow-indigo-500/20 group-hover:scale-105 transition-transform">
@@ -300,55 +308,88 @@ export default function Index({ auth, activeDrawer }) {
                                     </div>
                                 </div>
                                 <div className="flex items-center gap-1 text-xs text-slate-500 font-medium">
-                                    <Badge variant="primary">Calculated Total</Badge> Drawer Target
+                                    <Badge variant="primary">Physical Target</Badge> Cash to Reconcile
                                 </div>
                             </Card>
 
                         </div>
 
-                        {/* Multi-Channel Shift Revenue Breakdown Strip */}
-                        <div className="bg-slate-900 text-white rounded-2xl p-5 shadow-xl border border-slate-800">
-                            <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 border-b border-slate-800 pb-4 mb-4">
-                                <div>
-                                    <div className="flex items-center gap-2">
-                                        <TrendingUp size={18} className="text-emerald-400" />
-                                        <h3 className="text-base font-bold">Shift Revenue Across All Payment Channels</h3>
+                        {/* Shift Revenue by Payment Channel Card */}
+                        <Card className="p-5 border-slate-200/80 dark:border-slate-800 shadow-sm">
+                            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 border-b border-slate-100 dark:border-slate-800 pb-4 mb-4">
+                                <div className="flex items-center gap-2.5">
+                                    <div className="w-8 h-8 rounded-lg bg-indigo-50 dark:bg-indigo-950/60 border border-indigo-100 dark:border-indigo-800 flex items-center justify-center text-indigo-600 dark:text-indigo-400">
+                                        <CreditCard size={18} />
                                     </div>
-                                    <p className="text-xs text-slate-400 mt-0.5">
-                                        Combined sales collected during this shift ({activeDrawer.total_sales_count || 0} completed transaction{activeDrawer.total_sales_count === 1 ? '' : 's'})
-                                    </p>
+                                    <div>
+                                        <h3 className="text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider">Shift Sales By Payment Channel</h3>
+                                        <p className="text-xs text-slate-500 dark:text-slate-400">
+                                            Breakdown of where collected shift revenue is stored (Physical Till vs Digital Float)
+                                        </p>
+                                    </div>
                                 </div>
-                                <div className="text-left md:text-right">
-                                    <span className="text-xs text-slate-400 block font-medium">Total Shift Gross Sales</span>
-                                    <span className="text-2xl font-extrabold text-emerald-400 tracking-tight">
-                                        UGX {Number(activeDrawer.total_shift_sales || 0).toLocaleString()}
+                                <div className="flex items-center gap-2 bg-slate-50 dark:bg-slate-800/80 px-3.5 py-1.5 rounded-xl border border-slate-200/60 dark:border-slate-700">
+                                    <span className="text-xs text-slate-500 font-medium">Combined Total:</span>
+                                    <span className="text-sm font-black text-emerald-600 dark:text-emerald-400">
+                                        UGX {Number(activeDrawer?.total_shift_sales || 0).toLocaleString()}
                                     </span>
                                 </div>
                             </div>
 
                             <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-                                <div className="bg-slate-800/80 p-3.5 rounded-xl border border-slate-700/60">
-                                    <span className="text-[11px] font-bold text-emerald-400 uppercase tracking-wider block mb-1">Cash Inflow</span>
-                                    <span className="text-base sm:text-lg font-bold text-white block">UGX {cashSales.toLocaleString()}</span>
-                                    <span className="text-[10px] text-slate-400">Physical Register Till</span>
+                                <div className="bg-emerald-50/60 dark:bg-emerald-950/30 p-4 rounded-xl border border-emerald-200/70 dark:border-emerald-800/60 transition-all hover:shadow-sm">
+                                    <div className="flex items-center justify-between mb-1.5">
+                                        <span className="text-xs font-bold text-emerald-800 dark:text-emerald-300 uppercase tracking-wider">Physical Cash</span>
+                                        <Banknote size={16} className="text-emerald-600" />
+                                    </div>
+                                    <span className="text-lg font-black text-emerald-700 dark:text-emerald-300 block">
+                                        UGX {cashSales.toLocaleString()}
+                                    </span>
+                                    <span className="text-[11px] text-emerald-600/80 dark:text-emerald-400/80 font-medium mt-0.5 block">
+                                        Counted in Till Target
+                                    </span>
                                 </div>
-                                <div className="bg-slate-800/80 p-3.5 rounded-xl border border-slate-700/60">
-                                    <span className="text-[11px] font-bold text-yellow-400 uppercase tracking-wider block mb-1">MTN Mobile Money</span>
-                                    <span className="text-base sm:text-lg font-bold text-white block">UGX {Number(activeDrawer.momo_sales || 0).toLocaleString()}</span>
-                                    <span className="text-[10px] text-slate-400">Treasury Digital Float</span>
+
+                                <div className="bg-rose-50/60 dark:bg-rose-950/30 p-4 rounded-xl border border-rose-200/70 dark:border-rose-800/60 transition-all hover:shadow-sm">
+                                    <div className="flex items-center justify-between mb-1.5">
+                                        <span className="text-xs font-bold text-rose-800 dark:text-rose-300 uppercase tracking-wider">Airtel Money</span>
+                                        <Smartphone size={16} className="text-rose-600" />
+                                    </div>
+                                    <span className="text-lg font-black text-rose-700 dark:text-rose-300 block">
+                                        UGX {Number(activeDrawer?.airtel_sales || 0).toLocaleString()}
+                                    </span>
+                                    <span className="text-[11px] text-rose-600/80 dark:text-rose-400/80 font-medium mt-0.5 block">
+                                        Treasury Digital Float
+                                    </span>
                                 </div>
-                                <div className="bg-slate-800/80 p-3.5 rounded-xl border border-slate-700/60">
-                                    <span className="text-[11px] font-bold text-rose-400 uppercase tracking-wider block mb-1">Airtel Money</span>
-                                    <span className="text-base sm:text-lg font-bold text-white block">UGX {Number(activeDrawer.airtel_sales || 0).toLocaleString()}</span>
-                                    <span className="text-[10px] text-slate-400">Treasury Digital Float</span>
+
+                                <div className="bg-amber-50/60 dark:bg-amber-950/30 p-4 rounded-xl border border-amber-200/70 dark:border-amber-800/60 transition-all hover:shadow-sm">
+                                    <div className="flex items-center justify-between mb-1.5">
+                                        <span className="text-xs font-bold text-amber-800 dark:text-amber-300 uppercase tracking-wider">MTN MoMo</span>
+                                        <Smartphone size={16} className="text-amber-600" />
+                                    </div>
+                                    <span className="text-lg font-black text-amber-700 dark:text-amber-300 block">
+                                        UGX {Number(activeDrawer?.momo_sales || 0).toLocaleString()}
+                                    </span>
+                                    <span className="text-[11px] text-amber-600/80 dark:text-amber-400/80 font-medium mt-0.5 block">
+                                        Treasury Digital Float
+                                    </span>
                                 </div>
-                                <div className="bg-slate-800/80 p-3.5 rounded-xl border border-slate-700/60">
-                                    <span className="text-[11px] font-bold text-indigo-400 uppercase tracking-wider block mb-1">Bank / Card</span>
-                                    <span className="text-base sm:text-lg font-bold text-white block">UGX {Number(activeDrawer.bank_sales || 0).toLocaleString()}</span>
-                                    <span className="text-[10px] text-slate-400">Direct Bank Settlement</span>
+
+                                <div className="bg-indigo-50/60 dark:bg-indigo-950/30 p-4 rounded-xl border border-indigo-200/70 dark:border-indigo-800/60 transition-all hover:shadow-sm">
+                                    <div className="flex items-center justify-between mb-1.5">
+                                        <span className="text-xs font-bold text-indigo-800 dark:text-indigo-300 uppercase tracking-wider">Bank / Card</span>
+                                        <Building2 size={16} className="text-indigo-600" />
+                                    </div>
+                                    <span className="text-lg font-black text-indigo-700 dark:text-indigo-300 block">
+                                        UGX {Number(activeDrawer?.bank_sales || 0).toLocaleString()}
+                                    </span>
+                                    <span className="text-[11px] text-indigo-600/80 dark:text-indigo-400/80 font-medium mt-0.5 block">
+                                        Direct Bank Settlement
+                                    </span>
                                 </div>
                             </div>
-                        </div>
+                        </Card>
 
                         {/* Main Grid: Expenses Table & Actions Column */}
                         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
