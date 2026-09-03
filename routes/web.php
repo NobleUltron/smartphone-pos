@@ -272,6 +272,7 @@ Route::middleware('auth')->group(function () {
     Route::post('/api/dealers/items/{item}/settle', [\App\Http\Controllers\DealerController::class, 'settleInward'])->name('dealers.settle');
     Route::get('/dealers/items/{item}/voucher', [\App\Http\Controllers\DealerController::class, 'generatePayoutVoucher'])->name('dealers.voucher');
     Route::put('/api/dealers/items/{item}', [\App\Http\Controllers\DealerController::class, 'updateItem'])->name('dealers.update-item');
+    Route::delete('/api/dealers/items/{item}', [\App\Http\Controllers\DealerController::class, 'destroyItem'])->name('dealers.destroy-item');
 
     // Stock Audits
     Route::get('/inventory/audits', [\App\Http\Controllers\StockAuditController::class, 'index'])->name('inventory.audits.index');

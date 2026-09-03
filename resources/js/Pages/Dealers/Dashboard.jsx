@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import { Head, Link, router, useForm, usePage } from '@inertiajs/react';
-import { Handshake, Plus, PackageOpen, ArrowUpRight, RotateCcw, AlertCircle, Trophy, TrendingUp, BarChart2, Download, X, BookOpen } from 'lucide-react';
+import { Handshake, Plus, PackageOpen, ArrowUpRight, RotateCcw, AlertCircle, Trophy, TrendingUp, BarChart2, Download, X, BookOpen, Trash2 } from 'lucide-react';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, Cell } from 'recharts';
 import dayjs from 'dayjs';
 import relativeTime from 'dayjs/plugin/relativeTime';
@@ -12,6 +12,7 @@ import Badge from '@/Components/SaaS/Badge';
 import Modal from '@/Components/Modal';
 import ReceiveStockModal from './Partials/ReceiveStockModal';
 import IssueStockModal from './Partials/IssueStockModal';
+import VoidConsignmentModal from './Partials/VoidConsignmentModal';
 
 dayjs.extend(relativeTime);
 
@@ -23,6 +24,7 @@ export default function Dashboard({ metrics, pendingItems, recentSold, recentRet
 
     const [showInwardModal, setShowInwardModal] = useState(false);
     const [showIssueModal, setShowIssueModal] = useState(false);
+    const [voidItem, setVoidItem] = useState(null);
     const formatCurrency = (amount) => {
         const val = new Intl.NumberFormat('en-UG', {
             minimumFractionDigits: 0
@@ -274,12 +276,22 @@ export default function Dashboard({ metrics, pendingItems, recentSold, recentRet
                                             {formatCurrency(item.dealer_price)}
                                         </td>
                                         <td className="px-6 py-4 text-right">
-                                            <Link
-                                                href={route('dealers.show', item.dealer.id)}
-                                                className="text-indigo-600 hover:text-indigo-800 font-medium text-sm bg-indigo-50 hover:bg-indigo-100 px-3 py-1.5 rounded-lg transition-colors"
-                                            >
-                                                Manage
-                                            </Link>
+                                            <div className="flex items-center justify-end gap-2">
+                                                <Link
+                                                    href={route('dealers.show', item.dealer.id)}
+                                                    className="text-indigo-600 hover:text-indigo-800 font-medium text-sm bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950/60 dark:hover:bg-indigo-900/80 px-3 py-1.5 rounded-lg transition-colors"
+                                                >
+                                                    Manage
+                                                </Link>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setVoidItem(item)}
+                                                    className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/60 rounded-lg transition-colors"
+                                                    title="Void / Delete Transaction (Rollback Stock)"
+                                                >
+                                                    <Trash2 size={16} />
+                                                </button>
+                                            </div>
                                         </td>
                                     </tr>
                                 ))}
@@ -304,6 +316,13 @@ export default function Dashboard({ metrics, pendingItems, recentSold, recentRet
                 isOpen={showIssueModal}
                 onClose={() => setShowIssueModal(false)}
                 dealers={dealers}
+            />
+
+            {/* Void Consignment Modal */}
+            <VoidConsignmentModal
+                isOpen={!!voidItem}
+                onClose={() => setVoidItem(null)}
+                item={voidItem}
             />
 
         </AuthenticatedLayout>

@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import { Head, Link, useForm, router } from '@inertiajs/react';
-import { Handshake, Phone, MapPin, PackageOpen, CheckCircle, RotateCcw, X, DollarSign, Edit2, Receipt, Printer, Eye, MessageCircle, FileText, Download, TrendingUp, Clock, ShieldCheck, Award, BarChart2 } from 'lucide-react';
+import { Handshake, Phone, MapPin, PackageOpen, CheckCircle, RotateCcw, X, DollarSign, Edit2, Receipt, Printer, Eye, MessageCircle, FileText, Download, TrendingUp, Clock, ShieldCheck, Award, BarChart2, Trash2 } from 'lucide-react';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend, BarChart, Bar } from 'recharts';
 import Barcode from 'react-barcode';
 import dayjs from 'dayjs';
@@ -13,6 +13,7 @@ import Button from '@/Components/SaaS/Button';
 import Badge from '@/Components/SaaS/Badge';
 import ReceiveStockModal from './Partials/ReceiveStockModal';
 import IssueStockModal from './Partials/IssueStockModal';
+import VoidConsignmentModal from './Partials/VoidConsignmentModal';
 
 dayjs.extend(relativeTime);
 
@@ -24,6 +25,7 @@ export default function Show({ dealer, metrics, settings, monthlyTrends = [], an
     const [previewLoading, setPreviewLoading] = useState(false);
     const [viewItem, setViewItem] = useState(null);
     const [isEditing, setIsEditing] = useState(false);
+    const [voidItem, setVoidItem] = useState(null);
 
     // Direction Filter State ('all', 'outward', 'inward')
     const [directionTab, setDirectionTab] = useState('all');
@@ -589,6 +591,14 @@ export default function Show({ dealer, metrics, settings, monthlyTrends = [], an
                                                             title={item.direction === 'inward' ? 'Return device to sourcing dealer and remove from shop stock' : 'Restock item into shop inventory'}
                                                         >
                                                             <RotateCcw size={14} /> {item.direction === 'inward' ? 'Return to Dealer' : 'Restock'}
+                                                        </button>
+                                                        <button 
+                                                            type="button"
+                                                            onClick={() => setVoidItem(item)}
+                                                            className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/60 rounded-lg transition-colors"
+                                                            title="Void / Delete Transaction (Rollback Stock)"
+                                                        >
+                                                            <Trash2 size={15} />
                                                         </button>
                                                     </>
                                                 )}
@@ -1514,6 +1524,13 @@ export default function Show({ dealer, metrics, settings, monthlyTrends = [], an
                 onClose={() => setShowIssueModal(false)}
                 dealers={[dealer]}
                 preselectedDealerId={dealer.id}
+            />
+
+            {/* Void Consignment Modal */}
+            <VoidConsignmentModal
+                isOpen={!!voidItem}
+                onClose={() => setVoidItem(null)}
+                item={voidItem}
             />
             
         </AuthenticatedLayout>

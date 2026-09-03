@@ -862,6 +862,48 @@ class DealerController extends Controller
         }
     }
 
+    public function destroyItem(DealerItem $item)
+    {
+        if ($item->status !== 'Pending') {
+            return redirect()->back()->with('error', 'Only pending consignment transactions can be voided. Sold or returned items cannot be voided.');
+        }
+
+        try {
+            DB::beginTransaction();
+
+            if ($item->direction === 'inward') {
+                // Inward consignment received from dealer into shop:
+                // Revert shop inventory
+                if ($item->type === 'serialized' && $item->deviceImei) {
+                    if ($item->deviceImei->status === 'In Stock') {
+                        $item->deviceImei->delete();
+                    } else {
+                        return redirect()->back()->with('error', 'Cannot void intake: device status has already changed to ' . $item->deviceImei->status);
+                    }
+                } elseif ($item->type === 'bulk' && $item->product) {
+                    $item->product->decrement('quantity', min($item->product->quantity, $item->quantity));
+                }
+            } else {
+                // Outward consignment issued from shop to dealer:
+                // Revert by restoring stock back to active inventory
+                if ($item->type === 'serialized' && $item->deviceImei) {
+                    $item->deviceImei->update(['status' => 'In Stock']);
+                } elseif ($item->type === 'bulk' && $item->product) {
+                    $item->product->increment('quantity', $item->quantity);
+                }
+            }
+
+            $item->delete();
+
+            DB::commit();
+
+            return redirect()->back()->with('success', 'Transaction successfully voided and inventory restored to active stock.');
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return redirect()->back()->with('error', 'Error voiding transaction: ' . $e->getMessage());
+        }
+    }
+
     public function generateStatement(Dealer $dealer, Request $request)
     {
         $status = $request->query('status', 'all'); // 'all', 'pending', 'sold', 'returned'
