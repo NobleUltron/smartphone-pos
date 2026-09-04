@@ -616,7 +616,7 @@ export default function ReceiveStockModal({
                                 <input
                                     type="number"
                                     min="0"
-                                    step="500"
+                                    step="any"
                                     className="w-full pl-12 pr-3.5 py-2.5 text-sm font-bold text-rose-600 dark:text-rose-400 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 focus:bg-white dark:focus:bg-slate-800 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 shadow-sm transition-all"
                                     placeholder="Price owed to dealer upon sale"
                                     value={data.wholesale_cost}
@@ -636,7 +636,7 @@ export default function ReceiveStockModal({
                                 <input
                                     type="number"
                                     min="0"
-                                    step="500"
+                                    step="any"
                                     className="w-full pl-12 pr-3.5 py-2.5 text-sm font-bold text-emerald-600 dark:text-emerald-400 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 focus:bg-white dark:focus:bg-slate-800 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 shadow-sm transition-all"
                                     placeholder="POS shelf price"
                                     value={data.retail_price}

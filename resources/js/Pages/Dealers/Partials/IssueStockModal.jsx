@@ -495,7 +495,7 @@ export default function IssueStockModal({
                                                 <input
                                                     type="number"
                                                     min="0"
-                                                    step="500"
+                                                    step="any"
                                                     className="w-full pl-12 pr-3.5 py-2 text-sm font-bold text-indigo-600 dark:text-indigo-400 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all shadow-sm"
                                                     placeholder="Agreed payout upon sale"
                                                     value={data.dealer_price}

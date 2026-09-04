@@ -293,7 +293,7 @@ export default function PurchasesCreate({ auth, suppliers, products }) {
                                                     <label className="block text-xs font-semibold text-slate-500 mb-1">Unit Cost (UGX)</label>
                                                     <input 
                                                         type="number" 
-                                                        required min="0" step="500"
+                                                        required min="0" step="any"
                                                         className="saas-input w-full"
                                                         value={item.unit_cost}
                                                         onChange={e => handleItemChange(index, 'unit_cost', e.target.value)}
@@ -359,7 +359,7 @@ export default function PurchasesCreate({ auth, suppliers, products }) {
                                                         <label className="block text-xs font-semibold text-slate-500 mb-1">Selling Price (UGX)</label>
                                                         <input 
                                                             type="number"
-                                                            min="0" step="500"
+                                                            min="0" step="any"
                                                             className="saas-input w-full"
                                                             placeholder="Default Price"
                                                             value={item.selling_price || ''}

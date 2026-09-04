@@ -136,7 +136,7 @@ export default function Index({ auth, activeDrawer }) {
                                         <input
                                             type="number"
                                             min="0"
-                                            step="1"
+                                            step="any"
                                             required
                                             placeholder="e.g. 50000"
                                             className="w-full pl-12 pr-4 py-3 text-lg font-bold text-slate-900 bg-slate-50 border border-slate-300 focus:border-rose-500 focus:ring-rose-500 rounded-xl shadow-sm transition-all"

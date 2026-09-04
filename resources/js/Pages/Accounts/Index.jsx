@@ -656,6 +656,11 @@ export default function AccountsIndex({ accounts, metrics, transactions, filters
                     </div>
 
                     <form onSubmit={handleTransfer} className="space-y-4">
+                        {transferForm.errors.transfer && (
+                            <div className="p-3 bg-rose-50 dark:bg-rose-950/50 border border-rose-200 dark:border-rose-800 rounded-xl text-xs font-bold text-rose-600 dark:text-rose-400">
+                                {transferForm.errors.transfer}
+                            </div>
+                        )}
                         <div className="space-y-1.5">
                             <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">
                                 From Source Account (Debit) *
@@ -703,7 +708,7 @@ export default function AccountsIndex({ accounts, metrics, transactions, filters
                                 <input
                                     type="number"
                                     min="1"
-                                    step="100"
+                                    step="any"
                                     className="w-full pl-12 pr-3.5 py-2.5 text-base font-black text-indigo-600 dark:text-indigo-400 border border-slate-200 dark:border-slate-700 rounded-xl bg-slate-50 dark:bg-slate-800/80 focus:bg-white dark:focus:bg-slate-800 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 shadow-sm transition-all"
                                     placeholder="0"
                                     value={transferForm.data.amount}
@@ -790,7 +795,7 @@ export default function AccountsIndex({ accounts, metrics, transactions, filters
                                 <input
                                     type="number"
                                     min="0"
-                                    step="100"
+                                    step="any"
                                     className="w-full pl-12 pr-3.5 py-2.5 text-base font-black text-slate-900 dark:text-white border border-slate-200 dark:border-slate-700 rounded-xl bg-slate-50 dark:bg-slate-800/80 focus:bg-white dark:focus:bg-slate-800 focus:border-amber-500 focus:ring-1 focus:ring-amber-500 shadow-sm transition-all"
                                     value={reconcileForm.data.actual_balance}
                                     onChange={e => reconcileForm.setData('actual_balance', e.target.value)}

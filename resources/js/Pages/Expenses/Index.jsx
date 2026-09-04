@@ -433,7 +433,7 @@ export default function Index({ auth, expenses, summary, filters, cashiers, cate
                                 <input
                                     type="number"
                                     min="0"
-                                    step="100"
+                                    step="any"
                                     required
                                     value={addForm.data.amount}
                                     onChange={e => addForm.setData('amount', e.target.value)}
