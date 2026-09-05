@@ -668,7 +668,11 @@ export default function AccountsIndex({ accounts, metrics, transactions, filters
                             <select
                                 className="w-full px-3.5 py-2.5 text-sm font-semibold rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/80 text-slate-900 dark:text-white focus:bg-white dark:focus:bg-slate-800 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all shadow-sm"
                                 value={transferForm.data.from_account_id}
-                                onChange={e => transferForm.setData('from_account_id', e.target.value)}
+                                onChange={e => {
+                                    const newFrom = e.target.value;
+                                    const newTo = accounts.find(a => String(a.id) !== String(newFrom))?.id || '';
+                                    transferForm.setData({ ...transferForm.data, from_account_id: newFrom, to_account_id: String(newTo) });
+                                }}
                                 required
                             >
                                 {accounts.map(acc => (

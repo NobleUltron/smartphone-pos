@@ -213,7 +213,7 @@ class AccountController extends Controller
                 (int) $validated['from_account_id'],
                 (int) $validated['to_account_id'],
                 (float) $validated['amount'],
-                $validated['notes'] ?? null,
+                $validated['notes'] ?? '',
                 auth()->id()
             );
 
