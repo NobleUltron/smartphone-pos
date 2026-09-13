@@ -24,11 +24,15 @@ const categoryColor = (cat) => {
     return 'bg-slate-100 text-slate-600 border-slate-200';
 };
 
-export default function Index({ auth, expenses, summary, filters, cashiers, categories, is_admin_or_manager }) {
+export default function Index({ auth, expenses, summary, filters, cashiers, categories, is_admin_or_manager, accounts = [] }) {
     const [showAddModal, setShowAddModal]     = useState(false);
     const [showEditModal, setShowEditModal]   = useState(false);
     const [showDeleteModal, setShowDeleteModal] = useState(false);
     const [selected, setSelected]             = useState(null);
+
+    // Identify cash register account vs other funding accounts (MTN, Airtel, Bank, Safe)
+    const cashAccount = accounts.find(a => a.type === 'cash') || accounts[0];
+    const nonCashAccounts = accounts.filter(a => a.id !== cashAccount?.id);
 
     // Search / filter state
     const [search, setSearch]       = useState(filters?.search || '');
@@ -39,7 +43,7 @@ export default function Index({ auth, expenses, summary, filters, cashiers, cate
     const [dateFilter, setDateFilter] = useState(filters?.date_filter || '');
 
     // Add form
-    const addForm = useForm({ amount: '', category: 'Shop Supplies', description: '' });
+    const addForm = useForm({ amount: '', category: 'Shop Supplies', description: '', source_account_id: '' });
     // Edit form
     const editForm = useForm({ amount: '', category: '', description: '' });
 
@@ -66,7 +70,11 @@ export default function Index({ auth, expenses, summary, filters, cashiers, cate
     const handleAdd = (e) => {
         e.preventDefault();
         addForm.post('/expenses', {
-            onSuccess: () => { toast.success('Expense logged!'); setShowAddModal(false); addForm.reset(); },
+            onSuccess: () => { 
+                toast.success(addForm.data.category === 'Cash In' ? 'Cash In float added successfully!' : 'Expense logged!'); 
+                setShowAddModal(false); 
+                addForm.reset(); 
+            },
             onError: (err) => toast.error(Object.values(err)[0] || 'Failed to log expense.')
         });
     };
@@ -411,7 +419,16 @@ export default function Index({ auth, expenses, summary, filters, cashiers, cate
                             <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">Category *</label>
                             <select
                                 value={addForm.data.category}
-                                onChange={e => addForm.setData('category', e.target.value)}
+                                onChange={e => {
+                                    const cat = e.target.value;
+                                    addForm.setData(data => ({
+                                        ...data,
+                                        category: cat,
+                                        source_account_id: cat === 'Cash In' && !data.source_account_id 
+                                            ? (nonCashAccounts[0]?.id ? String(nonCashAccounts[0].id) : 'external') 
+                                            : data.source_account_id
+                                    }));
+                                }}
                                 className="w-full border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm font-semibold bg-slate-50 focus:border-rose-400 focus:ring-rose-400"
                             >
                                 <optgroup label="Additions">
@@ -425,6 +442,33 @@ export default function Index({ auth, expenses, summary, filters, cashiers, cate
                             </select>
                             {addForm.errors.category && <p className="text-xs text-rose-500">{addForm.errors.category}</p>}
                         </div>
+
+                        {/* Float Source Selector when Cash In is chosen */}
+                        {addForm.data.category === 'Cash In' && (
+                            <div className="space-y-1.5 p-3 rounded-xl bg-emerald-50 border border-emerald-200">
+                                <label className="text-xs font-bold text-emerald-800 uppercase tracking-wider flex items-center justify-between">
+                                    <span>Float Source (Where is money from?) *</span>
+                                </label>
+                                <select
+                                    className="w-full bg-white border border-emerald-300 focus:border-emerald-500 focus:ring-emerald-500 rounded-xl px-3 py-2 text-xs font-bold text-slate-900 shadow-sm"
+                                    value={addForm.data.source_account_id}
+                                    onChange={e => addForm.setData('source_account_id', e.target.value)}
+                                    required
+                                >
+                                    {nonCashAccounts.map(acc => (
+                                        <option key={acc.id} value={acc.id}>
+                                            {acc.name} (Balance: UGX {Number(acc.current_balance).toLocaleString()})
+                                        </option>
+                                    ))}
+                                    <option value="external">External / Owner Cash (Direct Injection)</option>
+                                </select>
+                                <p className="text-[11px] text-emerald-700 font-medium">
+                                    {addForm.data.source_account_id === 'external'
+                                        ? 'Direct addition to Cash without deducting any account.'
+                                        : `Transfers UGX ${Number(addForm.data.amount || 0).toLocaleString()} from ${accounts.find(a => String(a.id) === String(addForm.data.source_account_id))?.name || 'account'} to Main Cash Register.`}
+                                </p>
+                            </div>
+                        )}
 
                         <div className="space-y-1.5">
                             <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">Amount (UGX) *</label>

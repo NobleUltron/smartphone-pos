@@ -7,6 +7,8 @@ use Illuminate\Http\Request;
 use App\Models\CashDrawer;
 use App\Models\Sale;
 use App\Models\Expense;
+use App\Models\PaymentAccount;
+use App\Services\TreasuryService;
 use Inertia\Inertia;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Auth;
@@ -62,15 +64,19 @@ class CashDrawerController extends Controller
             $activeDrawer->is_stale = $openedAt->diffInHours(now()) >= 24;
         }
 
+        $accounts = PaymentAccount::where('is_active', true)->get(['id', 'name', 'type', 'current_balance', 'provider']);
+
         return Inertia::render('CashDrawer/Index', [
-            'activeDrawer' => $activeDrawer
+            'activeDrawer' => $activeDrawer,
+            'accounts'     => $accounts,
         ]);
     }
 
     public function open(Request $request)
     {
         $request->validate([
-            'starting_cash' => 'required|numeric|min:0'
+            'starting_cash'     => 'required|numeric|min:0',
+            'source_account_id' => 'nullable|string',
         ]);
 
         // Ensure no active drawer exists
@@ -78,12 +84,43 @@ class CashDrawerController extends Controller
             return back()->with('error', 'You already have an open shift.');
         }
 
-        CashDrawer::create([
-            'user_id' => Auth::id(),
+        $drawer = CashDrawer::create([
+            'user_id'       => Auth::id(),
             'starting_cash' => $request->starting_cash,
-            'status' => 'open',
-            'opened_at' => Carbon::now()
+            'status'        => 'open',
+            'opened_at'     => Carbon::now()
         ]);
+
+        // Handle opening float transfer/injection if starting_cash > 0 and source specified
+        $startingCash = floatval($request->starting_cash);
+        $sourceId = $request->source_account_id;
+
+        if ($startingCash > 0 && $sourceId && $sourceId !== 'existing') {
+            $cashAccount = PaymentAccount::getForMethod('Cash');
+
+            if ($sourceId === 'external') {
+                TreasuryService::recordInflow(
+                    'Cash',
+                    $startingCash,
+                    'Opening Float',
+                    $drawer,
+                    "Opening shift float for Shift #{$drawer->id} (External funds)",
+                    null,
+                    Auth::id()
+                );
+            } elseif (is_numeric($sourceId) && (int)$sourceId !== (int)$cashAccount?->id) {
+                $sourceAccount = PaymentAccount::find($sourceId);
+                if ($sourceAccount) {
+                    TreasuryService::transfer(
+                        (int) $sourceAccount->id,
+                        (int) $cashAccount->id,
+                        $startingCash,
+                        "Opening shift float for Shift #{$drawer->id} from {$sourceAccount->name}",
+                        Auth::id()
+                    );
+                }
+            }
+        }
 
         return back()->with('success', 'Shift opened successfully.');
     }

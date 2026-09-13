@@ -6,6 +6,8 @@ use Illuminate\Http\Request;
 use App\Models\Expense;
 use App\Models\CashDrawer;
 use App\Models\User;
+use App\Models\PaymentAccount;
+use App\Services\TreasuryService;
 use Illuminate\Support\Facades\Auth;
 use Carbon\Carbon;
 use Inertia\Inertia;
@@ -31,72 +33,55 @@ class ExpenseController extends Controller
             $query->where('description', 'like', '%' . $request->input('search') . '%');
         }
 
-        // Category filter
+        // Filter by category
         if ($request->filled('category') && $request->input('category') !== 'all') {
             $query->where('category', $request->input('category'));
         }
 
-        // Cashier filter (admin/manager only)
-        if ($isAdminOrManager && $request->filled('cashier_id') && $request->input('cashier_id') !== 'all') {
+        // Filter by cashier
+        if ($request->filled('cashier_id') && $request->input('cashier_id') !== 'all') {
             $query->where('user_id', $request->input('cashier_id'));
         }
 
-        // Date range filter
-        if ($request->filled('date_from')) {
+        // Filter by date range or quick preset
+        if ($request->filled('date_filter')) {
+            match ($request->input('date_filter')) {
+                'today'     => $query->whereDate('expense_date', Carbon::today()),
+                'yesterday' => $query->whereDate('expense_date', Carbon::yesterday()),
+                'this_week' => $query->whereBetween('expense_date', [Carbon::now()->startOfWeek(), Carbon::now()->endOfWeek()]),
+                'this_month'=> $query->whereMonth('expense_date', Carbon::now()->month)->whereYear('expense_date', Carbon::now()->year),
+                default     => null,
+            };
+        } elseif ($request->filled('date_from') && $request->filled('date_to')) {
+            $query->whereBetween('expense_date', [$request->input('date_from'), $request->input('date_to')]);
+        } elseif ($request->filled('date_from')) {
             $query->whereDate('expense_date', '>=', $request->input('date_from'));
-        }
-        if ($request->filled('date_to')) {
+        } elseif ($request->filled('date_to')) {
             $query->whereDate('expense_date', '<=', $request->input('date_to'));
         }
 
-        // Single date shortcut
-        if ($request->filled('date_filter')) {
-            switch ($request->input('date_filter')) {
-                case 'today':
-                    $query->whereDate('expense_date', Carbon::today());
-                    break;
-                case 'yesterday':
-                    $query->whereDate('expense_date', Carbon::yesterday());
-                    break;
-                case 'this_week':
-                    $query->whereBetween('expense_date', [Carbon::now()->startOfWeek(), Carbon::now()->endOfWeek()]);
-                    break;
-                case 'this_month':
-                    $query->whereMonth('expense_date', Carbon::now()->month)
-                          ->whereYear('expense_date', Carbon::now()->year);
-                    break;
-            }
-        }
+        $expenses = $query->paginate(15)->withQueryString();
 
-        // Summary stats (on filtered query, before pagination)
+        // Summary aggregates based on current filter
         $summaryQuery = clone $query;
+        $todayTotal       = Expense::whereDate('expense_date', Carbon::today())->where('category', '!=', 'Cash In')->sum('amount');
         $totalFiltered    = (clone $summaryQuery)->where('category', '!=', 'Cash In')->sum('amount');
         $totalCashIns     = (clone $summaryQuery)->where('category', 'Cash In')->sum('amount');
-        $totalRefunds     = (clone $summaryQuery)->where(function($q){ $q->where('category','Refund')->orWhere('category','Refund (Past Shift)'); })->sum('amount');
+        $totalRefunds     = (clone $summaryQuery)->whereIn('category', ['Refund', 'Refund (Past Shift)'])->sum('amount');
         $totalOperating   = (clone $summaryQuery)->whereNotIn('category', ['Cash In', 'Refund', 'Refund (Past Shift)'])->sum('amount');
 
-        // Today's total (unfiltered scope)
-        $todayQuery = Expense::whereDate('expense_date', Carbon::today())
-            ->where('category', '!=', 'Cash In');
-        if (!$isAdminOrManager) $todayQuery->where('user_id', $user->id);
-        $todayTotal = $todayQuery->sum('amount');
-
-        // Top category this month
-        $topCategory = Expense::whereMonth('expense_date', Carbon::now()->month)
-            ->whereYear('expense_date', Carbon::now()->year)
-            ->whereNotIn('category', ['Cash In', 'Refund', 'Refund (Past Shift)'])
-            ->when(!$isAdminOrManager, fn($q) => $q->where('user_id', $user->id))
-            ->selectRaw('category, SUM(amount) as total')
+        $topCategory = Expense::selectRaw('category, sum(amount) as total')
             ->groupBy('category')
+            ->where('category', '!=', 'Cash In')
             ->orderByDesc('total')
             ->first();
 
-        $expenses = $query->paginate(15)->withQueryString();
-
-        // Cashiers list for filter (admin/manager only)
+        // Cashiers list for filter dropdown (admin/manager only)
         $cashiers = $isAdminOrManager
-            ? User::whereIn('role', ['cashier', 'admin', 'manager'])->orderBy('name')->get(['id', 'name'])
+            ? User::select('id', 'name')->orderBy('name')->get()
             : [];
+
+        $accounts = PaymentAccount::where('is_active', true)->get(['id', 'name', 'type', 'current_balance', 'provider']);
 
         return Inertia::render('Expenses/Index', [
             'expenses'  => $expenses,
@@ -116,15 +101,17 @@ class ExpenseController extends Controller
                 'Refund', 'Refund (Past Shift)', 'Other'
             ],
             'is_admin_or_manager' => $isAdminOrManager,
+            'accounts'            => $accounts,
         ]);
     }
 
     public function store(Request $request)
     {
         $request->validate([
-            'amount'      => 'required|numeric|min:0.01',
-            'category'    => 'required|string',
-            'description' => 'nullable|string|max:500',
+            'amount'            => 'required|numeric|min:0.01',
+            'category'          => 'required|string',
+            'description'       => 'nullable|string|max:500',
+            'source_account_id' => 'nullable|string',
         ]);
 
         $user = Auth::user();
@@ -139,7 +126,7 @@ class ExpenseController extends Controller
             return back()->withErrors(['drawer' => 'You must have an open shift to log an expense.']);
         }
 
-        if ($activeDrawer) {
+        if ($activeDrawer && $request->category !== 'Cash In') {
             $availableCash = $activeDrawer->calculateExpectedCash();
             if ($request->amount > $availableCash) {
                 return back()->withErrors([
@@ -148,29 +135,55 @@ class ExpenseController extends Controller
             }
         }
 
+        $sourceAccount = null;
+        $cashAccount = PaymentAccount::getForMethod('Cash');
+        if ($request->category === 'Cash In' && $request->filled('source_account_id') && is_numeric($request->source_account_id)) {
+            $sourceAccount = PaymentAccount::find($request->source_account_id);
+        }
+
+        // Build description with source account reference if selected
+        $finalDescription = $request->description;
+        if ($request->category === 'Cash In' && $sourceAccount && (int)$sourceAccount->id !== (int)$cashAccount?->id) {
+            $prefix = "From {$sourceAccount->name}";
+            $finalDescription = $request->description ? "{$prefix} - {$request->description}" : $prefix;
+        }
+
         $expense = Expense::create([
             'cash_drawer_id' => $activeDrawer?->id,
             'user_id'        => $user->id,
             'recorded_by'    => $user->id,
             'amount'         => $request->amount,
             'category'       => $request->category,
-            'description'    => $request->description,
+            'description'    => $finalDescription,
             'expense_date'   => Carbon::today(),
         ]);
 
         // Sync with Treasury Service
         if ($request->category === 'Cash In') {
-            \App\Services\TreasuryService::recordInflow(
-                'Cash',
-                floatval($request->amount),
-                'Cash In Float',
-                $expense,
-                $request->description ?: 'Drawer float addition',
-                null,
-                $user->id
-            );
+            if ($sourceAccount && (int)$sourceAccount->id !== (int)$cashAccount?->id) {
+                // Inter-account transfer: Source Account (e.g. Airtel/MTN/Bank/Safe) -> Main Cash Register
+                $notes = "Shift #" . ($activeDrawer ? $activeDrawer->id : 'N/A') . " Float Addition" . ($request->description ? " ({$request->description})" : '');
+                TreasuryService::transfer(
+                    (int) $sourceAccount->id,
+                    (int) $cashAccount->id,
+                    floatval($request->amount),
+                    $notes,
+                    $user->id
+                );
+            } else {
+                // External cash injection / direct inflow into cash
+                TreasuryService::recordInflow(
+                    'Cash',
+                    floatval($request->amount),
+                    'Cash In Float',
+                    $expense,
+                    $finalDescription ?: 'Drawer float addition',
+                    null,
+                    $user->id
+                );
+            }
         } else {
-            \App\Services\TreasuryService::recordOutflow(
+            TreasuryService::recordOutflow(
                 'Cash',
                 floatval($request->amount),
                 'Expense',
@@ -181,7 +194,7 @@ class ExpenseController extends Controller
             );
         }
 
-        return back()->with('success', 'Expense logged successfully.');
+        return back()->with('success', $request->category === 'Cash In' ? 'Cash In float added successfully.' : 'Expense logged successfully.');
     }
 
     public function update(Request $request, Expense $expense)

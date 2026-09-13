@@ -14,19 +14,25 @@ import Button from '@/Components/SaaS/Button';
 import Modal from '@/Components/Modal';
 import toast from 'react-hot-toast';
 
-export default function Index({ auth, activeDrawer }) {
+export default function Index({ auth, activeDrawer, accounts = [] }) {
     const [showConfirmClose, setShowConfirmClose] = useState(false);
+
+    // Identify cash register account vs other funding accounts (MTN, Airtel, Bank, Safe)
+    const cashAccount = accounts.find(a => a.type === 'cash') || accounts[0];
+    const nonCashAccounts = accounts.filter(a => a.id !== cashAccount?.id);
 
     // Form for opening a shift
     const openForm = useForm({
-        starting_cash: ''
+        starting_cash: '',
+        source_account_id: 'existing'
     });
 
     // Form for logging expenses
     const expenseForm = useForm({
         amount: '',
         category: 'Shop Supplies',
-        description: ''
+        description: '',
+        source_account_id: ''
     });
 
     // Form for closing shift
@@ -49,10 +55,10 @@ export default function Index({ auth, activeDrawer }) {
         e.preventDefault();
         expenseForm.post('/expenses', {
             onSuccess: () => {
-                toast.success('Expense logged successfully!');
-                expenseForm.reset('amount', 'description');
+                toast.success(expenseForm.data.category === 'Cash In' ? 'Cash In float added successfully!' : 'Expense logged successfully!');
+                expenseForm.reset('amount', 'description', 'source_account_id');
             },
-            onError: (err) => toast.error(err.amount || 'Failed to log expense.')
+            onError: (err) => toast.error(err.amount || err.source_account_id || 'Failed to log transaction.')
         });
     };
 
@@ -146,6 +152,39 @@ export default function Index({ auth, activeDrawer }) {
                                     </div>
                                     {openForm.errors.starting_cash && <p className="text-xs text-rose-500 mt-1">{openForm.errors.starting_cash}</p>}
                                 </div>
+
+                                {Number(openForm.data.starting_cash) > 0 && (
+                                    <div className="space-y-1.5 p-3 rounded-xl bg-slate-50 border border-slate-200">
+                                        <label className="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center justify-between">
+                                            <span>Float Source</span>
+                                            <span className="text-[10px] text-slate-400 font-semibold lowercase">where is cash drawn from?</span>
+                                        </label>
+                                        <select
+                                            className="w-full bg-white border border-slate-300 focus:border-rose-500 focus:ring-rose-500 rounded-xl px-3 py-2 text-xs font-semibold text-slate-800 shadow-sm"
+                                            value={openForm.data.source_account_id}
+                                            onChange={e => openForm.setData('source_account_id', e.target.value)}
+                                        >
+                                            <option value="existing">Till Cash (Already in Register - No Transfer)</option>
+                                            <option value="external">External / Owner Cash (Direct Injection)</option>
+                                            {nonCashAccounts.length > 0 && (
+                                                <optgroup label="Transfer From Payment Accounts">
+                                                    {nonCashAccounts.map(acc => (
+                                                        <option key={acc.id} value={acc.id}>
+                                                            {acc.name} (Balance: UGX {Number(acc.current_balance).toLocaleString()})
+                                                        </option>
+                                                    ))}
+                                                </optgroup>
+                                            )}
+                                        </select>
+                                        <p className="text-[11px] text-slate-500">
+                                            {openForm.data.source_account_id === 'existing'
+                                                ? 'Counted from cash already in register. Account balances remain unchanged.'
+                                                : openForm.data.source_account_id === 'external'
+                                                ? 'Records direct cash injection into Main Cash Register.'
+                                                : `Will transfer UGX ${Number(openForm.data.starting_cash || 0).toLocaleString()} from ${accounts.find(a => String(a.id) === String(openForm.data.source_account_id))?.name || 'source'} to Main Cash Register.`}
+                                        </p>
+                                    </div>
+                                )}
 
                                 <button
                                     type="submit"
@@ -479,7 +518,16 @@ export default function Index({ auth, activeDrawer }) {
                                             <select 
                                                 className="w-full bg-white border border-slate-300 focus:border-rose-500 focus:ring-rose-500 rounded-xl px-3.5 py-2.5 text-sm font-semibold shadow-sm"
                                                 value={expenseForm.data.category}
-                                                onChange={e => expenseForm.setData('category', e.target.value)}
+                                                onChange={e => {
+                                                    const cat = e.target.value;
+                                                    expenseForm.setData(data => ({
+                                                        ...data,
+                                                        category: cat,
+                                                        source_account_id: cat === 'Cash In' && !data.source_account_id 
+                                                            ? (nonCashAccounts[0]?.id ? String(nonCashAccounts[0].id) : 'external') 
+                                                            : data.source_account_id
+                                                    }));
+                                                }}
                                             >
                                                 <optgroup label="Additions">
                                                     <option value="Cash In">Cash In (Float Addition)</option>
@@ -493,6 +541,33 @@ export default function Index({ auth, activeDrawer }) {
                                                 </optgroup>
                                             </select>
                                         </div>
+
+                                        {/* Float Source Selector - for Cash In */}
+                                        {expenseForm.data.category === 'Cash In' && (
+                                            <div className="space-y-1.5 p-3.5 rounded-xl bg-emerald-50/80 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800">
+                                                <label className="text-xs font-bold text-emerald-800 dark:text-emerald-300 uppercase tracking-wider flex items-center justify-between">
+                                                    <span>Float Source (Where is money from?) *</span>
+                                                </label>
+                                                <select
+                                                    className="w-full bg-white dark:bg-slate-900 border border-emerald-300 dark:border-emerald-700 focus:border-emerald-500 focus:ring-emerald-500 rounded-xl px-3 py-2 text-xs font-bold text-slate-900 dark:text-white shadow-sm"
+                                                    value={expenseForm.data.source_account_id}
+                                                    onChange={e => expenseForm.setData('source_account_id', e.target.value)}
+                                                    required
+                                                >
+                                                    {nonCashAccounts.map(acc => (
+                                                        <option key={acc.id} value={acc.id}>
+                                                            {acc.name} (Balance: UGX {Number(acc.current_balance).toLocaleString()})
+                                                        </option>
+                                                    ))}
+                                                    <option value="external">External / Owner Cash (Direct Injection)</option>
+                                                </select>
+                                                <p className="text-[11px] text-emerald-700 dark:text-emerald-400 font-medium">
+                                                    {expenseForm.data.source_account_id === 'external'
+                                                        ? 'Direct addition to Cash without deducting any system account.'
+                                                        : `Transfers UGX ${Number(expenseForm.data.amount || 0).toLocaleString()} from ${accounts.find(a => String(a.id) === String(expenseForm.data.source_account_id))?.name || 'account'} to Main Cash Register.`}
+                                                </p>
+                                            </div>
+                                        )}
 
                                         <div className="space-y-1.5">
                                             <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">Amount (UGX) *</label>
