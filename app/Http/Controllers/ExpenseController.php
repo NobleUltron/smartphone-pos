@@ -136,14 +136,21 @@ class ExpenseController extends Controller
         }
 
         $sourceAccount = null;
-        $cashAccount = PaymentAccount::getForMethod('Cash');
+        $tillAccount = TreasuryService::getTillAccount();
         if ($request->category === 'Cash In' && $request->filled('source_account_id') && is_numeric($request->source_account_id)) {
             $sourceAccount = PaymentAccount::find($request->source_account_id);
+            if ($sourceAccount && (int)$sourceAccount->id !== (int)$tillAccount?->id) {
+                if ($sourceAccount->current_balance < floatval($request->amount)) {
+                    return back()->withErrors([
+                        'source_account_id' => "Insufficient balance in {$sourceAccount->name}! Available balance is UGX " . number_format($sourceAccount->current_balance) . "."
+                    ]);
+                }
+            }
         }
 
         // Build description with source account reference if selected
         $finalDescription = $request->description;
-        if ($request->category === 'Cash In' && $sourceAccount && (int)$sourceAccount->id !== (int)$cashAccount?->id) {
+        if ($request->category === 'Cash In' && $sourceAccount && (int)$sourceAccount->id !== (int)$tillAccount?->id) {
             $prefix = "From {$sourceAccount->name}";
             $finalDescription = $request->description ? "{$prefix} - {$request->description}" : $prefix;
         }
@@ -160,12 +167,12 @@ class ExpenseController extends Controller
 
         // Sync with Treasury Service
         if ($request->category === 'Cash In') {
-            if ($sourceAccount && (int)$sourceAccount->id !== (int)$cashAccount?->id) {
-                // Inter-account transfer: Source Account (e.g. Airtel/MTN/Bank/Safe) -> Main Cash Register
+            if ($sourceAccount && (int)$sourceAccount->id !== (int)$tillAccount?->id) {
+                // Inter-account transfer: Source Account (e.g. Shop Safe / Bank / MoMo) -> Main Cash Register Till
                 $notes = "Shift #" . ($activeDrawer ? $activeDrawer->id : 'N/A') . " Float Addition" . ($request->description ? " ({$request->description})" : '');
                 TreasuryService::transfer(
                     (int) $sourceAccount->id,
-                    (int) $cashAccount->id,
+                    (int) $tillAccount->id,
                     floatval($request->amount),
                     $notes,
                     $user->id

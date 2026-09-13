@@ -17,9 +17,10 @@ import toast from 'react-hot-toast';
 export default function Index({ auth, activeDrawer, accounts = [] }) {
     const [showConfirmClose, setShowConfirmClose] = useState(false);
 
-    // Identify cash register account vs other funding accounts (MTN, Airtel, Bank, Safe)
-    const cashAccount = accounts.find(a => a.type === 'cash') || accounts[0];
-    const nonCashAccounts = accounts.filter(a => a.id !== cashAccount?.id);
+    // Identify counter till (Main Cash Register) vs funding accounts (Shop Safe, Bank, MTN, Airtel)
+    const tillAccount = accounts.find(a => a.name === 'Main Cash Register') 
+                     || accounts.find(a => (a.provider === 'Cash' || a.type === 'cash') && !a.name.toLowerCase().includes('safe'));
+    const fundingAccounts = accounts.filter(a => a.id !== tillAccount?.id && Number(a.current_balance) > 0);
 
     // Form for opening a shift
     const openForm = useForm({
@@ -50,7 +51,7 @@ export default function Index({ auth, activeDrawer, accounts = [] }) {
                 toast.success('Shift opened successfully!');
                 openForm.reset();
             },
-            onError: (err) => toast.error(err.starting_cash || 'Failed to open shift.')
+            onError: (err) => toast.error(err.starting_cash || err.source_account_id || 'Failed to open shift.')
         });
     };
 
@@ -169,9 +170,9 @@ export default function Index({ auth, activeDrawer, accounts = [] }) {
                                         >
                                             <option value="existing">Till Cash (Already in Register - No Transfer)</option>
                                             <option value="external">External / Owner Cash (Direct Injection)</option>
-                                            {nonCashAccounts.length > 0 && (
+                                            {fundingAccounts.length > 0 && (
                                                 <optgroup label="Transfer From Payment Accounts">
-                                                    {nonCashAccounts.map(acc => (
+                                                    {fundingAccounts.map(acc => (
                                                         <option key={acc.id} value={acc.id}>
                                                             {acc.name} (Balance: UGX {Number(acc.current_balance).toLocaleString()})
                                                         </option>
@@ -179,6 +180,9 @@ export default function Index({ auth, activeDrawer, accounts = [] }) {
                                                 </optgroup>
                                             )}
                                         </select>
+                                        {openForm.errors.source_account_id && (
+                                            <p className="text-xs text-rose-600 font-bold mt-1">{openForm.errors.source_account_id}</p>
+                                        )}
                                         <p className="text-[11px] text-slate-500">
                                             {openForm.data.source_account_id === 'existing'
                                                 ? 'Counted from cash already in register. Account balances remain unchanged.'
@@ -527,7 +531,7 @@ export default function Index({ auth, activeDrawer, accounts = [] }) {
                                                         ...data,
                                                         category: cat,
                                                         source_account_id: cat === 'Cash In' && !data.source_account_id 
-                                                            ? (nonCashAccounts[0]?.id ? String(nonCashAccounts[0].id) : 'external') 
+                                                            ? (fundingAccounts[0]?.id ? String(fundingAccounts[0].id) : 'external') 
                                                             : data.source_account_id
                                                     }));
                                                 }}
@@ -557,13 +561,16 @@ export default function Index({ auth, activeDrawer, accounts = [] }) {
                                                     onChange={e => expenseForm.setData('source_account_id', e.target.value)}
                                                     required
                                                 >
-                                                    {nonCashAccounts.map(acc => (
+                                                    {fundingAccounts.map(acc => (
                                                         <option key={acc.id} value={acc.id}>
                                                             {acc.name} (Balance: UGX {Number(acc.current_balance).toLocaleString()})
                                                         </option>
                                                     ))}
                                                     <option value="external">External / Owner Cash (Direct Injection)</option>
                                                 </select>
+                                                {expenseForm.errors.source_account_id && (
+                                                    <p className="text-xs text-rose-600 font-bold mt-1">{expenseForm.errors.source_account_id}</p>
+                                                )}
                                                 <p className="text-[11px] text-emerald-700 dark:text-emerald-400 font-medium">
                                                     {expenseForm.data.source_account_id === 'external'
                                                         ? 'Direct addition to Cash without deducting any system account.'

@@ -84,6 +84,23 @@ class CashDrawerController extends Controller
             return back()->with('error', 'You already have an open shift.');
         }
 
+        // Handle opening float transfer/injection if starting_cash > 0 and source specified
+        $startingCash = floatval($request->starting_cash);
+        $sourceId = $request->source_account_id;
+        $sourceAccount = null;
+        $tillAccount = TreasuryService::getTillAccount();
+
+        if ($startingCash > 0 && $sourceId && $sourceId !== 'existing' && $sourceId !== 'external') {
+            if (is_numeric($sourceId) && (int)$sourceId !== (int)$tillAccount?->id) {
+                $sourceAccount = PaymentAccount::find($sourceId);
+                if ($sourceAccount && $sourceAccount->current_balance < $startingCash) {
+                    return back()->withErrors([
+                        'source_account_id' => "Insufficient balance in {$sourceAccount->name}! Available balance is UGX " . number_format($sourceAccount->current_balance) . "."
+                    ]);
+                }
+            }
+        }
+
         $drawer = CashDrawer::create([
             'user_id'       => Auth::id(),
             'starting_cash' => $request->starting_cash,
@@ -91,13 +108,7 @@ class CashDrawerController extends Controller
             'opened_at'     => Carbon::now()
         ]);
 
-        // Handle opening float transfer/injection if starting_cash > 0 and source specified
-        $startingCash = floatval($request->starting_cash);
-        $sourceId = $request->source_account_id;
-
         if ($startingCash > 0 && $sourceId && $sourceId !== 'existing') {
-            $cashAccount = PaymentAccount::getForMethod('Cash');
-
             if ($sourceId === 'external') {
                 TreasuryService::recordInflow(
                     'Cash',
@@ -108,17 +119,14 @@ class CashDrawerController extends Controller
                     null,
                     Auth::id()
                 );
-            } elseif (is_numeric($sourceId) && (int)$sourceId !== (int)$cashAccount?->id) {
-                $sourceAccount = PaymentAccount::find($sourceId);
-                if ($sourceAccount) {
-                    TreasuryService::transfer(
-                        (int) $sourceAccount->id,
-                        (int) $cashAccount->id,
-                        $startingCash,
-                        "Opening shift float for Shift #{$drawer->id} from {$sourceAccount->name}",
-                        Auth::id()
-                    );
-                }
+            } elseif ($sourceAccount && (int)$sourceAccount->id !== (int)$tillAccount?->id) {
+                TreasuryService::transfer(
+                    (int) $sourceAccount->id,
+                    (int) $tillAccount->id,
+                    $startingCash,
+                    "Opening shift float for Shift #{$drawer->id} from {$sourceAccount->name}",
+                    Auth::id()
+                );
             }
         }
 

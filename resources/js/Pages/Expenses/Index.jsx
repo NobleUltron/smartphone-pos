@@ -30,9 +30,10 @@ export default function Index({ auth, expenses, summary, filters, cashiers, cate
     const [showDeleteModal, setShowDeleteModal] = useState(false);
     const [selected, setSelected]             = useState(null);
 
-    // Identify cash register account vs other funding accounts (MTN, Airtel, Bank, Safe)
-    const cashAccount = accounts.find(a => a.type === 'cash') || accounts[0];
-    const nonCashAccounts = accounts.filter(a => a.id !== cashAccount?.id);
+    // Identify counter till (Main Cash Register) vs funding accounts (Shop Safe, Bank, MTN, Airtel)
+    const tillAccount = accounts.find(a => a.name === 'Main Cash Register') 
+                     || accounts.find(a => (a.provider === 'Cash' || a.type === 'cash') && !a.name.toLowerCase().includes('safe'));
+    const fundingAccounts = accounts.filter(a => a.id !== tillAccount?.id && Number(a.current_balance) > 0);
 
     // Search / filter state
     const [search, setSearch]       = useState(filters?.search || '');
@@ -425,7 +426,7 @@ export default function Index({ auth, expenses, summary, filters, cashiers, cate
                                         ...data,
                                         category: cat,
                                         source_account_id: cat === 'Cash In' && !data.source_account_id 
-                                            ? (nonCashAccounts[0]?.id ? String(nonCashAccounts[0].id) : 'external') 
+                                            ? (fundingAccounts[0]?.id ? String(fundingAccounts[0].id) : 'external') 
                                             : data.source_account_id
                                     }));
                                 }}
@@ -455,13 +456,16 @@ export default function Index({ auth, expenses, summary, filters, cashiers, cate
                                     onChange={e => addForm.setData('source_account_id', e.target.value)}
                                     required
                                 >
-                                    {nonCashAccounts.map(acc => (
+                                    {fundingAccounts.map(acc => (
                                         <option key={acc.id} value={acc.id}>
                                             {acc.name} (Balance: UGX {Number(acc.current_balance).toLocaleString()})
                                         </option>
                                     ))}
                                     <option value="external">External / Owner Cash (Direct Injection)</option>
                                 </select>
+                                {addForm.errors.source_account_id && (
+                                    <p className="text-xs text-rose-600 font-bold mt-1">{addForm.errors.source_account_id}</p>
+                                )}
                                 <p className="text-[11px] text-emerald-700 font-medium">
                                     {addForm.data.source_account_id === 'external'
                                         ? 'Direct addition to Cash without deducting any account.'
