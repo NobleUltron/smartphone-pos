@@ -27,6 +27,7 @@ import {
     Clock,
     DollarSign,
     RefreshCw,
+    ShieldCheck,
     X
 } from 'lucide-react';
 import dayjs from 'dayjs';
@@ -126,6 +127,7 @@ export default function AccountsIndex({ accounts, metrics, transactions, filters
     };
 
     const getAccountIcon = (type, provider) => {
+        if ((provider || '').toLowerCase().includes('safe')) return <ShieldCheck className="text-emerald-500" size={24} />;
         if (type === 'cash') return <Wallet className="text-emerald-500" size={24} />;
         if (type === 'mobile_money') {
             if ((provider || '').toLowerCase().includes('mtn')) return <Smartphone className="text-amber-500" size={24} />;
@@ -136,6 +138,7 @@ export default function AccountsIndex({ accounts, metrics, transactions, filters
     };
 
     const getAccountBadgeColor = (type, provider) => {
+        if ((provider || '').toLowerCase().includes('safe')) return 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 border-emerald-300 dark:border-emerald-700 font-bold';
         if (type === 'cash') return 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800';
         if (type === 'mobile_money') {
             if ((provider || '').toLowerCase().includes('mtn')) return 'bg-amber-50 text-amber-700 dark:bg-amber-950/50 dark:text-amber-300 border-amber-200 dark:border-amber-800';

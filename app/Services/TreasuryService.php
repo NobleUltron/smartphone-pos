@@ -58,7 +58,45 @@ class TreasuryService
                 'is_active' => true,
                 'description' => 'Commercial bank account for wire transfers & large payouts'
             ]);
+
+            PaymentAccount::create([
+                'name' => 'Shop Safe (Master Cash)',
+                'type' => 'cash',
+                'provider' => 'Safe',
+                'current_balance' => 0,
+                'opening_balance' => 0,
+                'is_active' => true,
+                'description' => 'Secure store safe for daily cash banking drops and cashier floats'
+            ]);
         }
+    }
+
+    public static function getSafeAccount(): PaymentAccount
+    {
+        return PaymentAccount::where('provider', 'Safe')
+            ->orWhere('name', 'like', '%Safe%')
+            ->first() ?? PaymentAccount::firstOrCreate(['name' => 'Shop Safe (Master Cash)'], [
+                'type' => 'cash',
+                'provider' => 'Safe',
+                'current_balance' => 0,
+                'opening_balance' => 0,
+                'is_active' => true,
+                'description' => 'Secure store safe for daily cash banking drops and cashier floats'
+            ]);
+    }
+
+    public static function getTillAccount(): PaymentAccount
+    {
+        return PaymentAccount::where('name', 'Main Cash Register')
+            ->orWhere('provider', 'Cash')
+            ->first() ?? PaymentAccount::firstOrCreate(['name' => 'Main Cash Register'], [
+                'type' => 'cash',
+                'provider' => 'Cash',
+                'current_balance' => 0,
+                'opening_balance' => 0,
+                'is_active' => true,
+                'description' => 'Physical cash in shop drawer & register till'
+            ]);
     }
 
     /**

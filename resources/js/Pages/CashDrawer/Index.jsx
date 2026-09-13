@@ -37,7 +37,10 @@ export default function Index({ auth, activeDrawer, accounts = [] }) {
 
     // Form for closing shift
     const closeForm = useForm({
-        actual_cash: ''
+        actual_cash: '',
+        deposit_to_safe: true,
+        deposit_amount: '',
+        notes: ''
     });
 
     const handleOpenShift = (e) => {
@@ -653,6 +656,57 @@ export default function Index({ auth, activeDrawer, accounts = [] }) {
                                             </div>
                                         )}
 
+                                        {/* Safe Drop / Cash Banking on Close */}
+                                        {closeForm.data.actual_cash !== '' && Number(closeForm.data.actual_cash) > 0 && (
+                                            <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700 space-y-2.5">
+                                                <div className="flex items-center justify-between">
+                                                    <label className="text-xs font-bold text-slate-800 dark:text-slate-200 flex items-center gap-2 cursor-pointer select-none">
+                                                        <input
+                                                            type="checkbox"
+                                                            className="w-4 h-4 text-emerald-600 rounded border-slate-300 focus:ring-emerald-500"
+                                                            checked={closeForm.data.deposit_to_safe}
+                                                            onChange={e => closeForm.setData('deposit_to_safe', e.target.checked)}
+                                                        />
+                                                        <span>Deposit Counted Cash into Shop Safe</span>
+                                                    </label>
+                                                    <span className="text-[10px] font-bold text-emerald-700 dark:text-emerald-300 bg-emerald-100/70 dark:bg-emerald-950 px-2 py-0.5 rounded border border-emerald-200 dark:border-emerald-800">
+                                                        Safe Drop
+                                                    </span>
+                                                </div>
+
+                                                {closeForm.data.deposit_to_safe && (
+                                                    <div className="space-y-1.5 pt-1.5 border-t border-slate-200/80 dark:border-slate-700">
+                                                        <div className="flex items-center justify-between text-xs">
+                                                            <span className="text-slate-500 dark:text-slate-400 font-medium">Safe Banking Amount:</span>
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => closeForm.setData('deposit_amount', closeForm.data.actual_cash)}
+                                                                className="text-[11px] font-bold text-indigo-600 dark:text-indigo-400 hover:underline"
+                                                            >
+                                                                Deposit Full Count
+                                                            </button>
+                                                        </div>
+                                                        <div className="relative">
+                                                            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400">UGX</span>
+                                                            <input
+                                                                type="number"
+                                                                min="0"
+                                                                max={closeForm.data.actual_cash}
+                                                                step="any"
+                                                                placeholder={closeForm.data.actual_cash}
+                                                                className="w-full pl-11 pr-3 py-2 text-xs font-bold text-slate-900 dark:text-white bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg focus:ring-emerald-500 focus:border-emerald-500"
+                                                                value={closeForm.data.deposit_amount}
+                                                                onChange={e => closeForm.setData('deposit_amount', e.target.value)}
+                                                            />
+                                                        </div>
+                                                        <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                                                            Float left in drawer for next shift: <strong className="text-slate-700 dark:text-slate-200">UGX {Number(closeForm.data.actual_cash - (closeForm.data.deposit_amount !== '' ? closeForm.data.deposit_amount : closeForm.data.actual_cash) || 0).toLocaleString()}</strong>
+                                                        </p>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        )}
+
                                         <div className="space-y-1.5">
                                             <label className="text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider">Closing Notes (Optional)</label>
                                             <textarea 
@@ -693,6 +747,22 @@ export default function Index({ auth, activeDrawer, accounts = [] }) {
                             Are you sure you want to close this shift? Make sure you have correctly counted your physical cash. This action cannot be undone.
                         </p>
                     </div>
+
+                    {/* Safe drop summary in confirmation modal */}
+                    {closeForm.data.deposit_to_safe && Number(closeForm.data.deposit_amount !== '' ? closeForm.data.deposit_amount : closeForm.data.actual_cash) > 0 && (
+                        <div className="p-3 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 rounded-xl text-left text-xs space-y-1 text-emerald-900 dark:text-emerald-200">
+                            <div className="font-bold flex items-center justify-between">
+                                <span>Shop Safe Banking:</span>
+                                <span className="font-black text-sm text-emerald-700 dark:text-emerald-300">
+                                    UGX {Number(closeForm.data.deposit_amount !== '' ? closeForm.data.deposit_amount : closeForm.data.actual_cash).toLocaleString()}
+                                </span>
+                            </div>
+                            <p className="text-[11px] text-emerald-600 dark:text-emerald-400">
+                                Will be transferred from Cash Register Till into Shop Safe.
+                            </p>
+                        </div>
+                    )}
+
                     <div className="flex gap-3 pt-4 border-t border-slate-100">
                         <button 
                             type="button"

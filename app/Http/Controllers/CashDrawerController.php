@@ -128,7 +128,10 @@ class CashDrawerController extends Controller
     public function close(Request $request)
     {
         $request->validate([
-            'actual_cash' => 'required|numeric|min:0'
+            'actual_cash'      => 'required|numeric|min:0',
+            'deposit_to_safe'  => 'nullable|boolean',
+            'deposit_amount'   => 'nullable|numeric|min:0',
+            'notes'            => 'nullable|string|max:500',
         ]);
 
         $activeDrawer = CashDrawer::where('user_id', Auth::id())
@@ -140,11 +143,38 @@ class CashDrawerController extends Controller
 
         $activeDrawer->update([
             'expected_cash' => $expectedCash,
-            'actual_cash' => $request->actual_cash,
-            'difference' => $difference,
-            'status' => 'closed',
-            'closed_at' => Carbon::now()
+            'actual_cash'   => $request->actual_cash,
+            'difference'    => $difference,
+            'status'        => 'closed',
+            'closed_at'     => Carbon::now()
         ]);
+
+        // Transfer counted cash to Shop Safe if deposit_to_safe is selected
+        $shouldDeposit = $request->has('deposit_to_safe')
+            ? filter_var($request->deposit_to_safe, FILTER_VALIDATE_BOOLEAN)
+            : true;
+
+        $depositAmount = $request->filled('deposit_amount')
+            ? floatval($request->deposit_amount)
+            : floatval($request->actual_cash);
+
+        if ($shouldDeposit && $depositAmount > 0) {
+            $safeAccount = TreasuryService::getSafeAccount();
+            $tillAccount = TreasuryService::getTillAccount();
+
+            if ($safeAccount && $tillAccount && (int)$safeAccount->id !== (int)$tillAccount->id) {
+                $notes = "Shift #{$activeDrawer->id} End-of-Shift Cash Drop to Safe" . ($request->notes ? " - {$request->notes}" : '');
+                TreasuryService::transfer(
+                    (int) $tillAccount->id,
+                    (int) $safeAccount->id,
+                    $depositAmount,
+                    $notes,
+                    Auth::id()
+                );
+
+                return back()->with('success', "Shift closed successfully. UGX " . number_format($depositAmount) . " deposited into {$safeAccount->name}.");
+            }
+        }
 
         return back()->with('success', 'Shift closed successfully.');
     }

@@ -54,7 +54,9 @@ class PaymentAccount extends Model
         $method = trim($method);
 
         if (stripos($method, 'Cash') !== false) {
-            return self::where('type', 'cash')->first() 
+            return self::where('name', 'Main Cash Register')->first()
+                ?? self::where('provider', 'Cash')->first()
+                ?? self::where('type', 'cash')->first() 
                 ?? self::firstOrCreate(['name' => 'Main Cash Register'], [
                     'type' => 'cash',
                     'provider' => 'Cash',
