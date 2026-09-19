@@ -1,27 +1,64 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useRef } from 'react';
 import { Head, Link } from '@inertiajs/react';
 import Barcode from 'react-barcode';
 
+// 1 CSS pixel = 0.2646 mm at 96 DPI
+const PX_TO_MM = 0.2646;
+
+/**
+ * Measures the receipt container height, injects a correctly-sized @page rule,
+ * then triggers the browser print dialog. This prevents the blank-page / tiny-
+ * receipt issue caused by a fixed 297 mm page height that is far taller than
+ * the actual receipt content.
+ */
+function triggerThermalPrint(containerRef, saleId) {
+    const el = containerRef?.current;
+    const heightPx = el ? el.scrollHeight : 500;
+    const heightMm = Math.ceil(heightPx * PX_TO_MM) + 12; // +12 mm bottom feed margin
+
+    console.info(
+        `[SmartPOS Thermal Print] Sale #${saleId} | ` +
+        `Content: ${heightPx}px → ${heightMm}mm | Page: 80mm × ${heightMm}mm`
+    );
+
+    // Inject (or update) a dynamic @page rule so the page height exactly matches content
+    const styleId = 'smartpos-thermal-page-size';
+    let styleEl = document.getElementById(styleId);
+    if (!styleEl) {
+        styleEl = document.createElement('style');
+        styleEl.id = styleId;
+        document.head.appendChild(styleEl);
+    }
+    styleEl.textContent = `@page { size: 80mm ${heightMm}mm; margin: 0; }`;
+
+    window.print();
+}
+
 export default function Receipt({ sale, settings }) {
     const isPreview = typeof window !== 'undefined' ? new URLSearchParams(window.location.search).has('preview') : false;
+    const receiptRef = useRef(null);
 
     useEffect(() => {
         // Automatically trigger print dialog after rendering if not in preview mode
-        if (!isPreview) {
-            window.print();
+        if (!isPreview && sale?.id) {
+            // Small delay to ensure DOM (including barcode SVG) is fully painted
+            const timer = setTimeout(() => {
+                triggerThermalPrint(receiptRef, sale.id);
+            }, 350);
+            return () => clearTimeout(timer);
         }
-    }, [isPreview]);
+    }, [isPreview, sale?.id]);
 
     return (
-        <div className={`flex flex-col items-center justify-start font-sans print:bg-white print:py-0 print:block ${isPreview ? 'bg-white py-4 min-h-full' : 'bg-slate-100 dark:bg-slate-950 min-h-screen py-8'}`}>
+        <div className={`flex flex-col items-center justify-start font-sans print:bg-white print:py-0 print:m-0 print:block print:min-h-0 ${isPreview ? 'bg-white py-4 min-h-full' : 'bg-slate-100 dark:bg-slate-950 min-h-screen py-8'}`}>
             <Head title={`Receipt - Sale #${sale.id}`} />
             
             {/* Action Buttons for Screen (Hidden when Printing or in Preview) */}
             {!isPreview && (
-                <div className="w-full max-w-[380px] flex flex-col gap-2.5 mb-6 print:hidden">
+                <div className="w-full max-w-[380px] flex flex-col gap-2.5 mb-6 print-action-bar print:hidden">
                     <div className="flex gap-2">
                         <button 
-                            onClick={() => window.print()} 
+                            onClick={() => triggerThermalPrint(receiptRef, sale.id)} 
                             className="flex-1 font-bold py-2.5 px-4 rounded-xl shadow-sm border transition-colors flex items-center justify-center gap-2 cursor-pointer bg-white text-slate-900 border-slate-300 hover:bg-slate-50"
                         >
                             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 6 2 18 2 18 9"></polyline><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path><rect x="6" y="14" width="12" height="8"></rect></svg>
@@ -38,9 +75,10 @@ export default function Receipt({ sale, settings }) {
                 </div>
             )}
 
-            {/* Receipt Container */}
+            {/* Receipt Container — ref used to measure actual height for dynamic @page sizing */}
             <div 
-                className="receipt-container bg-white w-[380px] mx-auto shadow-2xl rounded-2xl overflow-hidden text-slate-900 print:shadow-none print:rounded-none"
+                ref={receiptRef}
+                className="receipt-container bg-white w-[380px] max-w-full mx-auto shadow-2xl rounded-2xl overflow-hidden text-slate-900 print:w-[72mm] print:max-w-[72mm] print:p-0 print:shadow-none print:rounded-none print:m-0 print:border-none"
                 data-receipt-light-mode="true"
                 style={{ backgroundColor: '#FFFFFF', color: '#0F172A' }}
             >
@@ -264,7 +302,7 @@ export default function Receipt({ sale, settings }) {
 
                     {/* Barcode */}
                     <div className="mt-4 flex justify-center">
-                        <Barcode value={`SALE-${sale.id}`} width={1.5} height={30} fontSize={10} margin={0} displayValue={true} background="transparent" lineColor="#000" />
+                        <Barcode value={`SALE-${sale.id}`} width={1.3} height={28} fontSize={10} margin={0} displayValue={true} background="transparent" lineColor="#000" />
                     </div>
                 </div>
             </div>
@@ -272,36 +310,52 @@ export default function Receipt({ sale, settings }) {
             <style>
                 {`
                     @media print {
-                        @page {
-                            margin: 3mm 0mm;
-                            size: 80mm auto;
-                        }
-                        body {
-                            background: white !important;
+                        /* NOTE: @page { size } is injected dynamically at print time
+                           by triggerThermalPrint() so the height matches exact content. */
+                        html, body {
+                            width: 80mm !important;
+                            max-width: 80mm !important;
+                            height: auto !important;
+                            min-height: 0 !important;
                             margin: 0 !important;
                             padding: 0 !important;
-                        }
-                        .receipt-container {
-                            width: 80mm !important;
-                            max-width: 100% !important;
-                            padding: 4mm 4mm 8mm 4mm !important;
-                            margin: 0 auto !important;
-                            box-shadow: none !important;
-                            border-radius: 0 !important;
+                            background: #ffffff !important;
+                            color: #000000 !important;
                             -webkit-print-color-adjust: exact !important;
                             print-color-adjust: exact !important;
-                            page-break-after: auto;
+                        }
+                        .receipt-container {
+                            width: 72mm !important;
+                            max-width: 72mm !important;
+                            height: auto !important;
+                            box-sizing: border-box !important;
+                            padding: 2mm 1.5mm 4mm 1.5mm !important;
+                            margin: 0 auto !important;
+                            box-shadow: none !important;
+                            border: none !important;
+                            border-radius: 0 !important;
+                            background: #ffffff !important;
+                            color: #000000 !important;
+                            page-break-after: avoid;
+                            page-break-inside: avoid;
+                        }
+                        .receipt-container * {
+                            color: #000000 !important;
+                            border-color: #000000 !important;
+                            box-sizing: border-box !important;
                         }
                         .receipt-container img {
-                            max-width: 130px !important;
-                            max-height: 60px !important;
+                            max-width: 120px !important;
+                            max-height: 50px !important;
                             width: auto !important;
                             height: auto !important;
                             object-fit: contain !important;
-                            margin-left: auto !important;
-                            margin-right: auto !important;
-                            margin-top: 2mm !important;
+                            margin: 1mm auto !important;
                             display: block !important;
+                        }
+                        .print-action-bar,
+                        .print\\:hidden {
+                            display: none !important;
                         }
                     }
                 `}
