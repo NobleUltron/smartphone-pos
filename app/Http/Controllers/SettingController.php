@@ -52,6 +52,9 @@ class SettingController extends Controller
     {
         $this->authorizeAdmin();
 
+        $isWindows = strtoupper(substr(PHP_OS, 0, 3)) === 'WIN';
+        $defaultPrintMode = $isWindows ? 'spooler' : 'browser';
+
         $settings = [
             'shop_name' => Setting::get('shop_name', 'SmartPOS Kampala'),
             'store_logo' => Setting::getLogoUrl(),
@@ -63,7 +66,7 @@ class SettingController extends Controller
             'allow_cashier_discounts' => (bool) Setting::get('allow_cashier_discounts', true),
             'allow_cashier_price_overwrites' => (bool) Setting::get('allow_cashier_price_overwrites', true),
             'allow_cashier_dealer_intake' => (bool) Setting::get('allow_cashier_dealer_intake', true),
-            'print_mode' => Setting::get('print_mode', 'spooler'),
+            'print_mode' => Setting::get('print_mode', $defaultPrintMode),
             'printer_paper_width' => Setting::get('printer_paper_width', '80mm'),
             'printer_network_ip' => Setting::get('printer_network_ip', '192.168.1.150'),
             'printer_network_port' => (int) Setting::get('printer_network_port', 9100),
@@ -78,11 +81,16 @@ class SettingController extends Controller
         return Inertia::render('Settings/StoreSettings', [
             'settings' => $settings,
             'windowsPrinters' => $windowsPrinters,
+            'isWindows' => $isWindows,
+            'serverOs' => PHP_OS,
         ]);
     }
 
     public function getSettings()
     {
+        $isWindows = strtoupper(substr(PHP_OS, 0, 3)) === 'WIN';
+        $defaultPrintMode = $isWindows ? 'spooler' : 'browser';
+
         return response()->json([
             'shop_name' => Setting::get('shop_name', 'SmartPOS Kampala'),
             'store_logo' => Setting::getLogoUrl(),
@@ -94,7 +102,7 @@ class SettingController extends Controller
             'allow_cashier_discounts' => (bool) Setting::get('allow_cashier_discounts', true),
             'allow_cashier_price_overwrites' => (bool) Setting::get('allow_cashier_price_overwrites', true),
             'allow_cashier_dealer_intake' => (bool) Setting::get('allow_cashier_dealer_intake', true),
-            'print_mode' => Setting::get('print_mode', 'spooler'),
+            'print_mode' => Setting::get('print_mode', $defaultPrintMode),
             'printer_paper_width' => Setting::get('printer_paper_width', '80mm'),
             'printer_network_ip' => Setting::get('printer_network_ip', '192.168.1.150'),
             'printer_network_port' => (int) Setting::get('printer_network_port', 9100),
@@ -103,6 +111,8 @@ class SettingController extends Controller
             'printer_cut_paper' => (bool) Setting::get('printer_cut_paper', true),
             'printer_print_logo' => (bool) Setting::get('printer_print_logo', true),
             'windows_printers' => (new \App\Services\ReceiptPrinterService())->getWindowsPrinters(),
+            'is_windows' => $isWindows,
+            'server_os' => PHP_OS,
         ]);
     }
 
@@ -122,7 +132,7 @@ class SettingController extends Controller
             'allow_cashier_discounts' => 'nullable|boolean',
             'allow_cashier_price_overwrites' => 'nullable|boolean',
             'allow_cashier_dealer_intake' => 'nullable|boolean',
-            'print_mode' => 'nullable|string|in:spooler,network,qztray,mock',
+            'print_mode' => 'nullable|string|in:browser,spooler,network,qztray,mock',
             'printer_paper_width' => 'nullable|string|in:80mm,58mm',
             'printer_network_ip' => 'nullable|string|max:100',
             'printer_network_port' => 'nullable|integer|min:1|max:65535',

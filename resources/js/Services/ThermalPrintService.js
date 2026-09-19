@@ -53,6 +53,16 @@ class ThermalPrintService {
 
         console.log('[ThermalPrint] Success:', data.mode, data.message);
 
+        // Browser thermal printing (client-side window.print formatted for 80mm roll)
+        if (data.mode === 'browser') {
+            return {
+                success: true,
+                mode: 'browser',
+                fallback: data.fallback || false,
+                message: data.message || 'Opening browser thermal print dialog...',
+            };
+        }
+
         // Server-side printing modes (spooler, network) — printing already happened
         if (data.mode === 'spooler' || data.mode === 'network') {
             return {
@@ -104,6 +114,15 @@ class ThermalPrintService {
         }
 
         console.log('[ThermalPrint] Test print success:', data.mode, data.message);
+
+        if (data.mode === 'browser') {
+            return {
+                success: true,
+                mode: 'browser',
+                fallback: data.fallback || false,
+                message: data.message || 'Browser thermal test print ready.',
+            };
+        }
 
         if (data.mode === 'spooler' || data.mode === 'network') {
             return {

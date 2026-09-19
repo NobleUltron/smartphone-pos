@@ -18,11 +18,13 @@ class ReceiptPrintController extends Controller
     ) {}
 
     /**
-     * Dispatch print job for a sale: Network Socket, QZ Tray base64, or Dev Mock
+     * Dispatch print job for a sale: Network Socket, QZ Tray base64, Dev Mock, or Browser Print
      */
     public function print(Sale $sale, Request $request)
     {
-        $mode = $request->input('mode', Setting::get('print_mode', config('printing.mode', 'spooler')));
+        $isWindows = strtoupper(substr(PHP_OS, 0, 3)) === 'WIN';
+        $defaultMode = $isWindows ? 'spooler' : 'browser';
+        $mode = $request->input('mode', Setting::get('print_mode', config('printing.mode', $defaultMode)));
         $paperWidth = $request->input('paper_width', Setting::get('printer_paper_width', config('printing.paper_width', '80mm')));
         $printerIp = $request->input('printer_ip', Setting::get('printer_network_ip', config('printing.network.ip', '192.168.1.150')));
         $printerPort = (int) $request->input('printer_port', Setting::get('printer_network_port', config('printing.network.port', 9100)));
@@ -30,6 +32,27 @@ class ReceiptPrintController extends Controller
         $cutPaper = $request->boolean('cut_paper', (bool) Setting::get('printer_cut_paper', config('printing.hardware.cut_paper', true)));
         $printerName = $request->input('qz_printer_name', Setting::get('qz_printer_name', config('printing.qz.printer_name', 'E-PoS printer driver (1)')));
         $printLogo = $request->boolean('print_logo', (bool) Setting::get('printer_print_logo', config('printing.hardware.print_logo', true)));
+
+        // Mode: Browser thermal printing (universal, works on Cloud Render and all devices)
+        if ($mode === 'browser') {
+            return response()->json([
+                'success' => true,
+                'mode' => 'browser',
+                'message' => 'Ready for browser thermal printing.',
+                'sale_id' => $sale->id
+            ]);
+        }
+
+        // Automatic Cloud Fallback: If running on Linux/Render, Windows spooler cannot be reached directly on server
+        if (!$isWindows && ($mode === 'spooler' || $mode === 'qztray')) {
+            return response()->json([
+                'success' => true,
+                'mode' => 'browser',
+                'fallback' => true,
+                'message' => 'Cloud server detected. Opening browser 80mm thermal print dialog.',
+                'sale_id' => $sale->id
+            ]);
+        }
 
         $widthChars = $paperWidth === '58mm' 
             ? ReceiptPrinterService::WIDTH_58MM 
@@ -103,7 +126,9 @@ class ReceiptPrintController extends Controller
      */
     public function testPrint(Request $request)
     {
-        $mode = $request->input('mode', Setting::get('print_mode', config('printing.mode', 'spooler')));
+        $isWindows = strtoupper(substr(PHP_OS, 0, 3)) === 'WIN';
+        $defaultMode = $isWindows ? 'spooler' : 'browser';
+        $mode = $request->input('mode', Setting::get('print_mode', config('printing.mode', $defaultMode)));
         $paperWidth = $request->input('paper_width', Setting::get('printer_paper_width', config('printing.paper_width', '80mm')));
         $printerIp = $request->input('printer_ip', Setting::get('printer_network_ip', config('printing.network.ip', '192.168.1.150')));
         $printerPort = (int) $request->input('printer_port', Setting::get('printer_network_port', config('printing.network.port', 9100)));
@@ -111,6 +136,15 @@ class ReceiptPrintController extends Controller
         $cutPaper = $request->boolean('cut_paper', (bool) Setting::get('printer_cut_paper', config('printing.hardware.cut_paper', true)));
         $printerName = $request->input('qz_printer_name', Setting::get('qz_printer_name', config('printing.qz.printer_name', 'E-PoS printer driver (1)')));
         $printLogo = $request->boolean('print_logo', (bool) Setting::get('printer_print_logo', config('printing.hardware.print_logo', true)));
+
+        if ($mode === 'browser' || (!$isWindows && ($mode === 'spooler' || $mode === 'qztray'))) {
+            return response()->json([
+                'success' => true,
+                'mode' => 'browser',
+                'fallback' => !$isWindows,
+                'message' => 'Browser thermal test print ready.'
+            ]);
+        }
 
         $widthChars = $paperWidth === '58mm' 
             ? ReceiptPrinterService::WIDTH_58MM 
@@ -251,8 +285,13 @@ class ReceiptPrintController extends Controller
      */
     public function getSettings()
     {
+        $isWindows = strtoupper(substr(PHP_OS, 0, 3)) === 'WIN';
+        $defaultMode = $isWindows ? 'spooler' : 'browser';
+
         return response()->json([
-            'print_mode' => Setting::get('print_mode', config('printing.mode', 'spooler')),
+            'is_windows' => $isWindows,
+            'server_os' => PHP_OS,
+            'print_mode' => Setting::get('print_mode', config('printing.mode', $defaultMode)),
             'printer_paper_width' => Setting::get('printer_paper_width', config('printing.paper_width', '80mm')),
             'printer_network_ip' => Setting::get('printer_network_ip', config('printing.network.ip', '192.168.1.150')),
             'printer_network_port' => (int) Setting::get('printer_network_port', config('printing.network.port', 9100)),
@@ -270,7 +309,7 @@ class ReceiptPrintController extends Controller
     public function saveSettings(Request $request)
     {
         $validated = $request->validate([
-            'print_mode' => 'required|in:network,qztray,spooler,mock',
+            'print_mode' => 'required|in:browser,network,qztray,spooler,mock',
             'printer_paper_width' => 'required|in:80mm,58mm',
             'printer_network_ip' => 'nullable|string|max:100',
             'printer_network_port' => 'nullable|integer|min:1|max:65535',

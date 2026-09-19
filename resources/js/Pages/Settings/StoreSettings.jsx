@@ -315,8 +315,32 @@ export default function StoreSettings({ auth, settings, windowsPrinters = [] }) 
                                 {/* Print Mode Selector */}
                                 <div>
                                     <label className="saas-label mb-2">Printing Method / Mode</label>
-                                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
                                         
+                                        {/* Browser Thermal Option (Cloud & Universal) */}
+                                        <div 
+                                            onClick={() => setData('print_mode', 'browser')}
+                                            className={`p-3.5 rounded-xl border cursor-pointer transition-all flex flex-col justify-between ${
+                                                data.print_mode === 'browser'
+                                                    ? 'border-indigo-600 bg-indigo-50/50 ring-2 ring-indigo-500/20'
+                                                    : 'border-slate-200 hover:border-slate-300 bg-white'
+                                            }`}
+                                        >
+                                            <div>
+                                                <div className="flex items-center justify-between mb-1.5">
+                                                    <Printer size={18} className={data.print_mode === 'browser' ? 'text-indigo-600' : 'text-slate-500'} />
+                                                    {data.print_mode === 'browser' && <Check size={16} className="text-indigo-600 font-bold" />}
+                                                </div>
+                                                <div className="font-bold text-xs text-slate-900 flex items-center gap-1.5">
+                                                    Browser Thermal
+                                                    <span className="text-[9px] font-extrabold px-1.5 py-0.2 rounded bg-emerald-100 text-emerald-700">Cloud & Local</span>
+                                                </div>
+                                                <p className="text-[11px] text-slate-500 mt-1 leading-snug">
+                                                    Universal 80mm roll print dialog. Recommended for Cloud (Render) & mobile devices.
+                                                </p>
+                                            </div>
+                                        </div>
+
                                         {/* Direct Windows Spooler Option */}
                                         <div 
                                             onClick={() => setData('print_mode', 'spooler')}
@@ -328,15 +352,15 @@ export default function StoreSettings({ auth, settings, windowsPrinters = [] }) 
                                         >
                                             <div>
                                                 <div className="flex items-center justify-between mb-1.5">
-                                                    <Printer size={18} className={data.print_mode === 'spooler' ? 'text-indigo-600' : 'text-slate-500'} />
+                                                    <Usb size={18} className={data.print_mode === 'spooler' ? 'text-indigo-600' : 'text-slate-500'} />
                                                     {data.print_mode === 'spooler' && <Check size={16} className="text-indigo-600 font-bold" />}
                                                 </div>
                                                 <div className="font-bold text-xs text-slate-900 flex items-center gap-1.5">
                                                     Windows Spooler
-                                                    <span className="text-[10px] font-extrabold px-1.5 py-0.2 rounded bg-indigo-100 text-indigo-700">Native</span>
+                                                    <span className="text-[9px] font-extrabold px-1.5 py-0.2 rounded bg-indigo-100 text-indigo-700">Local PC</span>
                                                 </div>
                                                 <p className="text-[11px] text-slate-500 mt-1 leading-snug">
-                                                    Direct raw spooling to Windows printer (`E-PoS`). No third-party apps needed.
+                                                    Direct raw ESC/POS via Winspool. Requires server and printer on the same Windows PC (XAMPP).
                                                 </p>
                                             </div>
                                         </div>
@@ -355,9 +379,12 @@ export default function StoreSettings({ auth, settings, windowsPrinters = [] }) 
                                                     <Wifi size={18} className={data.print_mode === 'network' ? 'text-indigo-600' : 'text-slate-500'} />
                                                     {data.print_mode === 'network' && <Check size={16} className="text-indigo-600 font-bold" />}
                                                 </div>
-                                                <div className="font-bold text-xs text-slate-900">Network TCP Socket</div>
+                                                <div className="font-bold text-xs text-slate-900 flex items-center gap-1.5">
+                                                    Network Socket
+                                                    <span className="text-[9px] font-extrabold px-1.5 py-0.2 rounded bg-slate-100 text-slate-700">LAN</span>
+                                                </div>
                                                 <p className="text-[11px] text-slate-500 mt-1 leading-snug">
-                                                    Direct IP socket on port 9100. No client software required.
+                                                    Direct TCP socket on port 9100 for network thermal printers on local LAN.
                                                 </p>
                                             </div>
                                         </div>
@@ -376,7 +403,10 @@ export default function StoreSettings({ auth, settings, windowsPrinters = [] }) 
                                                     <Terminal size={18} className={data.print_mode === 'mock' ? 'text-indigo-600' : 'text-slate-500'} />
                                                     {data.print_mode === 'mock' && <Check size={16} className="text-indigo-600 font-bold" />}
                                                 </div>
-                                                <div className="font-bold text-xs text-slate-900">Dev Simulator</div>
+                                                <div className="font-bold text-xs text-slate-900 flex items-center gap-1.5">
+                                                    Dev Simulator
+                                                    <span className="text-[9px] font-extrabold px-1.5 py-0.2 rounded bg-slate-100 text-slate-700">Testing</span>
+                                                </div>
                                                 <p className="text-[11px] text-slate-500 mt-1 leading-snug">
                                                     Simulates ESC/POS buffer in-browser for zero-hardware testing.
                                                 </p>
@@ -424,6 +454,23 @@ export default function StoreSettings({ auth, settings, windowsPrinters = [] }) 
                                 </div>
 
                                 {/* Mode-Specific Configuration Details */}
+                                {data.print_mode === 'browser' && (
+                                    <div className="p-4 rounded-xl border border-indigo-200 bg-indigo-50/50 space-y-2 text-xs">
+                                        <div className="flex items-center justify-between">
+                                            <div className="flex items-center gap-2 font-bold text-indigo-950">
+                                                <Printer size={16} className="text-indigo-600" />
+                                                Browser Thermal Printing (Recommended for Cloud / Render)
+                                            </div>
+                                            <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200 flex items-center gap-1">
+                                                <CheckCircle size={11} /> Universal Driverless
+                                            </span>
+                                        </div>
+                                        <p className="text-[11px] text-slate-600 leading-relaxed">
+                                            Thermal receipts open directly in your browser's print dialog, formatted for <strong>{data.printer_paper_width} roll width</strong> with zero margins. Since it uses your computer's native browser printer system, it works immediately with any USB thermal printer plugged into your PC without needing server-side Windows spoolers.
+                                        </p>
+                                    </div>
+                                )}
+
                                 {data.print_mode === 'spooler' && (
                                     <div className="p-4 rounded-xl border border-slate-200 bg-slate-50/60 space-y-4">
                                         <div className="flex items-center justify-between">

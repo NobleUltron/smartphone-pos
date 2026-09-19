@@ -69,7 +69,7 @@ export default function Receipt({ sale, settings }) {
         }, 120);
     };
 
-    // Direct Windows Spooler Thermal Print (ESC/POS hardware)
+    // Thermal Print (Direct Spooler on Localhost, Browser Dialog on Cloud / Mobile)
     const handleThermalPrint = async () => {
         setIsPrinting(true);
         setPrintError(null);
@@ -78,7 +78,11 @@ export default function Receipt({ sale, settings }) {
         try {
             const result = await ThermalPrintService.printSaleReceipt(sale.id);
 
-            if (result.simulated) {
+            if (result.mode === 'browser') {
+                handleThermalBrowserPrint();
+                setPrintSuccess(true);
+                toast.success(result.message || 'Opening browser print for 80mm thermal receipt');
+            } else if (result.simulated) {
                 setSimText(result.preview_text);
                 setSimModalOpen(true);
                 toast.success('Simulation rendered in Dev Mode');
@@ -88,8 +92,16 @@ export default function Receipt({ sale, settings }) {
             }
         } catch (err) {
             console.error('Receipt print failure:', err);
-            setPrintError(err.message || 'Printer not detected or connection refused');
-            toast.error(err.message || 'Failed to print receipt');
+            // If direct Windows spooler fails because server is in cloud (e.g. Render Linux),
+            // seamlessly fall back to browser thermal printing immediately!
+            if (err.message && (err.message.includes('Windows spooler') || err.message.includes('supported on Windows'))) {
+                toast('Cloud server detected. Opening 80mm browser print...', { icon: '🖨️' });
+                handleThermalBrowserPrint();
+                setPrintSuccess(true);
+            } else {
+                setPrintError(err.message || 'Printer not detected or connection refused');
+                toast.error(err.message || 'Failed to print receipt');
+            }
         } finally {
             setIsPrinting(false);
         }
@@ -152,27 +164,42 @@ export default function Receipt({ sale, settings }) {
                         <div className="p-3.5 bg-rose-50 border border-rose-200 rounded-xl text-xs text-rose-800 space-y-2 animate-fade-in">
                             <div className="flex items-center gap-2 font-bold text-rose-900">
                                 <AlertCircle size={16} className="text-rose-600 shrink-0" />
-                                Thermal Print Issue
+                                Thermal Print Notice
                             </div>
                             <p className="text-[11px] leading-snug">
                                 {printError}
                             </p>
-                            <div className="flex items-center gap-2 pt-1">
+                            <div className="flex flex-wrap items-center gap-2 pt-1">
+                                <button
+                                    type="button"
+                                    onClick={handleThermalBrowserPrint}
+                                    className="px-2.5 py-1.5 rounded-lg bg-indigo-600 text-white font-bold text-[11px] hover:bg-indigo-700 flex items-center gap-1 shadow-sm cursor-pointer"
+                                >
+                                    <Printer size={12} /> Print 80mm via Browser
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={handleA4BrowserPrint}
+                                    className="px-2.5 py-1.5 rounded-lg border border-rose-300 bg-white text-rose-800 font-bold text-[11px] hover:bg-rose-50 cursor-pointer"
+                                >
+                                    Print A4 via Browser
+                                </button>
+                                <a
+                                    href={`/api/receipts/${sale.id}/pdf?format=thermal`}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className="px-2.5 py-1.5 rounded-lg border border-rose-300 bg-white text-rose-800 font-bold text-[11px] hover:bg-rose-50 flex items-center gap-1"
+                                >
+                                    <Download size={12} /> 80mm PDF
+                                </a>
                                 <a
                                     href={`/api/receipts/${sale.id}/pdf?format=a4`}
                                     target="_blank"
                                     rel="noreferrer"
-                                    className="px-2.5 py-1.5 rounded-lg bg-rose-600 text-white font-bold text-[11px] hover:bg-rose-700 flex items-center gap-1"
+                                    className="px-2.5 py-1.5 rounded-lg border border-rose-300 bg-white text-rose-800 font-bold text-[11px] hover:bg-rose-50 flex items-center gap-1"
                                 >
-                                    <Download size={12} /> Download A4 PDF
+                                    <Download size={12} /> A4 PDF
                                 </a>
-                                <button
-                                    type="button"
-                                    onClick={handleA4BrowserPrint}
-                                    className="px-2.5 py-1.5 rounded-lg border border-rose-300 bg-white text-rose-800 font-bold text-[11px] hover:bg-rose-50"
-                                >
-                                    Print A4 via Browser
-                                </button>
                             </div>
                         </div>
                     )}
@@ -203,7 +230,7 @@ export default function Receipt({ sale, settings }) {
                             ) : (
                                 <>
                                     <Printer size={18} />
-                                    <span>Print Thermal (ESC/POS)</span>
+                                    <span>Print Thermal Slip (80mm)</span>
                                 </>
                             )}
                         </button>
