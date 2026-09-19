@@ -11,26 +11,7 @@ const PX_TO_MM = 0.2646;
  * receipt issue caused by a fixed 297 mm page height that is far taller than
  * the actual receipt content.
  */
-function triggerThermalPrint(containerRef, saleId) {
-    const el = containerRef?.current;
-    const heightPx = el ? el.scrollHeight : 500;
-    const heightMm = Math.ceil(heightPx * PX_TO_MM) + 12; // +12 mm bottom feed margin
-
-    console.info(
-        `[SmartPOS Thermal Print] Sale #${saleId} | ` +
-        `Content: ${heightPx}px → ${heightMm}mm | Page: 80mm × ${heightMm}mm`
-    );
-
-    // Inject (or update) a dynamic @page rule so the page height exactly matches content
-    const styleId = 'smartpos-thermal-page-size';
-    let styleEl = document.getElementById(styleId);
-    if (!styleEl) {
-        styleEl = document.createElement('style');
-        styleEl.id = styleId;
-        document.head.appendChild(styleEl);
-    }
-    styleEl.textContent = `@page { size: 80mm ${heightMm}mm; margin: 0; }`;
-
+function triggerThermalPrint() {
     window.print();
 }
 
@@ -43,14 +24,14 @@ export default function Receipt({ sale, settings }) {
         if (!isPreview && sale?.id) {
             // Small delay to ensure DOM (including barcode SVG) is fully painted
             const timer = setTimeout(() => {
-                triggerThermalPrint(receiptRef, sale.id);
+                triggerThermalPrint();
             }, 350);
             return () => clearTimeout(timer);
         }
     }, [isPreview, sale?.id]);
 
     return (
-        <div className={`flex flex-col items-center justify-start font-sans print:bg-white print:py-0 print:m-0 print:block print:min-h-0 ${isPreview ? 'bg-white py-4 min-h-full' : 'bg-slate-100 dark:bg-slate-950 min-h-screen py-8'}`}>
+        <div className={`receipt-wrapper flex flex-col items-center justify-start font-sans print:bg-white print:py-0 print:m-0 print:block print:min-h-0 ${isPreview ? 'bg-white py-4 min-h-full' : 'bg-slate-100 dark:bg-slate-950 min-h-screen py-8'}`}>
             <Head title={`Receipt - Sale #${sale.id}`} />
             
             {/* Action Buttons for Screen (Hidden when Printing or in Preview) */}
@@ -58,7 +39,7 @@ export default function Receipt({ sale, settings }) {
                 <div className="w-full max-w-[380px] flex flex-col gap-2.5 mb-6 print-action-bar print:hidden">
                     <div className="flex gap-2">
                         <button 
-                            onClick={() => triggerThermalPrint(receiptRef, sale.id)} 
+                            onClick={() => triggerThermalPrint()} 
                             className="flex-1 font-bold py-2.5 px-4 rounded-xl shadow-sm border transition-colors flex items-center justify-center gap-2 cursor-pointer bg-white text-slate-900 border-slate-300 hover:bg-slate-50"
                         >
                             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 6 2 18 2 18 9"></polyline><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path><rect x="6" y="14" width="12" height="8"></rect></svg>
@@ -309,9 +290,14 @@ export default function Receipt({ sale, settings }) {
 
             <style>
                 {`
+                    @page {
+                        size: 80mm 210mm;
+                        margin: 0;
+                    }
                     @media print {
-                        /* NOTE: @page { size } is injected dynamically at print time
-                           by triggerThermalPrint() so the height matches exact content. */
+                        *, *::before, *::after {
+                            box-sizing: border-box !important;
+                        }
                         html, body {
                             width: 80mm !important;
                             max-width: 80mm !important;
@@ -323,6 +309,24 @@ export default function Receipt({ sale, settings }) {
                             color: #000000 !important;
                             -webkit-print-color-adjust: exact !important;
                             print-color-adjust: exact !important;
+                        }
+                        #app, [data-page], .receipt-wrapper {
+                            margin: 0 !important;
+                            padding: 0 !important;
+                            width: 80mm !important;
+                            max-width: 80mm !important;
+                            min-height: 0 !important;
+                            height: auto !important;
+                            display: block !important;
+                            background: #ffffff !important;
+                        }
+                        .print-action-bar,
+                        .print\\:hidden,
+                        header, nav, footer {
+                            display: none !important;
+                            height: 0 !important;
+                            margin: 0 !important;
+                            padding: 0 !important;
                         }
                         .receipt-container {
                             width: 72mm !important;
@@ -336,8 +340,9 @@ export default function Receipt({ sale, settings }) {
                             border-radius: 0 !important;
                             background: #ffffff !important;
                             color: #000000 !important;
-                            page-break-after: avoid;
-                            page-break-inside: avoid;
+                            page-break-after: avoid !important;
+                            page-break-inside: avoid !important;
+                            break-inside: avoid !important;
                         }
                         .receipt-container * {
                             color: #000000 !important;
@@ -352,10 +357,6 @@ export default function Receipt({ sale, settings }) {
                             object-fit: contain !important;
                             margin: 1mm auto !important;
                             display: block !important;
-                        }
-                        .print-action-bar,
-                        .print\\:hidden {
-                            display: none !important;
                         }
                     }
                 `}
