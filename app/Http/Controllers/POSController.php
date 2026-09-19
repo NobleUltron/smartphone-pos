@@ -344,12 +344,7 @@ class POSController extends Controller
             'shop_phone' => \App\Models\Setting::get('shop_phone', '+256 700 000 000'),
             'currency_symbol' => \App\Models\Setting::get('currency_symbol', 'UGX'),
             'receipt_footer' => \App\Models\Setting::get('receipt_footer', 'Thank you for shopping with us!'),
-            'terms_conditions' => \App\Models\Setting::get('terms_conditions', [
-                'Goods sold in good condition are not returnable.',
-                'Retain this receipt for any warranty claims.',
-                'Warranty does not cover physical or liquid damage.',
-                'Software issues are not covered under warranty.'
-            ]),
+            'terms_conditions' => \App\Models\Setting::getTermsConditions(),
         ];
 
         // JSON response for in-page receipt preview (e.g. from Dealer Show page)

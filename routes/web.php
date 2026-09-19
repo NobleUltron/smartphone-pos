@@ -17,6 +17,7 @@ use App\Http\Controllers\RepairController;
 use App\Http\Controllers\UserController;
 use App\Http\Controllers\ShiftReportController;
 use App\Http\Controllers\ActivityLogController;
+use App\Http\Controllers\ReceiptPrintController;
 use Illuminate\Foundation\Application;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
@@ -31,6 +32,10 @@ use Illuminate\Support\Facades\DB;
 // Public Image Routes
 Route::get('/images/store-logo', [SettingController::class, 'serveLogo'])->name('images.store_logo');
 Route::get('/images/profile/{id}', [ProfileController::class, 'servePhoto'])->name('images.profile_photo');
+
+// QZ Tray Digital Certificate & Signature Handshake
+Route::get('/api/receipts/qz-certificate', [ReceiptPrintController::class, 'qzCertificate'])->name('receipts.qz-certificate');
+Route::post('/api/receipts/qz-sign', [ReceiptPrintController::class, 'qzSign'])->name('receipts.qz-sign');
 
 Route::get('/fix-sequences', function () {
     $results = \App\Services\DatabaseSequenceService::syncAll();
@@ -201,6 +206,11 @@ Route::middleware('auth')->group(function () {
         Route::get('/pos/receipt/{sale}', [POSController::class, 'receipt'])->name('pos.receipt');
         Route::get('/receipts', [ReceiptHistoryController::class, 'index'])->name('receipts.index');
         Route::post('/api/receipts/{sale}/refund', [ReceiptHistoryController::class, 'refund']);
+        Route::post('/api/receipts/{sale}/print', [ReceiptPrintController::class, 'print'])->name('receipts.print');
+        Route::post('/api/receipts/test-print', [ReceiptPrintController::class, 'testPrint'])->name('receipts.test-print');
+        Route::get('/api/receipts/{sale}/pdf', [ReceiptPrintController::class, 'pdf'])->name('receipts.pdf');
+        Route::get('/api/settings/printer', [ReceiptPrintController::class, 'getSettings'])->name('settings.printer.get');
+        Route::post('/api/settings/printer', [ReceiptPrintController::class, 'saveSettings'])->name('settings.printer.save');
         Route::post('/api/pos/validate-imei', [POSController::class, 'validateImei']);
         Route::post('/api/pos/checkout', [POSController::class, 'checkout']);
         Route::get('/api/pos/inventory-search', [POSController::class, 'inventorySearch']);

@@ -37,6 +37,29 @@ class Setting extends Model
         );
     }
 
+    public static function defaultTerms(): array
+    {
+        return [
+            'Warranty claims strictly require presentation of this original tax invoice by the original purchaser.',
+            'Device IMEI and serial number must match store records; damaged or removed warranty seals void coverage.',
+            'Warranty strictly covers manufacturer hardware faults and component failure under normal recommended use.',
+            'Physical impact, drops, cracked screens, casing pressure damage, or liquid intrusion void all warranty.',
+            'Unauthorized third-party repair, unapproved casing disassembly, jailbreaking, or OS tampering voids warranty.',
+            'Goods once inspected and accepted in good working condition are not refundable for cash.',
+            'Batteries, power adapters, charging cables, and consumable accessories carry a limited 30-day warranty.',
+            'All warranty assessment claims require a 24–72 hour diagnostic period prior to repair or replacement.',
+        ];
+    }
+
+    public static function getTermsConditions(): array
+    {
+        $terms = static::get('terms_conditions');
+        if (empty($terms) || !is_array($terms)) {
+            return static::defaultTerms();
+        }
+        return $terms;
+    }
+
     public static function getLogoUrl()
     {
         $val = static::get('store_logo');

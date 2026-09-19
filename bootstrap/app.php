@@ -1,4 +1,5 @@
 <?php
+ini_set('memory_limit', '256M');
 
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
@@ -17,6 +18,11 @@ return Application::configure(basePath: dirname(__DIR__))
             \App\Http\Middleware\SecurityHeadersMiddleware::class,
             \App\Http\Middleware\HandleInertiaRequests::class,
             \Illuminate\Http\Middleware\AddLinkHeadersForPreloadedAssets::class,
+        ]);
+
+        $middleware->validateCsrfTokens(except: [
+            'api/receipts/*',
+            'api/settings/printer',
         ]);
 
         $middleware->alias([
