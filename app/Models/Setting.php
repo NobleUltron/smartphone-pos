@@ -3,23 +3,36 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Facades\Cache;
 
 class Setting extends Model
 {
     protected $fillable = ['key', 'value'];
     protected static $runtimeCache = null;
 
-    public static function get(string $key, $default = null)
+    public static function getAllSettings(): array
     {
         if (static::$runtimeCache === null) {
-            static::$runtimeCache = static::pluck('value', 'key')->toArray();
+            try {
+                static::$runtimeCache = Cache::remember('all_store_settings', 300, function () {
+                    return static::pluck('value', 'key')->toArray();
+                });
+            } catch (\Throwable $e) {
+                static::$runtimeCache = static::pluck('value', 'key')->toArray();
+            }
         }
+        return static::$runtimeCache ?? [];
+    }
 
-        if (!array_key_exists($key, static::$runtimeCache)) {
+    public static function get(string $key, $default = null)
+    {
+        $all = static::getAllSettings();
+
+        if (!array_key_exists($key, $all)) {
             return $default;
         }
 
-        $val = static::$runtimeCache[$key];
+        $val = $all[$key];
         // Try decoding JSON
         $decoded = json_decode($val, true);
         return is_null($decoded) && $val !== 'null' ? $val : $decoded;
@@ -28,9 +41,13 @@ class Setting extends Model
     public static function set(string $key, $value)
     {
         $valToStore = is_array($value) || is_object($value) ? json_encode($value) : $value;
-        if (static::$runtimeCache !== null) {
-            static::$runtimeCache[$key] = $valToStore;
+        try {
+            Cache::forget('all_store_settings');
+        } catch (\Throwable $e) {
+            // Ignore cache failure
         }
+        static::$runtimeCache = null;
+
         return static::updateOrCreate(
             ['key' => $key],
             ['value' => $valToStore]

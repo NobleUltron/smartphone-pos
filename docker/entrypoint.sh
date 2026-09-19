@@ -11,6 +11,10 @@ APP_URL="${APP_URL}"
 LOG_CHANNEL=stderr
 DB_CONNECTION=pgsql
 DATABASE_URL="${DATABASE_URL}"
+SESSION_DRIVER="${SESSION_DRIVER:-file}"
+SESSION_LIFETIME="${SESSION_LIFETIME:-120}"
+CACHE_STORE="${CACHE_STORE:-file}"
+QUEUE_CONNECTION="${QUEUE_CONNECTION:-sync}"
 MAIL_MAILER="${MAIL_MAILER:-smtp}"
 MAIL_HOST="${MAIL_HOST}"
 MAIL_PORT="${MAIL_PORT}"
@@ -29,6 +33,11 @@ AWS_URL="${AWS_URL}"
 AWS_USE_PATH_STYLE_ENDPOINT="${AWS_USE_PATH_STYLE_ENDPOINT}"
 EOF
 
+# Ensure storage directories exist and are properly owned
+mkdir -p /var/www/html/storage/framework/{sessions,views,cache/data} /var/www/html/storage/logs
+chown -R www-data:www-data /var/www/html/storage /var/www/html/bootstrap/cache
+chmod -R 775 /var/www/html/storage /var/www/html/bootstrap/cache
+
 # Run migrations and sync sequences
 echo "Running migrations..."
 php artisan migrate --force
@@ -41,6 +50,7 @@ echo "Caching configuration..."
 php artisan config:cache
 php artisan route:cache
 php artisan view:cache
+php artisan event:cache
 
 # Start Apache
 echo "Starting Apache..."

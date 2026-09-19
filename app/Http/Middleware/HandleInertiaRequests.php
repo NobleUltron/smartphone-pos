@@ -3,6 +3,7 @@
 namespace App\Http\Middleware;
 
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 use Inertia\Middleware;
 
 class HandleInertiaRequests extends Middleware
@@ -31,8 +32,10 @@ class HandleInertiaRequests extends Middleware
     {
         $notifications = [];
         if ($request->user() && in_array($request->user()->role, ['admin', 'manager'])) {
-            // Defective Items
-            $defectiveCount = \App\Models\DeviceImei::where('status', 'Defective')->count();
+            // Defective Items (cached for 90s to avoid DB load on every request)
+            $defectiveCount = Cache::remember('global_defective_count', 90, function () {
+                return \App\Models\DeviceImei::where('status', 'Defective')->count();
+            });
             if ($defectiveCount > 0) {
                 $notifications[] = [
                     'id' => 'defective',
@@ -44,14 +47,16 @@ class HandleInertiaRequests extends Middleware
                 ];
             }
 
-            // Unified high-performance low stock count (direct SQL without loading models into memory)
-            $totalLowStock = \App\Models\Product::where(function ($query) {
-                $query->where('type', 'bulk')
-                      ->where('quantity', '<=', 5);
-            })->orWhere(function ($query) {
-                $query->where('type', 'serialized')
-                      ->whereRaw("(SELECT COUNT(*) FROM device_imeis WHERE device_imeis.product_id = products.id AND device_imeis.status = 'In Stock') <= 5");
-            })->count();
+            // Unified high-performance low stock count (cached for 90s to prevent subquery overhead on navigation)
+            $totalLowStock = Cache::remember('global_low_stock_count', 90, function () {
+                return \App\Models\Product::where(function ($query) {
+                    $query->where('type', 'bulk')
+                          ->where('quantity', '<=', 5);
+                })->orWhere(function ($query) {
+                    $query->where('type', 'serialized')
+                          ->whereRaw("(SELECT COUNT(*) FROM device_imeis WHERE device_imeis.product_id = products.id AND device_imeis.status = 'In Stock') <= 5");
+                })->count();
+            });
 
             if ($totalLowStock > 0) {
                 $notifications[] = [
@@ -67,10 +72,12 @@ class HandleInertiaRequests extends Middleware
 
         // Notifications for ALL users
         if ($request->user()) {
-            $overdueCount = \App\Models\DealerItem::where('status', 'Pending')
-                ->whereNotNull('expected_return_date')
-                ->where('expected_return_date', '<', \Carbon\Carbon::today())
-                ->count();
+            $overdueCount = Cache::remember('global_overdue_dealer_items_count', 90, function () {
+                return \App\Models\DealerItem::where('status', 'Pending')
+                    ->whereNotNull('expected_return_date')
+                    ->where('expected_return_date', '<', \Carbon\Carbon::today())
+                    ->count();
+            });
 
             if ($overdueCount > 0) {
                 $notifications[] = [

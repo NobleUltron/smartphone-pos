@@ -17,14 +17,32 @@ RUN apt-get update && apt-get install -y \
     && docker-php-ext-install pdo_pgsql pgsql pdo_mysql gd zip bcmath opcache \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
-# OPcache Configuration
-RUN echo "opcache.memory_consumption=128" >> /usr/local/etc/php/conf.d/docker-php-ext-opcache.ini \
-    && echo "opcache.interned_strings_buffer=8" >> /usr/local/etc/php/conf.d/docker-php-ext-opcache.ini \
-    && echo "opcache.max_accelerated_files=4000" >> /usr/local/etc/php/conf.d/docker-php-ext-opcache.ini \
-    && echo "opcache.revalidate_freq=60" >> /usr/local/etc/php/conf.d/docker-php-ext-opcache.ini \
-    && echo "opcache.fast_shutdown=1" >> /usr/local/etc/php/conf.d/docker-php-ext-opcache.ini \
-    && echo "opcache.enable_cli=1" >> /usr/local/etc/php/conf.d/docker-php-ext-opcache.ini \
-    && echo "opcache.validate_timestamps=0" >> /usr/local/etc/php/conf.d/docker-php-ext-opcache.ini
+# Use default production configuration
+RUN cp /usr/local/etc/php/php.ini-production /usr/local/etc/php/php.ini
+
+# OPcache Configuration (Web + CLI)
+RUN { \
+        echo 'opcache.enable=1'; \
+        echo 'opcache.enable_cli=1'; \
+        echo 'opcache.memory_consumption=192'; \
+        echo 'opcache.interned_strings_buffer=16'; \
+        echo 'opcache.max_accelerated_files=10000'; \
+        echo 'opcache.revalidate_freq=0'; \
+        echo 'opcache.validate_timestamps=0'; \
+        echo 'opcache.save_comments=1'; \
+        echo 'opcache.fast_shutdown=1'; \
+    } > /usr/local/etc/php/conf.d/docker-php-ext-opcache.ini
+
+# Production PHP performance settings
+RUN { \
+        echo 'memory_limit = 256M'; \
+        echo 'upload_max_filesize = 20M'; \
+        echo 'post_max_size = 25M'; \
+        echo 'max_execution_time = 60'; \
+        echo 'realpath_cache_size = 4096K'; \
+        echo 'realpath_cache_ttl = 600'; \
+        echo 'expose_php = Off'; \
+    } > /usr/local/etc/php/conf.d/custom-perf.ini
 
 # Enable Apache modules
 RUN a2enmod rewrite deflate expires headers
