@@ -86,9 +86,15 @@ return [
 
         'pgsql' => [
             'driver' => 'pgsql',
-            'url' => env('DATABASE_URL', env('DB_URL')),
+            'url' => (function () {
+                $url = env('DATABASE_URL', env('DB_URL'));
+                if ($url && str_contains($url, 'pooler.supabase.com:5432')) {
+                    $url = str_replace('pooler.supabase.com:5432', 'pooler.supabase.com:6543', $url);
+                }
+                return $url;
+            })(),
             'host' => env('DB_HOST', '127.0.0.1'),
-            'port' => env('DB_PORT', '5432'),
+            'port' => (env('DB_PORT') == '5432' && str_contains(env('DB_HOST', ''), 'pooler.supabase.com')) ? '6543' : env('DB_PORT', '5432'),
             'database' => env('DB_DATABASE', 'laravel'),
             'username' => env('DB_USERNAME', 'root'),
             'password' => env('DB_PASSWORD', ''),
