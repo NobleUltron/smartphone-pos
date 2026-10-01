@@ -75,35 +75,39 @@ Route::get('/dashboard', function () {
     $todaySales = $todayDirectSales + $todayLayawayPayments - $todayRefunds;
     $inStockCount = DeviceImei::where('status', 'In Stock')->count();
     $scrappedCount = DeviceImei::where('status', 'Defective')->count();
-    $lowStockCount = Product::where(function ($query) {
-        $query->where('type', 'bulk')->where('quantity', '<=', 5);
-    })->orWhere(function ($query) {
-        $query->where('type', 'serialized')
-              ->whereRaw("(SELECT COUNT(*) FROM device_imeis WHERE device_imeis.product_id = products.id AND device_imeis.status = 'In Stock') <= 5");
-    })->count();
+    $lowStockCount = Cache::remember('global_low_stock_count', 90, function () {
+        return Product::where(function ($query) {
+            $query->where('type', 'bulk')->where('quantity', '<=', 5);
+        })->orWhere(function ($query) {
+            $query->where('type', 'serialized')
+                  ->whereRaw("(SELECT COUNT(*) FROM device_imeis WHERE device_imeis.product_id = products.id AND device_imeis.status = 'In Stock') <= 5");
+        })->count();
+    });
 
     $activeRepairsCount = Repair::whereIn('status', ['Pending', 'In Progress'])->count();
     $completedRepairsToday = Repair::whereIn('status', ['Completed', 'Delivered'])->whereDate('updated_at', Carbon::today())->count();
 
-    $salesData = collect(range(6, 0))->map(function ($days) {
-        $date = Carbon::today()->subDays($days);
-        $directSales = Sale::whereDate('sale_date', $date)
-            ->whereIn('payment_status', ['Paid', 'Refunded'])
-            ->where('payment_method', '!=', 'Layaway')
-            ->sum('final_amount');
-            
-        $layawayPayments = \App\Models\LayawayPayment::whereDate('payment_date', $date)
-            ->sum('amount_paid');
-            
-        $refunds = \App\Models\Expense::whereDate('expense_date', $date)
-            ->whereIn('category', ['Refund', 'Refund (Past Shift)'])
-            ->sum('amount');
-            
-        $total = $directSales + $layawayPayments - $refunds;
-        return [
-            'date' => $date->format('M d'),
-            'sales' => (float) $total
-        ];
+    $salesData = Cache::remember('dashboard_sales_7days', 120, function () {
+        return collect(range(6, 0))->map(function ($days) {
+            $date = Carbon::today()->subDays($days);
+            $directSales = Sale::whereDate('sale_date', $date)
+                ->whereIn('payment_status', ['Paid', 'Refunded'])
+                ->where('payment_method', '!=', 'Layaway')
+                ->sum('final_amount');
+                
+            $layawayPayments = \App\Models\LayawayPayment::whereDate('payment_date', $date)
+                ->sum('amount_paid');
+                
+            $refunds = \App\Models\Expense::whereDate('expense_date', $date)
+                ->whereIn('category', ['Refund', 'Refund (Past Shift)'])
+                ->sum('amount');
+                
+            $total = $directSales + $layawayPayments - $refunds;
+            return [
+                'date' => $date->format('M d'),
+                'sales' => (float) $total
+            ];
+        });
     });
 
     $recentSales = Sale::with('customer', 'user')->orderBy('created_at', 'desc')->take(5)->get()->map(function ($sale) {
@@ -120,15 +124,17 @@ Route::get('/dashboard', function () {
 
     $inventoryValue = DeviceImei::where('status', 'In Stock')->sum('selling_price');
 
-    $topBrands = \Illuminate\Support\Facades\DB::table('sale_items')
-        ->join('device_imeis', 'sale_items.device_imei_id', '=', 'device_imeis.id')
-        ->join('products', 'device_imeis.product_id', '=', 'products.id')
-        ->join('brands', 'products.brand_id', '=', 'brands.id')
-        ->select('brands.name', \Illuminate\Support\Facades\DB::raw('count(*) as value'))
-        ->groupBy('brands.name')
-        ->orderByDesc('value')
-        ->limit(5)
-        ->get();
+    $topBrands = Cache::remember('dashboard_top_brands', 180, function () {
+        return \Illuminate\Support\Facades\DB::table('sale_items')
+            ->join('device_imeis', 'sale_items.device_imei_id', '=', 'device_imeis.id')
+            ->join('products', 'device_imeis.product_id', '=', 'products.id')
+            ->join('brands', 'products.brand_id', '=', 'brands.id')
+            ->select('brands.name', \Illuminate\Support\Facades\DB::raw('count(*) as value'))
+            ->groupBy('brands.name')
+            ->orderByDesc('value')
+            ->limit(5)
+            ->get();
+    });
 
     $dealerPendingInwardCount = \App\Models\DealerItem::where('direction', 'inward')
         ->whereRaw('(quantity - quantity_sold - quantity_returned) > 0')

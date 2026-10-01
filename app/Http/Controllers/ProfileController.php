@@ -59,8 +59,34 @@ class ProfileController extends Controller
 
         if ($request->hasFile('photo')) {
             $file = $request->file('photo');
-            $base64 = 'data:' . $file->getMimeType() . ';base64,' . base64_encode(file_get_contents($file->getPathname()));
-            $request->user()->profile_photo_path = $base64;
+            $binary = file_get_contents($file->getPathname());
+            
+            // Resize and compress avatar to max 256x256 to ensure lightning-fast database loads
+            $img = @imagecreatefromstring($binary);
+            if ($img) {
+                $width = imagesx($img);
+                $height = imagesy($img);
+                $newSize = 256;
+                $thumb = imagecreatetruecolor($newSize, $newSize);
+                imagealphablending($thumb, false);
+                imagesavealpha($thumb, true);
+                
+                $min = min($width, $height);
+                $srcX = ($width - $min) / 2;
+                $srcY = ($height - $min) / 2;
+                imagecopyresampled($thumb, $img, 0, 0, $srcX, $srcY, $newSize, $newSize, $min, $min);
+                
+                ob_start();
+                imagejpeg($thumb, null, 80);
+                $compressed = ob_get_clean();
+                imagedestroy($img);
+                imagedestroy($thumb);
+                
+                $request->user()->profile_photo_path = 'data:image/jpeg;base64,' . base64_encode($compressed);
+            } else {
+                $base64 = 'data:' . $file->getMimeType() . ';base64,' . base64_encode($binary);
+                $request->user()->profile_photo_path = $base64;
+            }
         }
 
         $request->user()->save();
