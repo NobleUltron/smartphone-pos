@@ -142,8 +142,11 @@ class ReceiptData
 
         $layawayPaid = 0.0;
         $layawayBalance = 0.0;
-        if ($sale->layawayPayments) {
+        if ($sale->layawayPayments && $sale->layawayPayments->count() > 0) {
             $layawayPaid = (float) $sale->layawayPayments->sum('amount_paid');
+            $layawayBalance = max(0, $finalAmount - $layawayPaid);
+        } elseif ($sale->repair) {
+            $layawayPaid = (float) ($sale->repair->deposit ?? 0);
             $layawayBalance = max(0, $finalAmount - $layawayPaid);
         }
 

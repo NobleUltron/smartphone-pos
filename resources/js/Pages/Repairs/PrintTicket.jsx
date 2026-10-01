@@ -17,19 +17,27 @@ export default function PrintTicket({ repair, settings }) {
             <Head title={`Print Ticket - ${repair.repair_code}`} />
             
             {/* Action Buttons for Screen (Hidden when Printing) */}
-            <div className="w-full max-w-[320px] flex gap-3 mb-6 print:hidden">
+            <div className="w-full max-w-[380px] flex gap-2 mb-6 print:hidden">
                 <button 
                     onClick={() => window.print()} 
-                    className="flex-1 bg-white text-slate-700 font-semibold py-2.5 px-4 rounded-lg shadow-sm border border-slate-200 hover:bg-slate-50 transition-colors flex items-center justify-center gap-2"
+                    className="flex-1 bg-white text-slate-700 font-semibold py-2 px-3 rounded-lg shadow-sm border border-slate-200 hover:bg-slate-50 transition-colors flex items-center justify-center gap-1.5 text-xs"
                 >
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 6 2 18 2 18 9"></polyline><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path><rect x="6" y="14" width="12" height="8"></rect></svg>
-                    Print
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 6 2 18 2 18 9"></polyline><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path><rect x="6" y="14" width="12" height="8"></rect></svg>
+                    Print Slip
                 </button>
+                <a 
+                    href={route('repairs.receipt', repair.id)} 
+                    className="flex-1 bg-indigo-600 text-white font-semibold py-2 px-3 rounded-lg shadow-sm hover:bg-indigo-700 transition-colors flex items-center justify-center gap-1.5 text-xs"
+                    title="Switch to official sales receipt / tax invoice"
+                >
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 2v20l2-1 2 1 2-1 2 1 2-1 2 1 2-1 2 1V2l-2 1-2-1-2 1-2-1-2 1-2-1-2 1Z"></path><path d="M16 8h-6a2 2 0 1 0 0 4h4a2 2 0 1 1 0 4H8"></path><path d="M12 17V7"></path></svg>
+                    Sales Invoice
+                </a>
                 <Link 
                     href="/repairs" 
-                    className="flex-1 bg-slate-900 text-white font-semibold py-2.5 px-4 rounded-lg shadow-md hover:bg-slate-800 transition-colors flex items-center justify-center gap-2"
+                    className="bg-slate-900 text-white font-semibold py-2 px-3 rounded-lg shadow-md hover:bg-slate-800 transition-colors flex items-center justify-center gap-1.5 text-xs shrink-0"
                 >
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline></svg>
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline></svg>
                     Repairs
                 </Link>
             </div>

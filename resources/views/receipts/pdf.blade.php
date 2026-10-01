@@ -248,7 +248,7 @@
                 <td>Change Due:</td>
                 <td class="text-right font-mono">{{ $receipt->currency }} {{ number_format($receipt->changeDue) }}</td>
             </tr>
-        @elseif(strtolower($receipt->paymentMethod) === 'layaway')
+        @elseif(strtolower($receipt->paymentMethod) === 'layaway' || $receipt->isRepair)
             <tr>
                 <td>Total Paid:</td>
                 <td class="text-right font-mono">{{ $receipt->currency }} {{ number_format($receipt->layawayPaid) }}</td>

@@ -7,7 +7,8 @@ import Badge from '@/Components/SaaS/Badge';
 import { 
     Wrench, Phone, User, Smartphone, Hash, Lock, 
     FileText, Plus, Trash2, Package, Clock, CheckCircle2, 
-    Truck, XCircle, X, Calendar, ClipboardCheck, MessageSquare
+    Truck, XCircle, X, Calendar, ClipboardCheck, MessageSquare,
+    Printer, Receipt
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 
@@ -223,13 +224,35 @@ Thank you.`;
                             <p className="text-xs text-slate-400 mt-0.5">Received on {new Date(repair.created_at).toLocaleString()}</p>
                         </div>
                     </div>
-                    <button 
-                        type="button" 
-                        onClick={onClose}
-                        className="w-9 h-9 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white flex items-center justify-center transition-colors"
-                    >
-                        <X size={20} />
-                    </button>
+                    <div className="flex items-center gap-2">
+                        <a 
+                            href={route('repairs.print', repair.id)} 
+                            target="_blank" 
+                            rel="noreferrer"
+                            className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold flex items-center gap-1.5 transition-colors border border-slate-700 hover:text-white"
+                            title="Print Intake Claim Ticket"
+                        >
+                            <Printer size={15} className="text-rose-400" />
+                            <span className="hidden sm:inline">Intake Ticket</span>
+                        </a>
+                        <a 
+                            href={route('repairs.receipt', repair.id)} 
+                            target="_blank" 
+                            rel="noreferrer"
+                            className="px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold flex items-center gap-1.5 transition-colors shadow-sm"
+                            title="Print Official Sales Receipt / Tax Invoice (Thermal or A4)"
+                        >
+                            <Receipt size={15} />
+                            <span className="hidden sm:inline">Sales Invoice</span>
+                        </a>
+                        <button 
+                            type="button" 
+                            onClick={onClose}
+                            className="w-9 h-9 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white flex items-center justify-center transition-colors ml-1"
+                        >
+                            <X size={20} />
+                        </button>
+                    </div>
                 </div>
 
                 {/* Modal Split View */}
@@ -329,7 +352,15 @@ Thank you.`;
                             <div className="mt-4 border border-slate-200 dark:border-slate-800 rounded-xl overflow-hidden">
                                 <div className="bg-slate-50 dark:bg-slate-800/80 px-4 py-2 border-b border-slate-200 dark:border-slate-800 flex justify-between items-center">
                                     <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Payment History Log</span>
-                                    <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500">{repair.sale.layaway_payments.length} Payments</span>
+                                    <a 
+                                        href={route('repairs.receipt', repair.id)} 
+                                        target="_blank" 
+                                        rel="noreferrer" 
+                                        className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 hover:underline flex items-center gap-1"
+                                        title="View official sales receipt"
+                                    >
+                                        <Receipt size={11} /> Sales Receipt
+                                    </a>
                                 </div>
                                 <div className="divide-y divide-slate-100 dark:divide-slate-800 max-h-40 overflow-y-auto bg-white dark:bg-slate-900">
                                     {repair.sale.layaway_payments.map(payment => (
@@ -622,10 +653,22 @@ Thank you.`;
                         {balanceDue === 0 && (
                             <div className="bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-300 p-4 rounded-xl flex items-center justify-between shadow-sm">
                                 <span className="text-sm font-bold">Balance Due:</span>
-                                <span className="text-lg font-extrabold flex items-center gap-1.5 text-emerald-600 dark:text-emerald-400">
-                                    <CheckCircle2 size={20} className="text-emerald-500" />
-                                    Paid in Full
-                                </span>
+                                <div className="flex items-center gap-3">
+                                    <span className="text-lg font-extrabold flex items-center gap-1.5 text-emerald-600 dark:text-emerald-400">
+                                        <CheckCircle2 size={20} className="text-emerald-500" />
+                                        Paid in Full
+                                    </span>
+                                    <a 
+                                        href={route('repairs.receipt', repair.id)} 
+                                        target="_blank" 
+                                        rel="noreferrer"
+                                        className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-lg shadow-sm flex items-center gap-1 transition-colors"
+                                        title="Print Official Sales Receipt / Tax Invoice"
+                                    >
+                                        <Receipt size={13} />
+                                        Receipt
+                                    </a>
+                                </div>
                             </div>
                         )}
                     </div>

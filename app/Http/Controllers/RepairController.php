@@ -391,6 +391,40 @@ class RepairController extends Controller
         ]);
     }
 
+    public function printReceipt(Repair $repair)
+    {
+        $repair->load('sale.layawayPayments');
+        $sale = $repair->sale;
+
+        if (!$sale) {
+            $totalPaid = floatval($repair->deposit);
+            $estCost = floatval($repair->estimated_cost);
+
+            $sale = \App\Models\Sale::create([
+                'user_id' => $repair->user_id ?? auth()->id(),
+                'customer_id' => $repair->customer_id,
+                'repair_id' => $repair->id,
+                'total_amount' => $estCost,
+                'discount' => 0,
+                'trade_in_value' => 0,
+                'final_amount' => $estCost,
+                'payment_method' => 'Layaway',
+                'payment_status' => $repair->status === 'Delivered' || ($totalPaid >= $estCost && $estCost > 0) ? 'Paid' : ($totalPaid > 0 ? 'Partial' : 'Pending'),
+            ]);
+
+            if ($totalPaid > 0) {
+                \App\Models\LayawayPayment::create([
+                    'sale_id' => $sale->id,
+                    'amount_paid' => $totalPaid,
+                    'payment_method' => 'Cash',
+                    'payment_date' => $repair->created_at ?? now(),
+                ]);
+            }
+        }
+
+        return redirect()->route('pos.receipt', $sale->id);
+    }
+
     public function storePayment(Request $request, Repair $repair)
     {
         $validated = $request->validate([

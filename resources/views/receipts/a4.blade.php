@@ -390,7 +390,7 @@
                     {{ $receipt->currency }} {{ number_format($receipt->changeDue) }}
                 </td>
             </tr>
-        @elseif(strtolower($receipt->paymentMethod) === 'layaway')
+        @elseif(strtolower($receipt->paymentMethod) === 'layaway' || $receipt->isRepair)
             <tr>
                 <td style="color: #475569; font-size: 10px;">Total Paid to Date:</td>
                 <td class="text-right font-bold" style="font-size: 10.5px; font-family: 'Courier New', Courier, monospace;">

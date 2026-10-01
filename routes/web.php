@@ -257,6 +257,7 @@ Route::middleware('auth')->group(function () {
         Route::put('/{repair}', [RepairController::class, 'update'])->name('update');
         Route::delete('/{repair}', [RepairController::class, 'destroy'])->name('destroy');
         Route::get('/{repair}/print', [RepairController::class, 'printTicket'])->name('print');
+        Route::get('/{repair}/receipt', [RepairController::class, 'printReceipt'])->name('receipt');
         Route::post('/{repair}/payments', [RepairController::class, 'storePayment'])->name('payments.store');
         
         // Parts

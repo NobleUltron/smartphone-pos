@@ -120,6 +120,11 @@ export default function Receipt({ sale, settings }) {
 
     const currency = settings?.currency_symbol || 'UGX';
     const saleItems = sale.sale_items || sale.saleItems || [];
+    const layawayPayments = sale.layaway_payments || sale.layawayPayments || [];
+    const totalPaidAmount = layawayPayments.length > 0 
+        ? layawayPayments.reduce((sum, p) => sum + Number(p.amount_paid || 0), 0)
+        : (sale.repair ? Number(sale.repair.deposit || 0) : Number(sale.final_amount || 0));
+    const balanceDueAmount = Math.max(0, Number(sale.final_amount || 0) - totalPaidAmount);
 
     return (
         <div className={`receipt-wrapper flex flex-col items-center justify-start font-sans print:bg-white print:py-0 print:m-0 print:block print:min-h-0 ${
@@ -245,13 +250,13 @@ export default function Receipt({ sale, settings }) {
                             <span>Print A4 Invoice (Browser)</span>
                         </button>
 
-                        {/* Back to POS */}
+                        {/* Back to POS / Repairs */}
                         <Link 
-                            href="/pos" 
+                            href={sale.repair ? "/repairs" : "/pos"} 
                             className="font-bold py-2.5 px-4 rounded-xl shadow-sm transition-colors flex items-center justify-center gap-2 bg-slate-900 text-white hover:bg-slate-800 shrink-0"
                         >
                             <ArrowLeft size={16} />
-                            <span>POS</span>
+                            <span>{sale.repair ? 'Repairs' : 'POS'}</span>
                         </Link>
                     </div>
 
@@ -484,16 +489,16 @@ export default function Receipt({ sale, settings }) {
                                 </div>
                             </>
                         )}
-                        {sale.payment_method === 'Layaway' && sale.layaway_payments && (
+                        {(sale.payment_method === 'Layaway' || sale.repair) && (
                             <>
                                 <div className="border-t border-dashed border-gray-300 my-1.5"></div>
                                 <div className="flex justify-between">
                                     <span>Total Paid:</span>
-                                    <span className="font-bold text-black">{currency} {Number(sale.layaway_payments.reduce((sum, p) => sum + Number(p.amount_paid), 0)).toLocaleString()}</span>
+                                    <span className="font-bold text-black">{currency} {Number(totalPaidAmount).toLocaleString()}</span>
                                 </div>
                                 <div className="flex justify-between">
                                     <span>Balance Due:</span>
-                                    <span className="font-bold text-black">{currency} {Number(sale.final_amount - sale.layaway_payments.reduce((sum, p) => sum + Number(p.amount_paid), 0)).toLocaleString()}</span>
+                                    <span className="font-bold text-black">{currency} {Number(balanceDueAmount).toLocaleString()}</span>
                                 </div>
                             </>
                         )}
@@ -766,18 +771,18 @@ export default function Receipt({ sale, settings }) {
                                 </div>
                             </>
                         )}
-                        {sale.payment_method === 'Layaway' && sale.layaway_payments && (
+                        {(sale.payment_method === 'Layaway' || sale.repair) && (
                             <>
                                 <div className="flex justify-between items-center text-slate-600">
                                     <span>Total Paid to Date</span>
                                     <span className="font-mono font-bold text-slate-900 text-xs">
-                                        {currency} {Number(sale.layaway_payments.reduce((sum, p) => sum + Number(p.amount_paid), 0)).toLocaleString()}
+                                        {currency} {Number(totalPaidAmount).toLocaleString()}
                                     </span>
                                 </div>
                                 <div className="flex justify-between items-center text-rose-600 font-bold border-t border-slate-100 pt-1">
                                     <span className="text-xs">Remaining Balance Due</span>
                                     <span className="font-mono text-sm font-black">
-                                        {currency} {Number(sale.final_amount - sale.layaway_payments.reduce((sum, p) => sum + Number(p.amount_paid), 0)).toLocaleString()}
+                                        {currency} {Number(balanceDueAmount).toLocaleString()}
                                     </span>
                                 </div>
                             </>

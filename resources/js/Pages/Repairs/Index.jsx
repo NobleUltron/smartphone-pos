@@ -5,7 +5,7 @@ import {
     Wrench, Plus, Search, Filter, Printer, 
     Smartphone, User, Clock, CheckCircle2, 
     Truck, XCircle, AlertCircle, Eye, Trash2,
-    DollarSign, Package, MessageSquare, FileSpreadsheet
+    DollarSign, Package, MessageSquare, FileSpreadsheet, Receipt
 } from 'lucide-react';
 import PageHeader from '@/Components/SaaS/PageHeader';
 import Button from '@/Components/SaaS/Button';
@@ -393,9 +393,18 @@ Thank you.`;
                                                             target="_blank" 
                                                             rel="noreferrer"
                                                             className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"
-                                                            title="Print Thermal Ticket"
+                                                            title="Print Intake Ticket (Claim Stub)"
                                                         >
                                                             <Printer size={17} />
+                                                        </a>
+                                                        <a 
+                                                            href={route('repairs.receipt', repair.id)} 
+                                                            target="_blank" 
+                                                            rel="noreferrer"
+                                                            className="p-2 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors"
+                                                            title="Print Official Sales Receipt / Tax Invoice"
+                                                        >
+                                                            <Receipt size={17} />
                                                         </a>
                                                         <button 
                                                             onClick={() => setViewRepair(repair)}
@@ -464,9 +473,18 @@ Thank you.`;
                                                 <a 
                                                     href={route('repairs.print', repair.id)} 
                                                     target="_blank" 
-                                                    className="p-1.5 text-slate-600 bg-slate-100 rounded-lg"
+                                                    className="p-1.5 text-slate-600 bg-slate-100 rounded-lg hover:text-rose-600 transition-colors"
+                                                    title="Print Intake Ticket"
                                                 >
                                                     <Printer size={14} />
+                                                </a>
+                                                <a 
+                                                    href={route('repairs.receipt', repair.id)} 
+                                                    target="_blank" 
+                                                    className="p-1.5 text-slate-600 bg-slate-100 rounded-lg hover:text-emerald-600 transition-colors"
+                                                    title="Print Sales Receipt / Invoice"
+                                                >
+                                                    <Receipt size={14} />
                                                 </a>
                                             </div>
                                         </div>
