@@ -64,8 +64,14 @@ class SupplierController extends Controller
             $query->orderBy('purchase_date', 'desc')->with('items.product.brand');
         }]);
 
+        $paymentAccounts = \App\Models\PaymentAccount::where('is_active', true)
+            ->orderBy('type')
+            ->orderBy('name')
+            ->get();
+
         return Inertia::render('Suppliers/Show', [
-            'supplier' => $supplier
+            'supplier' => $supplier,
+            'paymentAccounts' => $paymentAccounts,
         ]);
     }
 

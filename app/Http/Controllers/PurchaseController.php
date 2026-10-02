@@ -331,6 +331,7 @@ class PurchaseController extends Controller
 
         $validated = $request->validate([
             'amount' => 'required|numeric|min:1|max:' . $remaining,
+            'payment_account_id' => 'nullable|exists:payment_accounts,id',
             'payment_method' => 'nullable|string|max:255',
             'notes' => 'nullable|string',
         ], [
@@ -338,7 +339,17 @@ class PurchaseController extends Controller
             'amount.min' => 'Payment amount must be at least 1 UGX.',
         ]);
 
-        DB::transaction(function () use ($purchase, $validated) {
+        $account = !empty($validated['payment_account_id'])
+            ? \App\Models\PaymentAccount::find($validated['payment_account_id'])
+            : \App\Models\PaymentAccount::getForMethod($validated['payment_method'] ?? 'Cash');
+
+        if ($account && floatval($validated['amount']) > floatval($account->current_balance)) {
+            throw \Illuminate\Validation\ValidationException::withMessages([
+                'amount' => "Insufficient funds in {$account->name}! Available balance is " . number_format(max(0, $account->current_balance)) . " UGX."
+            ]);
+        }
+
+        DB::transaction(function () use ($purchase, $validated, $account) {
             $purchase->paid_amount += $validated['amount'];
             if ($purchase->paid_amount >= $purchase->total_amount) {
                 $purchase->payment_status = 'Paid';
@@ -348,9 +359,9 @@ class PurchaseController extends Controller
             $purchase->save();
             $purchase->supplier?->recalculateBalance();
 
-            // Record in Cash Drawer Expenses if open drawer exists and payment method is Cash
-            $paymentMethod = $validated['payment_method'] ?? 'Cash';
-            if (strtolower($paymentMethod) === 'cash') {
+            // Record in Cash Drawer Expenses if payment method / account is Cash Register
+            $isCash = ($account && $account->type === 'cash') || (strtolower($validated['payment_method'] ?? '') === 'cash');
+            if ($isCash) {
                 $activeDrawer = \App\Models\CashDrawer::where('user_id', auth()->id())
                     ->where('status', 'open')
                     ->first();
@@ -370,6 +381,7 @@ class PurchaseController extends Controller
 
                 \App\Models\Expense::create([
                     'cash_drawer_id' => $activeDrawer->id,
+                    'payment_account_id' => $account?->id,
                     'user_id' => auth()->id(),
                     'category' => 'Supplier Payment',
                     'amount' => $validated['amount'],
@@ -379,12 +391,14 @@ class PurchaseController extends Controller
             }
 
             // Sync with Treasury Service
+            $methodOrAccount = $account ?: ($validated['payment_method'] ?? 'Cash');
+            $accountName = $account ? $account->name : ($validated['payment_method'] ?? 'Cash');
             \App\Services\TreasuryService::recordOutflow(
-                $paymentMethod,
+                $methodOrAccount,
                 floatval($validated['amount']),
                 'Supplier Payment',
                 $purchase,
-                "Supplier Payment for Purchase #{$purchase->id} (" . ($purchase->supplier->name ?? 'Supplier') . ")",
+                "Supplier Payment for Purchase #{$purchase->id} (" . ($purchase->supplier->name ?? 'Supplier') . ") via {$accountName}",
                 $validated['notes'] ?? null,
                 auth()->id()
             );

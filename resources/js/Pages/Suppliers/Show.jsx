@@ -9,7 +9,7 @@ import { Package, Building2, Phone, Mail, MapPin, Receipt, DollarSign, Calendar,
 import toast from 'react-hot-toast';
 import Modal from '@/Components/Modal';
 
-export default function SuppliersShow({ auth, supplier }) {
+export default function SuppliersShow({ auth, supplier, paymentAccounts = [] }) {
     const { data, setData, put, processing } = useForm({
         name: supplier.name,
         contact_name: supplier.contact_name || '',
@@ -24,9 +24,13 @@ export default function SuppliersShow({ auth, supplier }) {
     const [isDeleting, setIsDeleting] = useState(false);
     const [paymentModalPurchase, setPaymentModalPurchase] = useState(null);
 
+    const defaultAccountId = paymentAccounts[0]?.id || '';
+    const defaultAccountName = paymentAccounts[0]?.name || 'Cash';
+
     const paymentForm = useForm({
         amount: '',
-        payment_method: 'Cash',
+        payment_account_id: defaultAccountId,
+        payment_method: defaultAccountName,
         notes: ''
     });
 
@@ -35,7 +39,8 @@ export default function SuppliersShow({ auth, supplier }) {
         setPaymentModalPurchase(purchase);
         paymentForm.setData({
             amount: remaining > 0 ? remaining : '',
-            payment_method: 'Cash',
+            payment_account_id: defaultAccountId,
+            payment_method: defaultAccountName,
             notes: ''
         });
     };
@@ -499,16 +504,47 @@ export default function SuppliersShow({ auth, supplier }) {
                                 </div>
 
                                 <div>
-                                    <label className="block text-sm font-semibold text-slate-700 mb-1">Payment Method</label>
-                                    <select 
-                                        className="saas-input w-full"
-                                        value={paymentForm.data.payment_method}
-                                        onChange={e => paymentForm.setData('payment_method', e.target.value)}
-                                    >
-                                        <option value="Cash">Cash (Deducted from Cash Drawer)</option>
-                                        <option value="Mobile Money">Mobile Money</option>
-                                        <option value="Bank Transfer">Bank Transfer</option>
-                                    </select>
+                                    <label className="block text-sm font-semibold text-slate-700 mb-1">
+                                        Pay From Account / Float *
+                                    </label>
+                                    {paymentAccounts && paymentAccounts.length > 0 ? (
+                                        <>
+                                            <select 
+                                                className="saas-input w-full font-medium"
+                                                value={paymentForm.data.payment_account_id}
+                                                onChange={e => {
+                                                    const accId = e.target.value;
+                                                    const selectedAcc = paymentAccounts.find(a => String(a.id) === String(accId));
+                                                    paymentForm.setData(prev => ({
+                                                        ...prev,
+                                                        payment_account_id: accId,
+                                                        payment_method: selectedAcc ? selectedAcc.name : 'Cash'
+                                                    }));
+                                                }}
+                                            >
+                                                {paymentAccounts.map(account => (
+                                                    <option key={account.id} value={account.id}>
+                                                        {account.name} ({account.provider || account.type}) — Bal: UGX {Number(account.current_balance || 0).toLocaleString()}
+                                                    </option>
+                                                ))}
+                                            </select>
+                                            {paymentAccounts.find(a => String(a.id) === String(paymentForm.data.payment_account_id)) && (
+                                                <p className="text-[11px] text-slate-500 mt-1 font-medium">
+                                                    Available funds in selected account: <span className="font-bold text-emerald-700">UGX {Number(paymentAccounts.find(a => String(a.id) === String(paymentForm.data.payment_account_id)).current_balance || 0).toLocaleString()}</span>
+                                                </p>
+                                            )}
+                                        </>
+                                    ) : (
+                                        <select 
+                                            className="saas-input w-full"
+                                            value={paymentForm.data.payment_method}
+                                            onChange={e => paymentForm.setData('payment_method', e.target.value)}
+                                        >
+                                            <option value="Cash">Cash (Cash Register / Drawer)</option>
+                                            <option value="Mobile Money">Mobile Money</option>
+                                            <option value="Bank Transfer">Bank Transfer</option>
+                                        </select>
+                                    )}
                                 </div>
 
                                 <div>
