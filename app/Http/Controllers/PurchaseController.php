@@ -26,6 +26,7 @@ class PurchaseController extends Controller
             'reference_no' => 'nullable|string|max:255',
             'total_amount' => 'required|numeric|min:0|max:9999999999',
             'paid_amount' => 'required|numeric|min:0|lte:total_amount|max:9999999999',
+            'payment_account_id' => 'nullable|exists:payment_accounts,id',
             'status' => 'required|in:Pending,Received',
             'purchase_date' => 'required|date',
             'items' => 'required|array|min:1',
@@ -72,10 +73,30 @@ class PurchaseController extends Controller
             }
         }
 
-        DB::transaction(function () use ($validated) {
+        // Validate and resolve payment account if paid_amount > 0
+        $paidAmount = floatval($validated['paid_amount'] ?? 0);
+        $paymentAccountId = $validated['payment_account_id'] ?? null;
+        $paymentAccount = null;
+
+        if ($paidAmount > 0) {
+            $paymentAccount = $paymentAccountId ? \App\Models\PaymentAccount::find($paymentAccountId) : null;
+            if (!$paymentAccount) {
+                $paymentAccount = \App\Models\PaymentAccount::where('name', 'Main Cash Register')->first()
+                    ?? \App\Models\PaymentAccount::where('type', 'cash')->first()
+                    ?? \App\Models\PaymentAccount::first();
+            }
+
+            if ($paymentAccount && $paidAmount > floatval($paymentAccount->current_balance)) {
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                    'paid_amount' => "Insufficient funds in {$paymentAccount->name}! Available balance is " . number_format(max(0, $paymentAccount->current_balance)) . " UGX."
+                ]);
+            }
+        }
+
+        DB::transaction(function () use ($validated, $paidAmount, $paymentAccount) {
             $payment_status = 'Unpaid';
-            if ($validated['paid_amount'] > 0) {
-                if ($validated['paid_amount'] >= $validated['total_amount']) {
+            if ($paidAmount > 0) {
+                if ($paidAmount >= $validated['total_amount']) {
                     $payment_status = 'Paid';
                 } else {
                     $payment_status = 'Partial';
@@ -140,16 +161,7 @@ class PurchaseController extends Controller
             }
 
             // Sync with Treasury Service if paid_amount > 0
-            $paidAmount = floatval($validated['paid_amount'] ?? 0);
-            $paymentAccountId = $request->input('payment_account_id');
-            if ($paidAmount > 0) {
-                $paymentAccount = $paymentAccountId ? \App\Models\PaymentAccount::find($paymentAccountId) : null;
-                if (!$paymentAccount) {
-                    $paymentAccount = \App\Models\PaymentAccount::where('name', 'Main Cash Register')->first()
-                        ?? \App\Models\PaymentAccount::where('type', 'cash')->first()
-                        ?? \App\Models\PaymentAccount::first();
-                }
-
+            if ($paidAmount > 0 && $paymentAccount) {
                 \App\Services\TreasuryService::recordOutflow(
                     $paymentAccount,
                     $paidAmount,
@@ -168,6 +180,7 @@ class PurchaseController extends Controller
                     if ($activeDrawer) {
                         \App\Models\Expense::create([
                             'cash_drawer_id' => $activeDrawer->id,
+                            'payment_account_id' => $paymentAccount->id,
                             'user_id' => auth()->id(),
                             'recorded_by' => auth()->id(),
                             'category' => 'Supplier Payment',
