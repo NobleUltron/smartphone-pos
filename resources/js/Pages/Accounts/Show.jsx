@@ -23,7 +23,8 @@ import {
     TrendingUp, 
     TrendingDown,
     X,
-    Calendar
+    Calendar,
+    Trash2
 } from 'lucide-react';
 import dayjs from 'dayjs';
 
@@ -80,6 +81,16 @@ export default function AccountShow({ account, allAccounts, transactions, trends
         editForm.put(route('accounts.update', account.id), {
             onSuccess: () => setShowEditModal(false)
         });
+    };
+
+    const handleDeleteAccount = () => {
+        if (confirm(`Are you sure you want to deactivate or remove "${account.name}"? If it has transaction history, it will be safely deactivated.`)) {
+            router.delete(route('accounts.destroy', account.id), {
+                onSuccess: () => {
+                    router.visit(route('accounts.index'));
+                }
+            });
+        }
     };
 
     const handleTransfer = (e) => {
@@ -179,6 +190,13 @@ export default function AccountShow({ account, allAccounts, transactions, trends
                             title="Edit Account Details"
                         >
                             <Edit2 size={16} />
+                        </button>
+                        <button
+                            onClick={handleDeleteAccount}
+                            className="p-2 text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-xl transition-colors"
+                            title="Deactivate / Delete Account"
+                        >
+                            <Trash2 size={16} />
                         </button>
                     </div>
                 </div>
@@ -295,7 +313,12 @@ export default function AccountShow({ account, allAccounts, transactions, trends
                             </thead>
                             <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-slate-700 dark:text-slate-300">
                                 {transactions.data.map(trx => {
-                                    const isInflow = trx.type === 'inflow' || trx.type === 'transfer_in';
+                                    const isPositiveAdjustment = trx.type === 'adjustment' && (
+                                        (trx.category && trx.category.toLowerCase().includes('positive')) ||
+                                        (trx.balance_after != null && trx.balance_before != null && Number(trx.balance_after) >= Number(trx.balance_before))
+                                    );
+                                    const isInflow = trx.type === 'inflow' || trx.type === 'transfer_in' || isPositiveAdjustment;
+                                    const isOutflow = trx.type === 'outflow' || trx.type === 'transfer_out' || (trx.type === 'adjustment' && !isPositiveAdjustment);
                                     return (
                                         <tr key={trx.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors">
                                             <td className="py-3 px-4 whitespace-nowrap font-medium text-slate-500 dark:text-slate-400">
@@ -303,9 +326,9 @@ export default function AccountShow({ account, allAccounts, transactions, trends
                                             </td>
                                             <td className="py-3 px-4 whitespace-nowrap">
                                                 <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold ${
-                                                    trx.type === 'inflow' 
+                                                    isInflow 
                                                         ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300'
-                                                        : (trx.type === 'outflow' 
+                                                        : (isOutflow 
                                                             ? 'bg-rose-100 text-rose-800 dark:bg-rose-950/60 dark:text-rose-300' 
                                                             : 'bg-indigo-100 text-indigo-800 dark:bg-indigo-950/60 dark:text-indigo-300')
                                                 }`}>
@@ -326,7 +349,7 @@ export default function AccountShow({ account, allAccounts, transactions, trends
                                                 {isInflow ? `+ UGX ${Number(trx.amount).toLocaleString()}` : '—'}
                                             </td>
                                             <td className="py-3 px-4 text-right font-black whitespace-nowrap text-rose-600 dark:text-rose-400">
-                                                {!isInflow ? `- UGX ${Number(trx.amount).toLocaleString()}` : '—'}
+                                                {isOutflow ? `- UGX ${Number(trx.amount).toLocaleString()}` : '—'}
                                             </td>
                                             <td className="py-3 px-4 text-right font-black whitespace-nowrap text-slate-900 dark:text-white">
                                                 UGX {Number(trx.balance_after).toLocaleString()}

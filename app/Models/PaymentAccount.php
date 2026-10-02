@@ -43,17 +43,47 @@ class PaymentAccount extends Model
     }
 
     /**
-     * Resolve default account for a given payment method string
+     * Resolve default account for a given payment method string, numeric ID, or instance
      */
-    public static function getForMethod(?string $method): ?self
+    public static function getForMethod($method): ?self
     {
         if (!$method) {
-            return self::where('type', 'cash')->first() ?? self::first();
+            return self::where('name', 'Main Cash Register')->first()
+                ?? self::where('type', 'cash')->first()
+                ?? self::first();
         }
 
-        $method = trim($method);
+        if ($method instanceof self) {
+            return $method;
+        }
 
-        if (stripos($method, 'Cash') !== false) {
+        // If numeric ID or string ID of existing account
+        if (is_numeric($method)) {
+            $found = self::find((int) $method);
+            if ($found) return $found;
+        }
+
+        $method = trim((string) $method);
+
+        // Check exact name match first
+        $exactName = self::whereRaw('LOWER(name) = ?', [strtolower($method)])->first();
+        if ($exactName) return $exactName;
+
+        if (stripos($method, 'Safe') !== false) {
+            return self::where('provider', 'Safe')
+                ->orWhere('name', 'like', '%Safe%')
+                ->first()
+                ?? self::firstOrCreate(['name' => 'Shop Safe (Master Cash)'], [
+                    'type' => 'cash',
+                    'provider' => 'Safe',
+                    'current_balance' => 0,
+                    'opening_balance' => 0,
+                    'is_active' => true,
+                    'description' => 'Secure store safe for daily cash banking drops and cashier floats'
+                ]);
+        }
+
+        if (stripos($method, 'Cash') !== false || stripos($method, 'Till') !== false) {
             return self::where('name', 'Main Cash Register')->first()
                 ?? self::where('provider', 'Cash')->first()
                 ?? self::where('type', 'cash')->first() 
@@ -65,7 +95,10 @@ class PaymentAccount extends Model
         }
 
         if (stripos($method, 'MTN') !== false || stripos($method, 'MoMo') !== false) {
-            return self::where('provider', 'MTN')->orWhere('name', 'like', '%MTN%')->first()
+            return self::where('provider', 'MTN')
+                ->orWhere(function ($q) {
+                    $q->where('name', 'like', '%MTN%')->orWhere('name', 'like', '%MoMo%');
+                })->first()
                 ?? self::firstOrCreate(['name' => 'MTN Mobile Money'], [
                     'type' => 'mobile_money',
                     'provider' => 'MTN',
@@ -74,7 +107,9 @@ class PaymentAccount extends Model
         }
 
         if (stripos($method, 'Airtel') !== false) {
-            return self::where('provider', 'Airtel')->orWhere('name', 'like', '%Airtel%')->first()
+            return self::where('provider', 'Airtel')
+                ->orWhere('name', 'like', '%Airtel%')
+                ->first()
                 ?? self::firstOrCreate(['name' => 'Airtel Money'], [
                     'type' => 'mobile_money',
                     'provider' => 'Airtel',
@@ -82,15 +117,22 @@ class PaymentAccount extends Model
                 ]);
         }
 
-        if (stripos($method, 'Bank') !== false || stripos($method, 'Transfer') !== false || stripos($method, 'Card') !== false) {
+        if (stripos($method, 'Flexi') !== false) {
+            $flexi = self::where('name', 'like', '%Flexi%')->first();
+            if ($flexi) return $flexi;
+        }
+
+        if (stripos($method, 'Bank') !== false || stripos($method, 'Transfer') !== false || stripos($method, 'Card') !== false || stripos($method, 'Stanbic') !== false) {
             return self::where('type', 'bank')->first()
                 ?? self::firstOrCreate(['name' => 'Primary Bank Account'], [
                     'type' => 'bank',
-                    'provider' => 'Bank',
+                    'provider' => 'Stanbic',
                     'is_active' => true
                 ]);
         }
 
-        return self::where('type', 'cash')->first() ?? self::first();
+        return self::where('name', 'Main Cash Register')->first()
+            ?? self::where('type', 'cash')->first()
+            ?? self::first();
     }
 }

@@ -61,8 +61,8 @@ class LayawayController extends Controller
             ->where('status', 'open')
             ->first();
 
-        if (!$activeDrawer) {
-            return redirect()->back()->withErrors(['error' => 'You must open a shift (Cash Drawer) before taking payments.']);
+        if ($request->payment_method === 'Cash' && !$activeDrawer) {
+            return redirect()->back()->withErrors(['error' => 'You must open a shift (Cash Drawer) before taking cash payments.']);
         }
 
         DB::beginTransaction();
@@ -70,7 +70,7 @@ class LayawayController extends Controller
         try {
             $payment = LayawayPayment::create([
                 'sale_id' => $sale->id,
-                'cash_drawer_id' => $activeDrawer->id,
+                'cash_drawer_id' => ($request->payment_method === 'Cash' && $activeDrawer) ? $activeDrawer->id : null,
                 'amount_paid' => $request->amount_paid,
                 'payment_method' => $request->payment_method,
                 'payment_date' => now(),

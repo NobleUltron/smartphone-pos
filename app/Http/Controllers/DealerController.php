@@ -969,8 +969,12 @@ class DealerController extends Controller
             }
 
             // Create Expense record for financial reporting
+            $isCash = ($validated['payment_method'] === 'Cash');
+            $payoutAccount = \App\Models\PaymentAccount::getForMethod($validated['payment_method']);
+
             $expense = \App\Models\Expense::create([
-                'cash_drawer_id' => $activeDrawer?->id,
+                'cash_drawer_id' => $isCash ? $activeDrawer?->id : null,
+                'payment_account_id' => $payoutAccount?->id,
                 'user_id' => $user->id,
                 'recorded_by' => $user->id,
                 'amount' => $validated['amount'],

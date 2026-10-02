@@ -121,16 +121,30 @@ class ExpenseController extends Controller
             ->where('status', 'open')
             ->first();
 
-        // Cashiers must have an open drawer; admins can log without one
-        if (!$isAdminOrManager && !$activeDrawer) {
-            return back()->withErrors(['drawer' => 'You must have an open shift to log an expense.']);
+        $paymentAccountId = $request->input('payment_account_id');
+        $selectedAccount = $paymentAccountId ? PaymentAccount::find($paymentAccountId) : null;
+        if (!$selectedAccount) {
+            $selectedAccount = TreasuryService::getTillAccount();
         }
 
-        if ($activeDrawer && $request->category !== 'Cash In') {
+        $isTill = ($selectedAccount->type === 'cash' && stripos($selectedAccount->name, 'Safe') === false);
+
+        // Cashiers must have an open drawer for till expenses; admins can log without one
+        if ($isTill && !$isAdminOrManager && !$activeDrawer) {
+            return back()->withErrors(['drawer' => 'You must have an open shift to log an expense from the cash till.']);
+        }
+
+        if ($isTill && $activeDrawer && $request->category !== 'Cash In') {
             $availableCash = $activeDrawer->calculateExpectedCash();
             if ($request->amount > $availableCash) {
                 return back()->withErrors([
                     'amount' => 'Insufficient cash in active drawer shift! Available cash is ' . number_format(max(0, $availableCash)) . ' UGX. Please add starting cash float or use Mobile Money / Bank Transfer.'
+                ]);
+            }
+        } elseif (!$isTill && $request->category !== 'Cash In') {
+            if ($selectedAccount->current_balance < floatval($request->amount)) {
+                return back()->withErrors([
+                    'amount' => "Insufficient balance in {$selectedAccount->name}! Available balance is UGX " . number_format($selectedAccount->current_balance) . "."
                 ]);
             }
         }
@@ -156,7 +170,7 @@ class ExpenseController extends Controller
         }
 
         $expense = Expense::create([
-            'cash_drawer_id' => $activeDrawer?->id,
+            'cash_drawer_id' => $isTill ? $activeDrawer?->id : null,
             'user_id'        => $user->id,
             'recorded_by'    => $user->id,
             'amount'         => $request->amount,
@@ -185,18 +199,18 @@ class ExpenseController extends Controller
                     'Cash In Float',
                     $expense,
                     $finalDescription ?: 'Drawer float addition',
-                    null,
+                    'EXP-' . $expense->id,
                     $user->id
                 );
             }
         } else {
             TreasuryService::recordOutflow(
-                'Cash',
+                $selectedAccount,
                 floatval($request->amount),
                 'Expense',
                 $expense,
                 "Expense: {$request->category}" . ($request->description ? " - {$request->description}" : ''),
-                null,
+                'EXP-' . $expense->id,
                 $user->id
             );
         }
@@ -217,12 +231,38 @@ class ExpenseController extends Controller
             'description' => 'nullable|string|max:500',
         ]);
 
+        $oldAmount = (float) $expense->amount;
+        $newAmount = (float) $request->amount;
+        $diff = $newAmount - $oldAmount;
+
         $expense->update([
-            'amount'      => $request->amount,
+            'amount'      => $newAmount,
             'category'    => $request->category,
             'description' => $request->description,
             'recorded_by' => $user->id,
         ]);
+
+        // Sync with AccountTransaction
+        $trx = AccountTransaction::where('reference_type', Expense::class)
+            ->where('reference_id', $expense->id)
+            ->first();
+
+        if ($trx) {
+            $account = $trx->account;
+            if ($account) {
+                if ($trx->type === 'inflow') {
+                    $account->increment('current_balance', $diff);
+                } elseif ($trx->type === 'outflow') {
+                    $account->decrement('current_balance', $diff);
+                }
+            }
+
+            $trx->update([
+                'amount' => $newAmount,
+                'category' => $request->category === 'Cash In' ? 'Cash In Float' : $request->category,
+                'description' => $request->description ?: "Expense: {$request->category}",
+            ]);
+        }
 
         return back()->with('success', 'Expense updated successfully.');
     }
@@ -240,6 +280,23 @@ class ExpenseController extends Controller
                 || in_array($expense->category, $systemCategories)) {
                 abort(403, 'You cannot delete this expense.');
             }
+        }
+
+        // Reverse linked AccountTransaction before deleting expense
+        $trx = AccountTransaction::where('reference_type', Expense::class)
+            ->where('reference_id', $expense->id)
+            ->first();
+
+        if ($trx) {
+            $account = $trx->account;
+            if ($account) {
+                if ($trx->type === 'inflow') {
+                    $account->decrement('current_balance', $trx->amount);
+                } elseif ($trx->type === 'outflow') {
+                    $account->increment('current_balance', $trx->amount);
+                }
+            }
+            $trx->delete();
         }
 
         $expense->delete();

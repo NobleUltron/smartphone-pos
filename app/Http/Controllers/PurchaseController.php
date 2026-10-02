@@ -138,6 +138,46 @@ class PurchaseController extends Controller
                 $supplier->balance += $balanceIncrease;
                 $supplier->save();
             }
+
+            // Sync with Treasury Service if paid_amount > 0
+            $paidAmount = floatval($validated['paid_amount'] ?? 0);
+            $paymentAccountId = $request->input('payment_account_id');
+            if ($paidAmount > 0) {
+                $paymentAccount = $paymentAccountId ? \App\Models\PaymentAccount::find($paymentAccountId) : null;
+                if (!$paymentAccount) {
+                    $paymentAccount = \App\Models\PaymentAccount::where('name', 'Main Cash Register')->first()
+                        ?? \App\Models\PaymentAccount::where('type', 'cash')->first()
+                        ?? \App\Models\PaymentAccount::first();
+                }
+
+                \App\Services\TreasuryService::recordOutflow(
+                    $paymentAccount,
+                    $paidAmount,
+                    'Supplier Purchase',
+                    $purchase,
+                    "Stock Purchase #{$purchase->id} (" . ($purchase->supplier->name ?? 'Supplier') . ")" . ($purchase->reference_no ? " - Ref: {$purchase->reference_no}" : ''),
+                    $purchase->reference_no,
+                    auth()->id()
+                );
+
+                // If paid from Cash Register and an active drawer is open, record in Expense for shift drawer balance
+                if ($paymentAccount->type === 'cash' && stripos($paymentAccount->name, 'Safe') === false) {
+                    $activeDrawer = \App\Models\CashDrawer::where('user_id', auth()->id())
+                        ->where('status', 'open')
+                        ->first();
+                    if ($activeDrawer) {
+                        \App\Models\Expense::create([
+                            'cash_drawer_id' => $activeDrawer->id,
+                            'user_id' => auth()->id(),
+                            'recorded_by' => auth()->id(),
+                            'category' => 'Supplier Payment',
+                            'amount' => $paidAmount,
+                            'description' => "Stock Purchase #{$purchase->id} (" . ($purchase->supplier->name ?? 'Supplier') . ")",
+                            'expense_date' => now(),
+                        ]);
+                    }
+                }
+            }
         });
 
         return redirect()->back();
@@ -148,10 +188,12 @@ class PurchaseController extends Controller
         $suppliers = Supplier::orderBy('name')->get();
         // Eager load brand so we can show proper names
         $products = Product::with('brand')->orderBy('model_name')->get();
+        $paymentAccounts = \App\Models\PaymentAccount::where('is_active', true)->get();
         
         return Inertia::render('Purchases/Create', [
             'suppliers' => $suppliers,
             'products' => $products,
+            'paymentAccounts' => $paymentAccounts,
             'selected_supplier_id' => $request->query('supplier_id'),
         ]);
     }
@@ -216,6 +258,22 @@ class PurchaseController extends Controller
                         $supplier->save();
                     }
                 }
+
+                // Reverse Treasury outflows and restore account balances
+                $trxs = \App\Models\AccountTransaction::where('reference_type', \App\Models\Purchase::class)
+                    ->where('reference_id', $purchase->id)
+                    ->get();
+                foreach ($trxs as $trx) {
+                    if ($trx->account) {
+                        $trx->account->increment('current_balance', $trx->amount);
+                    }
+                    $trx->delete();
+                }
+
+                // Reverse any linked shift expenses
+                \App\Models\Expense::where('category', 'Supplier Payment')
+                    ->where('description', 'like', "%Purchase #{$purchase->id}%")
+                    ->delete();
 
                 // Delete items and purchase
                 $purchase->items()->delete();

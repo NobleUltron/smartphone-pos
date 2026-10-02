@@ -373,6 +373,7 @@ Route::middleware('auth')->group(function () {
         Route::get('/accounts/{account}', [\App\Http\Controllers\AccountController::class, 'show'])->name('accounts.show');
         Route::put('/accounts/{account}', [\App\Http\Controllers\AccountController::class, 'update'])->name('accounts.update');
         Route::post('/accounts/{account}/reconcile', [\App\Http\Controllers\AccountController::class, 'reconcile'])->name('accounts.reconcile');
+        Route::delete('/accounts/{account}', [\App\Http\Controllers\AccountController::class, 'destroy'])->name('accounts.destroy');
         Route::get('/accounts/{account}/statement', [\App\Http\Controllers\AccountController::class, 'statement'])->name('accounts.statement');
     });
 

@@ -116,15 +116,29 @@ class AccountController extends Controller
 
         $allAccounts = PaymentAccount::where('id', '!=', $account->id)->where('is_active', true)->get();
 
-        // 30-day inflow vs outflow trends
-        $days = collect(range(0, 29))->map(function ($i) use ($account) {
+        // 30-day inflow vs outflow trends (optimized into 2 aggregate queries instead of 60 individual queries)
+        $thirtyDaysAgo = Carbon::today()->subDays(29)->startOfDay();
+
+        $inflowAggregates = $account->transactions()
+            ->where('transaction_date', '>=', $thirtyDaysAgo)
+            ->whereIn('type', ['inflow', 'transfer_in'])
+            ->selectRaw("DATE(transaction_date) as tx_date, SUM(amount) as total")
+            ->groupBy('tx_date')
+            ->pluck('total', 'tx_date');
+
+        $outflowAggregates = $account->transactions()
+            ->where('transaction_date', '>=', $thirtyDaysAgo)
+            ->whereIn('type', ['outflow', 'transfer_out'])
+            ->selectRaw("DATE(transaction_date) as tx_date, SUM(amount) as total")
+            ->groupBy('tx_date')
+            ->pluck('total', 'tx_date');
+
+        $days = collect(range(0, 29))->map(function ($i) use ($inflowAggregates, $outflowAggregates) {
             $date = Carbon::today()->subDays($i)->format('Y-m-d');
-            $inflows = (float) $account->transactions()->whereDate('transaction_date', $date)->whereIn('type', ['inflow', 'transfer_in'])->sum('amount');
-            $outflows = (float) $account->transactions()->whereDate('transaction_date', $date)->whereIn('type', ['outflow', 'transfer_out'])->sum('amount');
             return [
                 'date' => Carbon::parse($date)->format('d M'),
-                'inflows' => $inflows,
-                'outflows' => $outflows,
+                'inflows' => (float) ($inflowAggregates[$date] ?? 0),
+                'outflows' => (float) ($outflowAggregates[$date] ?? 0),
             ];
         })->reverse()->values();
 
@@ -284,5 +298,27 @@ class AccountController extends Controller
         }
 
         return $pdf->stream($filename);
+    }
+
+    public function destroy(PaymentAccount $account)
+    {
+        // Protected core accounts cannot be deleted
+        $protectedNames = ['Main Cash Register', 'Shop Safe (Master Cash)'];
+        if (in_array($account->name, $protectedNames)) {
+            return redirect()->back()->withErrors(['delete' => 'Cannot delete system-critical cash account.']);
+        }
+
+        if (abs($account->current_balance) > 0.01) {
+            return redirect()->back()->withErrors(['delete' => "Cannot delete account '{$account->name}' with a non-zero balance (UGX " . number_format($account->current_balance) . "). Transfer funds first or deactivate."]);
+        }
+
+        if ($account->transactions()->count() > 0) {
+            // Soft-deactivate if it has ledger history
+            $account->update(['is_active' => false]);
+            return redirect()->back()->with('success', "Account '{$account->name}' has been archived / deactivated.");
+        }
+
+        $account->delete();
+        return redirect()->route('accounts.index')->with('success', "Account '{$account->name}' deleted successfully.");
     }
 }

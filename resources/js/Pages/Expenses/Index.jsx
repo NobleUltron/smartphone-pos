@@ -44,7 +44,7 @@ export default function Index({ auth, expenses, summary, filters, cashiers, cate
     const [dateFilter, setDateFilter] = useState(filters?.date_filter || '');
 
     // Add form
-    const addForm = useForm({ amount: '', category: 'Shop Supplies', description: '', source_account_id: '' });
+    const addForm = useForm({ amount: '', category: 'Shop Supplies', description: '', source_account_id: '', payment_account_id: tillAccount?.id || '' });
     // Edit form
     const editForm = useForm({ amount: '', category: '', description: '' });
 
@@ -471,6 +471,27 @@ export default function Index({ auth, expenses, summary, filters, cashiers, cate
                                         ? 'Direct addition to Cash without deducting any account.'
                                         : `Transfers UGX ${Number(addForm.data.amount || 0).toLocaleString()} from ${accounts.find(a => String(a.id) === String(addForm.data.source_account_id))?.name || 'account'} to Main Cash Register.`}
                                 </p>
+                            </div>
+                        )}
+
+                        {/* Paid From Account Selector for Regular Expenses */}
+                        {addForm.data.category !== 'Cash In' && accounts.length > 0 && (
+                            <div className="space-y-1.5">
+                                <label className="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center justify-between">
+                                    <span>Paid From Account *</span>
+                                </label>
+                                <select
+                                    className="w-full border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm font-semibold bg-slate-50 focus:border-rose-400 focus:ring-rose-400"
+                                    value={addForm.data.payment_account_id || (tillAccount?.id || '')}
+                                    onChange={e => addForm.setData('payment_account_id', e.target.value)}
+                                >
+                                    {accounts.map(acc => (
+                                        <option key={acc.id} value={acc.id}>
+                                            {acc.name} ({acc.provider || acc.type}) — Bal: UGX {Number(acc.current_balance || 0).toLocaleString()}
+                                        </option>
+                                    ))}
+                                </select>
+                                {addForm.errors.payment_account_id && <p className="text-xs text-rose-500 font-bold">{addForm.errors.payment_account_id}</p>}
                             </div>
                         )}
 

@@ -106,7 +106,14 @@ class TreasuryService
     {
         self::ensureDefaultAccounts();
 
-        $cashAccount = PaymentAccount::where('type', 'cash')->first() ?? PaymentAccount::first();
+        // 0. Remove known duplicate dealer settlement backfill transactions created from Expense #4 & Expense #5
+        AccountTransaction::whereIn('id', [32, 33])
+            ->where('category', 'Dealer Settlement')
+            ->delete();
+
+        $cashAccount = PaymentAccount::where('name', 'Main Cash Register')->first()
+            ?? PaymentAccount::where('type', 'cash')->first()
+            ?? PaymentAccount::first();
 
         // 1. Backfill Paid POS Sales
         $sales = \App\Models\Sale::where('payment_status', 'Paid')
@@ -165,8 +172,10 @@ class TreasuryService
             }
         }
 
-        // 3. Backfill Expenses and Cash Ins
-        $expenses = \App\Models\Expense::where('amount', '>', 0)->get();
+        // 3. Backfill Expenses and Cash Ins (Excluding Dealer Settlements, Supplier Payments, and Refunds which have dedicated references)
+        $expenses = \App\Models\Expense::where('amount', '>', 0)
+            ->whereNotIn('category', ['Dealer Settlement', 'Supplier Payment', 'Refund', 'Refund (Past Shift)'])
+            ->get();
 
         foreach ($expenses as $expense) {
             $exists = AccountTransaction::where('reference_type', \App\Models\Expense::class)
@@ -192,7 +201,41 @@ class TreasuryService
             }
         }
 
-        // 4. Recalculate Chronological Running Balances for All Accounts
+        // 4. Backfill Repairs with Deposits or Final Deliveries not already captured via LayawayPayment
+        $repairs = \App\Models\Repair::where(function ($q) {
+            $q->where('deposit', '>', 0)->orWhere('status', 'Delivered');
+        })->get();
+
+        foreach ($repairs as $repair) {
+            $hasLayawayTrx = false;
+            if ($repair->sale) {
+                $hasLayawayTrx = AccountTransaction::where('reference_type', \App\Models\LayawayPayment::class)
+                    ->whereIn('reference_id', $repair->sale->layawayPayments()->pluck('id'))
+                    ->exists();
+            }
+
+            $hasDirectTrx = AccountTransaction::where('reference_type', \App\Models\Repair::class)
+                ->where('reference_id', $repair->id)
+                ->exists();
+
+            if (!$hasLayawayTrx && !$hasDirectTrx && $repair->deposit > 0) {
+                AccountTransaction::create([
+                    'payment_account_id' => $cashAccount->id,
+                    'type' => 'inflow',
+                    'amount' => $repair->deposit,
+                    'balance_after' => 0,
+                    'category' => 'Repair Deposit',
+                    'reference_type' => \App\Models\Repair::class,
+                    'reference_id' => $repair->id,
+                    'transaction_reference' => 'REP-' . $repair->id,
+                    'description' => "Repair Deposit for Ticket #{$repair->repair_code} ({$repair->device_model})",
+                    'user_id' => $repair->user_id,
+                    'transaction_date' => $repair->created_at ?? now(),
+                ]);
+            }
+        }
+
+        // 5. Recalculate Chronological Running Balances for All Accounts
         $accounts = PaymentAccount::all();
         foreach ($accounts as $account) {
             $transactions = AccountTransaction::where('payment_account_id', $account->id)
@@ -205,8 +248,17 @@ class TreasuryService
             foreach ($transactions as $trx) {
                 if (in_array($trx->type, ['inflow', 'transfer_in'])) {
                     $runningBalance += (float) $trx->amount;
-                } else {
+                } elseif (in_array($trx->type, ['outflow', 'transfer_out'])) {
                     $runningBalance -= (float) $trx->amount;
+                } elseif ($trx->type === 'adjustment') {
+                    $desc = strtolower($trx->description ?? '');
+                    if (str_contains($desc, 'positive')) {
+                        $runningBalance += (float) $trx->amount;
+                    } elseif (str_contains($desc, 'negative')) {
+                        $runningBalance -= (float) $trx->amount;
+                    } else {
+                        $runningBalance = (float) $trx->balance_after;
+                    }
                 }
 
                 $trx->update(['balance_after' => $runningBalance]);
@@ -215,7 +267,7 @@ class TreasuryService
             $account->update(['current_balance' => $runningBalance]);
         }
 
-        // 5. Synchronize Postgres Sequences safely if running on PostgreSQL
+        // 6. Synchronize Postgres Sequences safely if running on PostgreSQL
         if (DB::getDriverName() === 'pgsql') {
             $tables = ['payment_accounts', 'account_transactions', 'account_transfers'];
             foreach ($tables as $table) {
@@ -412,16 +464,16 @@ class TreasuryService
                 throw new Exception("Recorded system balance already matches actual balance.");
             }
 
-            $account->update(['current_balance' => $actualBalance]);
+            $isPositive = $variance > 0;
 
             return AccountTransaction::create([
                 'payment_account_id' => $account->id,
                 'type' => 'adjustment',
                 'amount' => abs($variance),
                 'balance_after' => $actualBalance,
-                'category' => 'Reconciliation Adjustment',
+                'category' => $isPositive ? 'Audit Adjustment (Positive)' : 'Audit Adjustment (Negative)',
                 'transaction_reference' => 'AUDIT-' . date('Ymd'),
-                'description' => ($variance > 0 ? "Positive" : "Negative") . " Audit Adjustment of UGX " . number_format(abs($variance)) . ($reason ? ": {$reason}" : ''),
+                'description' => ($isPositive ? "Positive" : "Negative") . " Audit Adjustment of UGX " . number_format(abs($variance)) . ($reason ? ": {$reason}" : ''),
                 'user_id' => $userId ?? auth()->id(),
                 'transaction_date' => now(),
             ]);

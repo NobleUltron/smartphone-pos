@@ -113,28 +113,25 @@ class RepairController extends Controller
             }
         }
 
-        if ($validated['deposit'] > 0) {
-            $activeDrawer = \App\Models\CashDrawer::where('user_id', auth()->id())
-                ->where('status', 'open')
-                ->first();
+        $depositMethod = $request->input('payment_method', 'Cash');
+        $activeDrawer = \App\Models\CashDrawer::where('user_id', auth()->id())
+            ->where('status', 'open')
+            ->first();
 
-            if (!$activeDrawer) {
-                return back()->withInput()->withErrors(['deposit' => 'You must open a shift (Cash Drawer) before collecting a deposit.']);
-            }
-        } else {
-            $activeDrawer = \App\Models\CashDrawer::where('user_id', auth()->id())->where('status', 'open')->first();
+        if ($validated['deposit'] > 0 && $depositMethod === 'Cash' && !$activeDrawer) {
+            return back()->withInput()->withErrors(['deposit' => 'You must open a shift (Cash Drawer) before collecting a cash deposit.']);
         }
 
         \Log::info('Creating repair with parts:', ['parts' => $parts]);
 
-        \Illuminate\Support\Facades\DB::transaction(function () use ($validated, $parts, $activeDrawer) {
+        \Illuminate\Support\Facades\DB::transaction(function () use ($validated, $parts, $activeDrawer, $depositMethod) {
             $repair = Repair::create($validated);
             \Log::info('Created repair ID: ' . $repair->id);
 
             // Create Initial Sale
             $sale = \App\Models\Sale::create([
                 'user_id' => auth()->id(),
-                'cash_drawer_id' => $activeDrawer ? $activeDrawer->id : null,
+                'cash_drawer_id' => ($depositMethod === 'Cash' && $activeDrawer) ? $activeDrawer->id : null,
                 'customer_id' => $repair->customer_id,
                 'repair_id' => $repair->id,
                 'total_amount' => $repair->estimated_cost,
@@ -145,21 +142,21 @@ class RepairController extends Controller
                 'payment_status' => 'Partial',
             ]);
 
-            if ($repair->deposit > 0 && $activeDrawer) {
+            if ($repair->deposit > 0) {
                 \App\Models\LayawayPayment::create([
                     'sale_id' => $sale->id,
-                    'cash_drawer_id' => $activeDrawer->id,
+                    'cash_drawer_id' => ($depositMethod === 'Cash' && $activeDrawer) ? $activeDrawer->id : null,
                     'amount_paid' => $repair->deposit,
-                    'payment_method' => 'Cash',
+                    'payment_method' => $depositMethod,
                     'payment_date' => now()
                 ]);
 
                 \App\Services\TreasuryService::recordInflow(
-                    'Cash',
+                    $depositMethod,
                     floatval($repair->deposit),
                     'Repair Deposit',
                     $repair,
-                    "Repair Deposit for Ticket #{$repair->id}",
+                    "Repair Deposit for Ticket #{$repair->id} ({$depositMethod})",
                     null,
                     auth()->id()
                 );
@@ -226,6 +223,16 @@ class RepairController extends Controller
                             'description' => "Deposit Refund for Cancelled Repair #{$repair->id}",
                             'recorded_by' => auth()->id(),
                         ]);
+
+                        \App\Services\TreasuryService::recordOutflow(
+                            'Cash',
+                            floatval($refundAmount),
+                            'Refund',
+                            $repair,
+                            "Deposit Refund for Cancelled Repair #{$repair->id}",
+                            null,
+                            auth()->id()
+                        );
                     }
                 }
 
@@ -262,18 +269,21 @@ class RepairController extends Controller
 
             // Handle finalizing sale if delivered
             if ($validated['status'] === 'Delivered' && $repair->status !== 'Delivered') {
-                if (!$activeDrawer) {
-                    return redirect()->back()->withErrors(['error' => 'You must have an open cash drawer to deliver a repair.']);
-                }
-
                 $validatedDelivery = $request->validate([
                     'payment_method' => 'required|in:Cash,Bank Transfer,MTN MoMo,Airtel Money,Layaway',
                 ]);
 
+                $deliveryMethod = $validatedDelivery['payment_method'];
+
                 if ($repair->sale) {
                     // Use actual payments sum for accurate balance — not the denormalized deposit field
                     $totalActuallyPaid = $repair->sale->layawayPayments()->sum('amount_paid');
-                    $balance = $repair->estimated_cost - $totalActuallyPaid;
+                    $balance = max(0, $repair->estimated_cost - $totalActuallyPaid);
+
+                    if ($balance > 0 && $deliveryMethod === 'Cash' && !$activeDrawer) {
+                        return redirect()->back()->withErrors(['error' => 'You must have an open cash drawer to collect cash payment upon delivery.']);
+                    }
+
                     $repair->sale->update([
                         'payment_status' => 'Paid',
                     ]);
@@ -281,18 +291,18 @@ class RepairController extends Controller
                     if ($balance > 0) {
                         \App\Models\LayawayPayment::create([
                             'sale_id' => $repair->sale->id,
-                            'cash_drawer_id' => $activeDrawer->id,
+                            'cash_drawer_id' => ($deliveryMethod === 'Cash' && $activeDrawer) ? $activeDrawer->id : null,
                             'amount_paid' => $balance,
-                            'payment_method' => $validatedDelivery['payment_method'],
+                            'payment_method' => $deliveryMethod,
                             'payment_date' => now()
                         ]);
 
                         \App\Services\TreasuryService::recordInflow(
-                            $validatedDelivery['payment_method'],
+                            $deliveryMethod,
                             floatval($balance),
                             'Repair Collection',
                             $repair,
-                            "Final Repair Payment for Ticket #{$repair->id}",
+                            "Final Repair Payment for Ticket #{$repair->id} ({$deliveryMethod})",
                             null,
                             auth()->id()
                         );
@@ -374,6 +384,16 @@ class RepairController extends Controller
                         'description' => "Deposit Refund for Deleted Repair #{$repair->id}",
                         'recorded_by' => auth()->id(),
                     ]);
+
+                    \App\Services\TreasuryService::recordOutflow(
+                        'Cash',
+                        floatval($refundAmount),
+                        'Refund',
+                        $repair,
+                        "Deposit Refund for Deleted Repair #{$repair->id}",
+                        null,
+                        auth()->id()
+                    );
                 }
             }
             

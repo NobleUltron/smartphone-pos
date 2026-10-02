@@ -8,12 +8,13 @@ import SearchableSelect from '@/Components/SaaS/SearchableSelect';
 import { Package, Plus, Trash2, Save, X, Search, AlertTriangle } from 'lucide-react';
 import toast from 'react-hot-toast';
 
-export default function PurchasesCreate({ auth, suppliers, products }) {
+export default function PurchasesCreate({ auth, suppliers, products, paymentAccounts = [] }) {
     const { data, setData, post, processing, errors } = useForm({
         supplier_id: '',
         reference_no: '',
         total_amount: '',
         paid_amount: '',
+        payment_account_id: paymentAccounts?.[0]?.id || '',
         status: 'Received',
         purchase_date: new Date().toISOString().split('T')[0],
         items: [] // { product_id, quantity, unit_cost, imeis: [] }
@@ -385,26 +386,48 @@ export default function PurchasesCreate({ auth, suppliers, products }) {
 
                     {/* Payment */}
                     <Card className="bg-emerald-50/50 border-emerald-100">
-                        <div className="flex justify-between items-center">
+                        <div className="flex flex-col md:flex-row md:justify-between md:items-center gap-4">
                             <div>
                                 <h3 className="font-bold text-emerald-900 mb-1">Payment Made</h3>
                                 <p className="text-sm text-emerald-700">How much are you paying the supplier upfront for this shipment?</p>
                             </div>
-                            <div className="w-64">
-                                <input 
-                                    type="number" 
-                                    className="saas-input w-full text-right font-bold text-xl py-3 text-emerald-900 border-emerald-200 focus:border-emerald-500 focus:ring-emerald-500"
-                                    placeholder="Amount in UGX"
-                                    required
-                                    min="0"
-                                    max={data.total_amount || 9999999999}
-                                    value={data.paid_amount}
-                                    onChange={e => setData('paid_amount', e.target.value)}
-                                />
-                                {errors.paid_amount && <div className="text-rose-500 text-xs mt-1 text-right">{errors.paid_amount}</div>}
+                            <div className="w-full md:w-80 space-y-2">
+                                <div className="relative">
+                                    <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-xs font-bold text-emerald-600">UGX</span>
+                                    <input 
+                                        type="number" 
+                                        className="saas-input w-full text-right font-bold text-xl py-2.5 pl-12 text-emerald-900 border-emerald-200 focus:border-emerald-500 focus:ring-emerald-500 rounded-xl"
+                                        placeholder="0"
+                                        min="0"
+                                        max={data.total_amount || 9999999999}
+                                        value={data.paid_amount}
+                                        onChange={e => setData('paid_amount', e.target.value)}
+                                    />
+                                </div>
+                                {errors.paid_amount && <div className="text-rose-500 text-xs text-right font-bold">{errors.paid_amount}</div>}
+
+                                {Number(data.paid_amount || 0) > 0 && paymentAccounts.length > 0 && (
+                                    <div className="pt-2 border-t border-emerald-200/60 animate-fade-in space-y-1">
+                                        <label className="block text-[11px] font-bold text-emerald-800 uppercase tracking-wider">
+                                            Pay From Account / Float:
+                                        </label>
+                                        <select
+                                            className="w-full bg-white border border-emerald-300 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 shadow-sm focus:border-emerald-500 focus:ring-emerald-500"
+                                            value={data.payment_account_id}
+                                            onChange={e => setData('payment_account_id', e.target.value)}
+                                        >
+                                            {paymentAccounts.map(acc => (
+                                                <option key={acc.id} value={acc.id}>
+                                                    {acc.name} ({acc.provider || acc.type}) — Bal: UGX {Number(acc.current_balance || 0).toLocaleString()}
+                                                </option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                )}
+
                                 {data.total_amount > 0 && (
-                                    <div className="text-[11px] text-slate-500 text-right mt-1 font-medium">
-                                        Max payable: <strong className="text-emerald-700">{Number(data.total_amount).toLocaleString()} UGX</strong>
+                                    <div className="text-[11px] text-slate-500 text-right font-medium">
+                                        Total shipment cost: <strong className="text-emerald-700">{Number(data.total_amount).toLocaleString()} UGX</strong>
                                     </div>
                                 )}
                             </div>
