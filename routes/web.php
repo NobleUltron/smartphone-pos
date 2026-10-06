@@ -246,6 +246,26 @@ Route::middleware('auth')->group(function () {
         
         Route::get('/layaways', [\App\Http\Controllers\LayawayController::class, 'index'])->name('layaways.index');
         Route::post('/layaways/{sale}/payments', [\App\Http\Controllers\LayawayController::class, 'storePayment'])->name('layaways.payments.store');
+
+        // B2B Quotations
+        Route::get('/quotations', [\App\Http\Controllers\QuotationController::class, 'index'])->name('quotations.index');
+        Route::get('/quotations/create', [\App\Http\Controllers\QuotationController::class, 'create'])->name('quotations.create');
+        Route::post('/quotations', [\App\Http\Controllers\QuotationController::class, 'store'])->name('quotations.store');
+        Route::get('/quotations/{quotation}', [\App\Http\Controllers\QuotationController::class, 'show'])->name('quotations.show');
+        Route::get('/quotations/{quotation}/edit', [\App\Http\Controllers\QuotationController::class, 'edit'])->name('quotations.edit');
+        Route::put('/quotations/{quotation}', [\App\Http\Controllers\QuotationController::class, 'update'])->name('quotations.update');
+        Route::delete('/quotations/{quotation}', [\App\Http\Controllers\QuotationController::class, 'destroy'])->name('quotations.destroy');
+        Route::post('/quotations/{quotation}/convert', [\App\Http\Controllers\QuotationController::class, 'convertToInvoice'])->name('quotations.convert');
+        Route::get('/quotations/{quotation}/pdf', [\App\Http\Controllers\QuotationController::class, 'printPdf'])->name('quotations.pdf');
+
+        // B2B Invoices & Credit Sales
+        Route::get('/invoices', [\App\Http\Controllers\InvoiceController::class, 'index'])->name('invoices.index');
+        Route::get('/invoices/create', [\App\Http\Controllers\InvoiceController::class, 'create'])->name('invoices.create');
+        Route::post('/invoices', [\App\Http\Controllers\InvoiceController::class, 'store'])->name('invoices.store');
+        Route::get('/invoices/{invoice}', [\App\Http\Controllers\InvoiceController::class, 'show'])->name('invoices.show');
+        Route::post('/invoices/{invoice}/payments', [\App\Http\Controllers\InvoiceController::class, 'recordPayment'])->name('invoices.payments.store');
+        Route::get('/invoices/{invoice}/pdf', [\App\Http\Controllers\InvoiceController::class, 'printPdf'])->name('invoices.pdf');
+        Route::get('/invoices/payments/{payment}/receipt-pdf', [\App\Http\Controllers\InvoiceController::class, 'printReceiptPdf'])->name('invoices.payments.receipt-pdf');
     });
 
     Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');

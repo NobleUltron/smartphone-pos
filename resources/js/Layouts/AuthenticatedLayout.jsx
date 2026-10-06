@@ -24,7 +24,9 @@ import {
     Handshake,
     Sun,
     Moon,
-    Landmark
+    Landmark,
+    FileSpreadsheet,
+    FileText
 } from 'lucide-react';
 import Dropdown from '@/Components/Dropdown';
 import { Toaster, toast } from 'react-hot-toast';
@@ -97,6 +99,8 @@ function LayoutInner({ children }) {
             title: 'INVENTORY & SALES',
             items: [
                 isAdminOrManager ? { name: 'Inventory', href: route('inventory.index'), icon: Smartphone, active: route().current('inventory.*') } : null,
+                !isTechnician ? { name: 'Quotations / Proforma', href: route('quotations.index'), icon: FileSpreadsheet, active: route().current('quotations.*') } : null,
+                !isTechnician ? { name: 'Invoices & Credit', href: route('invoices.index'), icon: FileText, active: route().current('invoices.*') } : null,
                 !isTechnician ? { name: 'Issued Receipts', href: route('receipts.index'), icon: Receipt, active: route().current('receipts.*') } : null,
                 !isTechnician ? { name: 'Layaways & Installments', href: route('layaways.index'), icon: Clock, active: route().current('layaways.*') } : null,
                 isAdminOrManager ? { name: 'Suppliers', href: route('suppliers.index'), icon: Package, active: route().current('suppliers.*') || route().current('purchases.*') } : null,

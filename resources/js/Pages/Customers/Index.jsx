@@ -15,7 +15,17 @@ export default function CustomersIndex({ auth, customers = {}, summary }) {
     const [showHistoryModal, setShowHistoryModal] = useState(false);
     const [isEditing, setIsEditing] = useState(false);
     
-    const [formData, setFormData] = useState({ id: null, name: '', phone: '', email: '', address: '' });
+    const [formData, setFormData] = useState({ 
+        id: null, 
+        name: '', 
+        company_name: '',
+        phone: '', 
+        email: '', 
+        tin_number: '',
+        credit_limit: '',
+        payment_terms_days: 30,
+        address: '' 
+    });
     const [loading, setLoading] = useState(false);
     
     const [selectedCustomer, setSelectedCustomer] = useState(null);
@@ -71,8 +81,12 @@ export default function CustomersIndex({ auth, customers = {}, summary }) {
         setFormData({
             id: customer.id,
             name: customer.name || '',
+            company_name: customer.company_name || '',
             phone: customer.phone || '',
             email: customer.email || '',
+            tin_number: customer.tin_number || '',
+            credit_limit: customer.credit_limit || '',
+            payment_terms_days: customer.payment_terms_days ?? 30,
             address: customer.address || ''
         });
         setIsEditing(true);
@@ -117,7 +131,17 @@ export default function CustomersIndex({ auth, customers = {}, summary }) {
                         icon={Plus} 
                         onClick={() => {
                             setIsEditing(false);
-                            setFormData({ id: null, name: '', phone: '', email: '', address: '' });
+                            setFormData({ 
+                                id: null, 
+                                name: '', 
+                                company_name: '',
+                                phone: '', 
+                                email: '', 
+                                tin_number: '',
+                                credit_limit: '',
+                                payment_terms_days: 30,
+                                address: '' 
+                            });
                             setShowEditModal(true);
                         }}
                     >
@@ -206,8 +230,18 @@ export default function CustomersIndex({ auth, customers = {}, summary }) {
                                                     className="w-10 h-10 rounded-full shadow-sm shrink-0" 
                                                 />
                                                 <div>
-                                                    <div className="font-semibold text-slate-900 dark:text-white">{customer.name}</div>
-                                                    <div className="text-xs text-slate-500">Joined {new Date(customer.created_at).toLocaleDateString()}</div>
+                                                    <div className="font-semibold text-slate-900 dark:text-white flex items-center gap-1.5 flex-wrap">
+                                                        <span>{customer.name}</span>
+                                                        {customer.company_name && (
+                                                            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
+                                                                {customer.company_name}
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                    <div className="text-xs text-slate-500">
+                                                        Joined {new Date(customer.created_at).toLocaleDateString()}
+                                                        {customer.tin_number && ` • TIN: ${customer.tin_number}`}
+                                                    </div>
                                                 </div>
                                             </div>
                                         </td>
@@ -312,7 +346,7 @@ export default function CustomersIndex({ auth, customers = {}, summary }) {
 
                     <form onSubmit={handleSubmit} className="space-y-4">
                         <div>
-                            <label className="block text-sm font-semibold text-slate-700 mb-1">Full Name</label>
+                            <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">Contact Person Name *</label>
                             <input
                                 type="text"
                                 className="saas-input w-full"
@@ -323,18 +357,41 @@ export default function CustomersIndex({ auth, customers = {}, summary }) {
                         </div>
 
                         <div>
-                            <label className="block text-sm font-semibold text-slate-700 mb-1">Phone Number</label>
+                            <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">Company / Organization (Optional)</label>
                             <input
                                 type="text"
+                                placeholder="e.g. MTN Uganda, Bank of Africa, SafeBoda"
                                 className="saas-input w-full"
-                                value={formData.phone}
-                                onChange={(e) => setFormData({...formData, phone: e.target.value})}
-                                required
+                                value={formData.company_name}
+                                onChange={(e) => setFormData({...formData, company_name: e.target.value})}
                             />
                         </div>
 
+                        <div className="grid grid-cols-2 gap-3">
+                            <div>
+                                <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">Phone Number *</label>
+                                <input
+                                    type="text"
+                                    className="saas-input w-full"
+                                    value={formData.phone}
+                                    onChange={(e) => setFormData({...formData, phone: e.target.value})}
+                                    required
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">TIN Number (Optional)</label>
+                                <input
+                                    type="text"
+                                    placeholder="URA 10-digit TIN"
+                                    className="saas-input w-full"
+                                    value={formData.tin_number}
+                                    onChange={(e) => setFormData({...formData, tin_number: e.target.value})}
+                                />
+                            </div>
+                        </div>
+
                         <div>
-                            <label className="block text-sm font-semibold text-slate-700 mb-1">Email Address (Optional)</label>
+                            <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">Email Address (Optional)</label>
                             <input
                                 type="email"
                                 className="saas-input w-full"
@@ -343,10 +400,38 @@ export default function CustomersIndex({ auth, customers = {}, summary }) {
                             />
                         </div>
 
+                        <div className="grid grid-cols-2 gap-3">
+                            <div>
+                                <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">Credit Limit (UGX)</label>
+                                <input
+                                    type="number"
+                                    min="0"
+                                    placeholder="e.g. 5000000"
+                                    className="saas-input w-full"
+                                    value={formData.credit_limit}
+                                    onChange={(e) => setFormData({...formData, credit_limit: e.target.value})}
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">Default Credit Terms</label>
+                                <select
+                                    className="saas-input w-full"
+                                    value={formData.payment_terms_days}
+                                    onChange={(e) => setFormData({...formData, payment_terms_days: e.target.value})}
+                                >
+                                    <option value="0">Immediate / Cash</option>
+                                    <option value="15">Net 15 Days</option>
+                                    <option value="30">Net 30 Days</option>
+                                    <option value="60">Net 60 Days</option>
+                                    <option value="90">Net 90 Days</option>
+                                </select>
+                            </div>
+                        </div>
+
                         <div>
-                            <label className="block text-sm font-semibold text-slate-700 mb-1">Address (Optional)</label>
+                            <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">Address (Optional)</label>
                             <textarea
-                                className="saas-input w-full min-h-[100px]"
+                                className="saas-input w-full min-h-[80px]"
                                 value={formData.address}
                                 onChange={(e) => setFormData({...formData, address: e.target.value})}
                             ></textarea>
