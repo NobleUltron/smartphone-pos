@@ -119,18 +119,18 @@ class AccountController extends Controller
         // 30-day inflow vs outflow trends (optimized into 2 aggregate queries instead of 60 individual queries)
         $thirtyDaysAgo = Carbon::today()->subDays(29)->startOfDay();
 
-        $inflowAggregates = $account->transactions()
+        $inflowAggregates = AccountTransaction::where('payment_account_id', $account->id)
             ->where('transaction_date', '>=', $thirtyDaysAgo)
             ->whereIn('type', ['inflow', 'transfer_in'])
             ->selectRaw("DATE(transaction_date) as tx_date, SUM(amount) as total")
-            ->groupBy('tx_date')
+            ->groupByRaw("DATE(transaction_date)")
             ->pluck('total', 'tx_date');
 
-        $outflowAggregates = $account->transactions()
+        $outflowAggregates = AccountTransaction::where('payment_account_id', $account->id)
             ->where('transaction_date', '>=', $thirtyDaysAgo)
             ->whereIn('type', ['outflow', 'transfer_out'])
             ->selectRaw("DATE(transaction_date) as tx_date, SUM(amount) as total")
-            ->groupBy('tx_date')
+            ->groupByRaw("DATE(transaction_date)")
             ->pluck('total', 'tx_date');
 
         $days = collect(range(0, 29))->map(function ($i) use ($inflowAggregates, $outflowAggregates) {
