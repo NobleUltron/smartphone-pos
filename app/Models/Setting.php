@@ -24,6 +24,41 @@ class Setting extends Model
         return static::$runtimeCache ?? [];
     }
 
+    public static function getAllAsKeyValue(): array
+    {
+        $settings = static::getAllSettings();
+
+        // Support both shop_* and store_* aliases seamlessly in PDF views
+        if (isset($settings['shop_name']) && !isset($settings['store_name'])) {
+            $settings['store_name'] = $settings['shop_name'];
+        }
+        if (isset($settings['shop_address']) && !isset($settings['store_address'])) {
+            $settings['store_address'] = $settings['shop_address'];
+        }
+        if (isset($settings['shop_phone']) && !isset($settings['store_phone'])) {
+            $settings['store_phone'] = $settings['shop_phone'];
+        }
+        if (isset($settings['shop_email']) && !isset($settings['store_email'])) {
+            $settings['store_email'] = $settings['shop_email'];
+        }
+
+        // Dynamically auto-fill bank and payment details from active treasury accounts if not manually specified
+        if (empty($settings['bank_name']) || empty($settings['bank_account_number'])) {
+            try {
+                $bankAccount = PaymentAccount::where('type', 'bank')->where('is_active', true)->first();
+                if ($bankAccount) {
+                    $settings['bank_name'] = $settings['bank_name'] ?? ($bankAccount->bank_name ?: $bankAccount->name);
+                    $settings['bank_account_number'] = $settings['bank_account_number'] ?? $bankAccount->account_number;
+                    $settings['bank_account_name'] = $settings['bank_account_name'] ?? ($bankAccount->account_name ?: ($settings['store_name'] ?? 'SmartPOS'));
+                }
+            } catch (\Throwable $e) {
+                // Ignore if payment_accounts table is not queried
+            }
+        }
+
+        return $settings;
+    }
+
     public static function get(string $key, $default = null)
     {
         $all = static::getAllSettings();
