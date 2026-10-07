@@ -38,6 +38,8 @@ export default function StoreSettings({ auth, settings, windowsPrinters = [] }) 
         shop_name: settings?.shop_name || 'SmartPOS Kampala',
         shop_address: settings?.shop_address || '123 Kampala Road, Kampala',
         shop_phone: settings?.shop_phone || '+256 700 000 000',
+        shop_email: settings?.shop_email || '',
+        tin_number: settings?.tin_number || '',
         currency_symbol: settings?.currency_symbol || 'UGX',
         receipt_footer: settings?.receipt_footer || 'Thank you for shopping with us!',
         store_logo: null,
@@ -252,6 +254,28 @@ export default function StoreSettings({ auth, settings, windowsPrinters = [] }) 
                                             className="saas-input" 
                                             value={data.shop_phone} 
                                             onChange={(e) => setData('shop_phone', e.target.value)} 
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="saas-label">Store Email (Quotations & Invoices)</label>
+                                        <input 
+                                            type="email" 
+                                            className="saas-input" 
+                                            placeholder="e.g. sales@ultrongadgets.com"
+                                            value={data.shop_email} 
+                                            onChange={(e) => setData('shop_email', e.target.value)} 
+                                        />
+                                    </div>
+                                </div>
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <div>
+                                        <label className="saas-label">Tax ID / URA TIN (Optional)</label>
+                                        <input 
+                                            type="text" 
+                                            className="saas-input" 
+                                            placeholder="e.g. 1000123456"
+                                            value={data.tin_number} 
+                                            onChange={(e) => setData('tin_number', e.target.value)} 
                                         />
                                     </div>
                                     <div>
@@ -856,6 +880,8 @@ export default function StoreSettings({ auth, settings, windowsPrinters = [] }) 
                                 <div className="text-xs leading-tight font-medium" style={{ color: '#475569' }}>
                                     <p>{data.shop_address || '123 Kampala Road'}</p>
                                     <p>Tel: {data.shop_phone || '+256 700 000 000'}</p>
+                                    {data.shop_email && <p>Email: {data.shop_email}</p>}
+                                    {data.tin_number && <p>TIN: {data.tin_number}</p>}
                                 </div>
                             </div>
 

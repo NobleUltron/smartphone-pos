@@ -221,8 +221,7 @@
                 <div class="store-title">{{ $settings['store_name'] ?? 'SMARTPHONE POS & SERVICE CENTER' }}</div>
                 <div class="store-sub">
                     {{ $settings['store_address'] ?? 'Plot 12 Kampala Road, Kampala, Uganda' }}<br>
-                    <strong>Tel:</strong> {{ $settings['store_phone'] ?? '+256 700 000 000' }} | 
-                    <strong>Email:</strong> {{ $settings['store_email'] ?? 'sales@smartpos.ug' }}<br>
+                    <strong>Tel:</strong> {{ $settings['store_phone'] ?? '+256 700 000 000' }}@if(!empty($settings['store_email']) || !empty($settings['shop_email'])) | <strong>Email:</strong> {{ $settings['store_email'] ?? $settings['shop_email'] }}@endif<br>
                     @if(!empty($settings['tin_number']))
                         <strong>TIN:</strong> {{ $settings['tin_number'] }}
                     @endif
