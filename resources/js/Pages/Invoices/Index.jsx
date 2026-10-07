@@ -209,7 +209,7 @@ export default function InvoicesIndex({ invoices, filters, metrics }) {
                                                 </div>
                                                 {inv.customer?.company_name && inv.customer?.name && (
                                                     <div className="text-[10px] text-slate-400">
-                                                        Attn: {inv.customer.name}
+                                                        Contact: {inv.customer.name}
                                                     </div>
                                                 )}
                                             </td>

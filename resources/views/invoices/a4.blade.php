@@ -258,7 +258,7 @@
                         {{ $invoice->customer->company_name ?: ($invoice->customer->name ?? 'Corporate Client') }}
                     </div>
                     @if($invoice->customer && $invoice->customer->company_name && $invoice->customer->name)
-                        <div style="font-weight: 600; color: #475569; font-size: 10px;">Attn: {{ $invoice->customer->name }}</div>
+                        <div style="font-weight: 600; color: #475569; font-size: 10px;">Contact Person: {{ $invoice->customer->name }}</div>
                     @endif
                     <div style="color: #475569; font-size: 10px; margin-top: 2px;">
                         @if($invoice->customer?->phone) Phone: {{ $invoice->customer->phone }}<br> @endif

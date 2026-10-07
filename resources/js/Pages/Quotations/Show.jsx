@@ -117,7 +117,7 @@ export default function QuotationsShow({ quotation }) {
                         </div>
                         {quotation.customer?.company_name && quotation.customer?.name && (
                             <div className="text-xs text-slate-600 dark:text-slate-400">
-                                Attn: <strong>{quotation.customer.name}</strong>
+                                Contact Person: <strong>{quotation.customer.name}</strong>
                             </div>
                         )}
                         <div className="text-xs text-slate-500 space-y-0.5 pt-1">

@@ -250,7 +250,7 @@
                         {{ $quotation->customer->company_name ?: ($quotation->customer->name ?? 'Valued Corporate Client') }}
                     </div>
                     @if($quotation->customer && $quotation->customer->company_name && $quotation->customer->name)
-                        <div style="font-weight: 600; color: #475569; font-size: 10px;">Attn: {{ $quotation->customer->name }}</div>
+                        <div style="font-weight: 600; color: #475569; font-size: 10px;">Contact Person: {{ $quotation->customer->name }}</div>
                     @endif
                     <div style="color: #475569; font-size: 10px; margin-top: 2px;">
                         @if($quotation->customer?->phone) Phone: {{ $quotation->customer->phone }}<br> @endif

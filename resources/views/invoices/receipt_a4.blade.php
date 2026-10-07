@@ -168,7 +168,7 @@
                         {{ $payment->invoice->customer->company_name ?: ($payment->invoice->customer->name ?? 'Valued Client') }}
                     </span>
                     @if($payment->invoice->customer && $payment->invoice->customer->company_name && $payment->invoice->customer->name)
-                        <div style="font-size: 10px; color: #64748b; font-weight: normal;">Attn: {{ $payment->invoice->customer->name }}</div>
+                        <div style="font-size: 10px; color: #64748b; font-weight: normal;">Contact Person: {{ $payment->invoice->customer->name }}</div>
                     @endif
                 </td>
             </tr>

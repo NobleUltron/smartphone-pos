@@ -209,7 +209,7 @@ export default function QuotationsIndex({ quotations, filters, metrics }) {
                                             </div>
                                             {q.customer?.company_name && q.customer?.name && (
                                                 <div className="text-[10px] text-slate-400">
-                                                    Attn: {q.customer.name}
+                                                    Contact: {q.customer.name}
                                                 </div>
                                             )}
                                         </td>
