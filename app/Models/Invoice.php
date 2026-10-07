@@ -40,6 +40,10 @@ class Invoice extends Model
         'paid_amount' => 'decimal:2',
     ];
 
+    protected $appends = [
+        'balance_due',
+    ];
+
     public function customer(): BelongsTo
     {
         return $this->belongsTo(Customer::class);

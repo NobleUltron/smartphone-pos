@@ -25,8 +25,12 @@ import dayjs from 'dayjs';
 export default function InvoicesShow({ invoice, paymentAccounts }) {
     const [showPaymentModal, setShowPaymentModal] = useState(false);
 
+    const balanceDue = (invoice.balance_due !== undefined && invoice.balance_due !== null)
+        ? Number(invoice.balance_due)
+        : Math.max(0, Number(invoice.total_amount || 0) - Number(invoice.paid_amount || 0));
+
     const paymentForm = useForm({
-        amount: invoice.balance_due > 0 ? invoice.balance_due : '',
+        amount: balanceDue > 0 ? balanceDue : '',
         payment_account_id: paymentAccounts?.[0]?.id || '',
         payment_method: 'Bank Transfer',
         transaction_reference: '',
@@ -121,7 +125,7 @@ export default function InvoicesShow({ invoice, paymentAccounts }) {
                         {!isPaid && (
                             <button
                                 onClick={() => {
-                                    paymentForm.setData('amount', invoice.balance_due);
+                                    paymentForm.setData('amount', balanceDue);
                                     setShowPaymentModal(true);
                                 }}
                                 className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 shadow-md shadow-emerald-600/20"
@@ -176,8 +180,8 @@ export default function InvoicesShow({ invoice, paymentAccounts }) {
                             </div>
                             <div className="flex justify-between items-center text-slate-700 dark:text-slate-300 pt-1 border-t border-slate-100 dark:border-slate-800">
                                 <span className="font-bold">Remaining Balance:</span>
-                                <span className={`font-mono font-black ${invoice.balance_due > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-emerald-600'}`}>
-                                    UGX {Number(invoice.balance_due).toLocaleString()}
+                                <span className={`font-mono font-black ${balanceDue > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-emerald-600'}`}>
+                                    UGX {balanceDue.toLocaleString()}
                                 </span>
                             </div>
                         </div>
@@ -201,20 +205,20 @@ export default function InvoicesShow({ invoice, paymentAccounts }) {
 
                     {/* Outstanding Balance Banner */}
                     <div className={`p-5 rounded-2xl shadow-md space-y-2 text-white flex flex-col justify-between ${
-                        invoice.balance_due > 0 
+                        balanceDue > 0 
                             ? 'bg-gradient-to-br from-slate-900 via-slate-800 to-indigo-950' 
                             : 'bg-gradient-to-br from-emerald-900 to-teal-950'
                     }`}>
                         <div>
                             <div className="text-[10px] font-bold uppercase tracking-wider text-slate-300">
-                                {invoice.balance_due > 0 ? 'Outstanding Due' : 'Invoice Settlement'}
+                                {balanceDue > 0 ? 'Outstanding Due' : 'Invoice Settlement'}
                             </div>
                             <div className="text-3xl font-black font-mono mt-1">
-                                {invoice.balance_due > 0 ? `UGX ${Number(invoice.balance_due).toLocaleString()}` : 'Fully Paid'}
+                                {balanceDue > 0 ? `UGX ${balanceDue.toLocaleString()}` : 'Fully Paid'}
                             </div>
                         </div>
                         <div className="text-xs text-slate-300/80">
-                            {invoice.balance_due > 0 ? (
+                            {balanceDue > 0 ? (
                                 <span>Payment terms: <strong>{invoice.payment_terms}</strong> due by {dayjs(invoice.due_date).format('DD MMM YYYY')}.</span>
                             ) : (
                                 <span>All payments have been settled and credited to Treasury accounts.</span>
@@ -301,7 +305,7 @@ export default function InvoicesShow({ invoice, paymentAccounts }) {
                         {!isPaid && (
                             <button
                                 onClick={() => {
-                                    paymentForm.setData('amount', invoice.balance_due);
+                                    paymentForm.setData('amount', balanceDue);
                                     setShowPaymentModal(true);
                                 }}
                                 className="px-3 py-1.5 bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-400 hover:bg-emerald-100 rounded-lg text-xs font-bold transition-all flex items-center gap-1"
@@ -425,7 +429,7 @@ export default function InvoicesShow({ invoice, paymentAccounts }) {
                     <div className="p-3 bg-slate-50 dark:bg-slate-800/40 rounded-xl flex justify-between items-center text-xs">
                         <span className="text-slate-500 font-medium">Outstanding Balance:</span>
                         <span className="font-mono font-bold text-amber-600 dark:text-amber-400">
-                            UGX {Number(invoice.balance_due).toLocaleString()}
+                            UGX {balanceDue.toLocaleString()}
                         </span>
                     </div>
 
@@ -438,7 +442,7 @@ export default function InvoicesShow({ invoice, paymentAccounts }) {
                             <input
                                 type="number"
                                 min="1"
-                                max={invoice.balance_due}
+                                max={balanceDue}
                                 value={paymentForm.data.amount}
                                 onChange={(e) => paymentForm.setData('amount', e.target.value)}
                                 className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-mono font-bold focus:ring-2 focus:ring-emerald-500"
