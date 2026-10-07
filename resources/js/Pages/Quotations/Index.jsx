@@ -13,7 +13,8 @@ import {
     Building2,
     DollarSign,
     Download,
-    Eye
+    Eye,
+    Trash2
 } from 'lucide-react';
 import dayjs from 'dayjs';
 
@@ -30,6 +31,12 @@ export default function QuotationsIndex({ quotations, filters, metrics }) {
             preserveState: true,
             replace: true
         });
+    };
+
+    const handleDelete = (quote) => {
+        if (confirm(`Are you sure you want to delete Quotation #${quote.quotation_number}? This cannot be undone.`)) {
+            router.delete(route('quotations.destroy', quote.id));
+        }
     };
 
     const getStatusBadge = (st) => {
@@ -247,6 +254,16 @@ export default function QuotationsIndex({ quotations, filters, metrics }) {
                                                 >
                                                     <Download size={15} />
                                                 </a>
+                                                {q.status !== 'Converted' && (
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => handleDelete(q)}
+                                                        className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-lg transition-colors"
+                                                        title="Delete Quotation"
+                                                    >
+                                                        <Trash2 size={15} />
+                                                    </button>
+                                                )}
                                             </div>
                                         </td>
                                     </tr>

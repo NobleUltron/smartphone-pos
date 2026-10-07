@@ -253,12 +253,18 @@ class QuotationController extends Controller
 
     public function destroy(Quotation $quotation)
     {
-        if ($quotation->status === 'Converted') {
-            return redirect()->back()->withErrors(['error' => 'Converted quotations cannot be deleted.']);
+        if ($quotation->status === 'Converted' || $quotation->invoice()->exists()) {
+            return redirect()->back()->withErrors(['error' => 'Converted quotations cannot be deleted as they are linked to an official Tax Invoice.']);
         }
 
-        $quotation->delete();
-        return redirect()->route('quotations.index')->with('success', 'Quotation deleted successfully.');
+        $quoteNumber = $quotation->quotation_number;
+
+        DB::transaction(function () use ($quotation) {
+            $quotation->items()->delete();
+            $quotation->delete();
+        });
+
+        return redirect()->route('quotations.index')->with('success', "Quotation #{$quoteNumber} deleted successfully.");
     }
 
     public function convertToInvoice(Request $request, Quotation $quotation)
