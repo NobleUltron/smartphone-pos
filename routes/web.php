@@ -395,21 +395,22 @@ Route::middleware('auth')->group(function () {
         Route::post('/accounts/{account}/reconcile', [\App\Http\Controllers\AccountController::class, 'reconcile'])->name('accounts.reconcile');
         Route::delete('/accounts/{account}', [\App\Http\Controllers\AccountController::class, 'destroy'])->name('accounts.destroy');
         Route::get('/accounts/{account}/statement', [\App\Http\Controllers\AccountController::class, 'statement'])->name('accounts.statement');
+
+        // Store & Thermal Printing Settings
+        Route::get('/settings', [SettingController::class, 'index'])->name('settings.index');
+        Route::post('/api/settings', [SettingController::class, 'store']);
     });
 
-        // Admin Only Routes (Staff & Store Settings)
-        Route::middleware(['role:admin'])->group(function () {
-            Route::get('/settings', [SettingController::class, 'index'])->name('settings.index');
-            Route::post('/api/settings', [SettingController::class, 'store']);
-
-            Route::get('/users', [UserController::class, 'index'])->name('users.index');
-            Route::post('/api/users', [UserController::class, 'store']);
-            Route::put('/api/users/{user}', [UserController::class, 'update']);
-            Route::delete('/api/users/{user}', [UserController::class, 'destroy']);
-            Route::post('/api/users/{user}/suspend', [UserController::class, 'suspend']);
-            Route::post('/api/users/{user}/reactivate', [UserController::class, 'reactivate']);
-            Route::post('/api/users/{user}/reset-password', [UserController::class, 'resetPassword']);
-        });
+    // Admin Only Routes (Staff Management)
+    Route::middleware(['role:admin'])->group(function () {
+        Route::get('/users', [UserController::class, 'index'])->name('users.index');
+        Route::post('/api/users', [UserController::class, 'store']);
+        Route::put('/api/users/{user}', [UserController::class, 'update']);
+        Route::delete('/api/users/{user}', [UserController::class, 'destroy']);
+        Route::post('/api/users/{user}/suspend', [UserController::class, 'suspend']);
+        Route::post('/api/users/{user}/reactivate', [UserController::class, 'reactivate']);
+        Route::post('/api/users/{user}/reset-password', [UserController::class, 'resetPassword']);
+    });
 
         // Sales History
         Route::get('/sales', [SaleController::class, 'index'])->name('sales.index');

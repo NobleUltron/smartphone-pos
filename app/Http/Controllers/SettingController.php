@@ -8,10 +8,11 @@ use Inertia\Inertia;
 
 class SettingController extends Controller
 {
-    private function authorizeAdmin()
+    private function authorizeAdminOrManager()
     {
-        if (strtolower(auth()->user()->role ?? '') !== 'admin') {
-            abort(403, 'Unauthorized action. Only store administrators can modify store settings.');
+        $role = strtolower(auth()->user()->role ?? '');
+        if (!in_array($role, ['admin', 'manager'])) {
+            abort(403, 'Unauthorized action. Only store administrators and managers can access store settings.');
         }
     }
 
@@ -50,7 +51,7 @@ class SettingController extends Controller
 
     public function index()
     {
-        $this->authorizeAdmin();
+        $this->authorizeAdminOrManager();
 
         $isWindows = strtoupper(substr(PHP_OS, 0, 3)) === 'WIN';
         $defaultPrintMode = $isWindows ? 'spooler' : 'browser';
@@ -118,7 +119,7 @@ class SettingController extends Controller
 
     public function updateSettings(Request $request)
     {
-        $this->authorizeAdmin();
+        $this->authorizeAdminOrManager();
 
         $validated = $request->validate([
             'shop_name' => 'required|string|max:255',
