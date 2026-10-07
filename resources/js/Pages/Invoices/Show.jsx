@@ -235,7 +235,6 @@ export default function InvoicesShow({ invoice, paymentAccounts }) {
                                 <tr className="border-b border-slate-200 dark:border-slate-800 text-slate-500 font-bold uppercase text-[10px] bg-slate-50/50 dark:bg-slate-800/30">
                                     <th className="py-3 px-4">#</th>
                                     <th className="py-3 px-4">Item / Description</th>
-                                    <th className="py-3 px-4 text-center">Type</th>
                                     <th className="py-3 px-4 text-center">Qty</th>
                                     <th className="py-3 px-4 text-right">Unit Price</th>
                                     <th className="py-3 px-4 text-right">Total</th>
@@ -246,21 +245,19 @@ export default function InvoicesShow({ invoice, paymentAccounts }) {
                                     <tr key={it.id}>
                                         <td className="py-3 px-4 text-slate-400 font-bold">{idx + 1}</td>
                                         <td className="py-3 px-4">
-                                            <div className="font-bold text-slate-900 dark:text-white">{it.item_name}</div>
+                                            <div className="flex items-center gap-2">
+                                                <span className="font-bold text-slate-900 dark:text-white">{it.item_name}</span>
+                                                {it.type === 'service' && (
+                                                    <span className="px-1.5 py-0.5 rounded text-[9px] font-bold uppercase bg-purple-50 text-purple-700 dark:bg-purple-950/60 dark:text-purple-400">
+                                                        Service
+                                                    </span>
+                                                )}
+                                            </div>
                                             {it.description && <div className="text-[11px] text-slate-500 mt-0.5">{it.description}</div>}
                                         </td>
-                                        <td className="py-3 px-4 text-center">
-                                            <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
-                                                it.type === 'service' 
-                                                    ? 'bg-purple-50 text-purple-700 dark:bg-purple-950/60 dark:text-purple-400' 
-                                                    : 'bg-blue-50 text-blue-700 dark:bg-blue-950/60 dark:text-blue-400'
-                                            }`}>
-                                                {it.type}
-                                            </span>
-                                        </td>
                                         <td className="py-3 px-4 text-center font-bold">{it.quantity}</td>
-                                        <td className="py-3 px-4 text-right font-mono font-semibold">UGX {Number(it.unit_price).toLocaleString()}</td>
-                                        <td className="py-3 px-4 text-right font-mono font-bold text-slate-900 dark:text-white">UGX {Number(it.total_price).toLocaleString()}</td>
+                                        <td className="py-3 px-4 text-right font-mono font-semibold whitespace-nowrap">UGX {Number(it.unit_price).toLocaleString()}</td>
+                                        <td className="py-3 px-4 text-right font-mono font-bold text-slate-900 dark:text-white whitespace-nowrap">UGX {Number(it.total_price).toLocaleString()}</td>
                                     </tr>
                                 ))}
                             </tbody>

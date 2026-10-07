@@ -130,6 +130,16 @@
         .items-table tr:nth-child(even) td {
             background: #f8fafc;
         }
+        .tag-service {
+            display: inline-block;
+            background: #dbeafe;
+            color: #1e40af;
+            font-size: 8px;
+            font-weight: bold;
+            padding: 1px 5px;
+            border-radius: 3px;
+            text-transform: uppercase;
+        }
         .totals-table {
             width: 100%;
             border-collapse: collapse;
@@ -140,8 +150,7 @@
             vertical-align: top;
         }
         .totals-box {
-            width: 50%;
-            margin-left: auto;
+            width: 100%;
             border-collapse: collapse;
         }
         .totals-box td {
@@ -152,27 +161,50 @@
             text-align: right;
             color: #64748b;
             font-weight: 600;
+            white-space: nowrap;
+            padding-right: 12px;
         }
         .totals-box .value {
             text-align: right;
             font-weight: bold;
             color: #0f172a;
+            white-space: nowrap;
         }
-        .totals-box .grand-total {
+        .totals-box .grand-total td {
             background: #f1f5f9;
             border-top: 2px solid #0f172a;
             border-bottom: 1px solid #cbd5e1;
+            padding: 6px 8px;
+        }
+        .totals-box .grand-total .label {
+            font-size: 11.5px;
+            font-weight: 900;
+            color: #0f172a;
+            white-space: nowrap;
+        }
+        .totals-box .grand-total .value {
             font-size: 12px;
             font-weight: 900;
             color: #0f172a;
+            white-space: nowrap;
         }
-        .totals-box .balance-row {
+        .totals-box .balance-row td {
             background: #fff1f2;
             border-top: 1px solid #fecdd3;
             border-bottom: 2px solid #e11d48;
-            font-size: 13px;
+            padding: 7px 8px;
+        }
+        .totals-box .balance-row .label {
+            font-size: 12px;
             font-weight: 900;
             color: #be123c;
+            white-space: nowrap;
+        }
+        .totals-box .balance-row .value {
+            font-size: 13.5px;
+            font-weight: 900;
+            color: #be123c;
+            white-space: nowrap;
         }
         .terms-section {
             background: #f8fafc;
@@ -287,11 +319,10 @@
         <thead>
             <tr>
                 <th style="width: 5%;" class="text-center">#</th>
-                <th style="width: 50%;">Description / Item Specification</th>
-                <th style="width: 10%;" class="text-center">Type</th>
+                <th style="width: 55%;">Description / Item Specification</th>
                 <th style="width: 10%;" class="text-center">Qty</th>
-                <th style="width: 12%;" class="text-right">Unit Price ({{ $settings['currency_symbol'] ?? 'UGX' }})</th>
-                <th style="width: 13%;" class="text-right">Total ({{ $settings['currency_symbol'] ?? 'UGX' }})</th>
+                <th style="width: 15%;" class="text-right">Unit Price ({{ $settings['currency_symbol'] ?? 'UGX' }})</th>
+                <th style="width: 15%;" class="text-right">Total ({{ $settings['currency_symbol'] ?? 'UGX' }})</th>
             </tr>
         </thead>
         <tbody>
@@ -300,18 +331,16 @@
                     <td class="text-center" style="color: #64748b; font-weight: bold;">{{ $index + 1 }}</td>
                     <td>
                         <strong style="color: #0f172a;">{{ $item->item_name }}</strong>
+                        @if($item->type === 'service')
+                            <span class="tag-service" style="margin-left: 5px;">SERVICE</span>
+                        @endif
                         @if($item->description)
-                            <div style="color: #64748b; font-size: 9.5px; margin-top: 1px;">{!! nl2br(e($item->description)) !!}</div>
+                            <div style="color: #64748b; font-size: 9.5px; margin-top: 2px;">{!! nl2br(e($item->description)) !!}</div>
                         @endif
                     </td>
-                    <td class="text-center">
-                        <span style="font-size: 9px; text-transform: uppercase; font-weight: bold; color: #475569;">
-                            {{ $item->type }}
-                        </span>
-                    </td>
                     <td class="text-center" style="font-weight: bold;">{{ $item->quantity }}</td>
-                    <td class="text-right font-mono">{{ number_format($item->unit_price) }}</td>
-                    <td class="text-right font-mono" style="font-weight: bold;">{{ number_format($item->total_price) }}</td>
+                    <td class="text-right font-mono" style="white-space: nowrap;">{{ number_format($item->unit_price) }}</td>
+                    <td class="text-right font-mono" style="font-weight: bold; white-space: nowrap;">{{ number_format($item->total_price) }}</td>
                 </tr>
             @endforeach
         </tbody>
@@ -320,11 +349,11 @@
     <!-- Totals Table -->
     <table class="totals-table">
         <tr>
-            <td style="width: 50%; padding-right: 15px;">
+            <td style="width: 50%; padding-right: 20px;">
                 @if($invoice->notes)
-                    <div style="background: #f8fafc; border: 1px dashed #cbd5e1; border-radius: 6px; padding: 8px; font-size: 9.5px;">
+                    <div style="background: #f8fafc; border: 1px dashed #cbd5e1; border-radius: 6px; padding: 10px; font-size: 9.5px;">
                         <strong style="color: #334155;">Notes / Reference:</strong>
-                        <div style="color: #64748b; margin-top: 2px;">{!! nl2br(e($invoice->notes)) !!}</div>
+                        <div style="color: #64748b; margin-top: 3px; line-height: 1.4;">{!! nl2br(e($invoice->notes)) !!}</div>
                     </div>
                 @endif
             </td>
@@ -355,8 +384,8 @@
                         <td class="value font-mono" style="color: #15803d;">-{{ number_format($invoice->paid_amount) }} {{ $settings['currency_symbol'] ?? 'UGX' }}</td>
                     </tr>
                     <tr class="balance-row">
-                        <td class="label" style="color: #be123c; font-size: 11.5px; font-weight: 900;">BALANCE DUE:</td>
-                        <td class="value font-mono" style="color: #be123c; font-size: 13px;">{{ number_format($invoice->balance_due) }} {{ $settings['currency_symbol'] ?? 'UGX' }}</td>
+                        <td class="label">BALANCE DUE:</td>
+                        <td class="value font-mono">{{ number_format($invoice->balance_due) }} {{ $settings['currency_symbol'] ?? 'UGX' }}</td>
                     </tr>
                 </table>
             </td>

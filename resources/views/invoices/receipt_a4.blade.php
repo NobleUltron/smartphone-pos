@@ -222,20 +222,20 @@
         <!-- Invoice Balance Summary -->
         <table style="width: 100%; border-collapse: collapse; margin-top: 15px; font-size: 10.5px;">
             <tr>
-                <td style="padding: 4px 0; color: #64748b;">Total Invoice Amount:</td>
-                <td style="padding: 4px 0; text-align: right; font-weight: bold; font-family: monospace;">
+                <td style="padding: 4px 0; color: #64748b; white-space: nowrap;">Total Invoice Amount:</td>
+                <td style="padding: 4px 0; text-align: right; font-weight: bold; font-family: monospace; white-space: nowrap;">
                     {{ $settings['currency_symbol'] ?? 'UGX' }} {{ number_format($payment->invoice->total_amount) }}
                 </td>
             </tr>
             <tr>
-                <td style="padding: 4px 0; color: #64748b;">Total Paid to Date:</td>
-                <td style="padding: 4px 0; text-align: right; font-weight: bold; color: #15803d; font-family: monospace;">
+                <td style="padding: 4px 0; color: #64748b; white-space: nowrap;">Total Paid to Date:</td>
+                <td style="padding: 4px 0; text-align: right; font-weight: bold; color: #15803d; font-family: monospace; white-space: nowrap;">
                     {{ $settings['currency_symbol'] ?? 'UGX' }} {{ number_format($payment->invoice->paid_amount) }}
                 </td>
             </tr>
             <tr style="border-top: 1px solid #cbd5e1; font-weight: 800;">
-                <td style="padding: 6px 0; color: #0f172a;">Remaining Balance on Invoice:</td>
-                <td style="padding: 6px 0; text-align: right; color: {{ $payment->invoice->balance_due > 0 ? '#b91c1c' : '#15803d' }}; font-family: monospace; font-size: 12px;">
+                <td style="padding: 6px 0; color: #0f172a; white-space: nowrap;">Remaining Balance on Invoice:</td>
+                <td style="padding: 6px 0; text-align: right; color: {{ $payment->invoice->balance_due > 0 ? '#b91c1c' : '#15803d' }}; font-family: monospace; font-size: 12px; white-space: nowrap;">
                     {{ $settings['currency_symbol'] ?? 'UGX' }} {{ number_format($payment->invoice->balance_due) }}
                 </td>
             </tr>
