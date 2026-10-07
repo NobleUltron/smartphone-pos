@@ -94,22 +94,24 @@
         .items-table th {
             background: #0f172a;
             color: #ffffff;
-            font-size: 10px;
+            font-size: 9.5px;
             font-weight: 700;
             text-transform: uppercase;
-            letter-spacing: 0.5px;
-            padding: 8px 10px;
+            letter-spacing: 0.3px;
+            padding: 7px 8px;
             border: 1px solid #0f172a;
             text-align: left;
+            white-space: nowrap;
         }
         .items-table th.text-right, .items-table td.text-right {
             text-align: right;
+            white-space: nowrap;
         }
         .items-table th.text-center, .items-table td.text-center {
             text-align: center;
         }
         .items-table td {
-            padding: 8px 10px;
+            padding: 7px 8px;
             border-bottom: 1px solid #e2e8f0;
             font-size: 10.5px;
         }
@@ -282,11 +284,11 @@
     <table class="items-table">
         <thead>
             <tr>
-                <th style="width: 5%;" class="text-center">#</th>
-                <th style="width: 55%;">Description / Item Specification</th>
-                <th style="width: 10%;" class="text-center">Qty</th>
-                <th style="width: 15%;" class="text-right">Unit Price ({{ $settings['currency_symbol'] ?? 'UGX' }})</th>
-                <th style="width: 15%;" class="text-right">Total ({{ $settings['currency_symbol'] ?? 'UGX' }})</th>
+                <th style="width: 4%;" class="text-center">#</th>
+                <th style="width: 54%;">Description / Item Specification</th>
+                <th style="width: 8%;" class="text-center">Qty</th>
+                <th style="width: 17%;" class="text-right">Unit Price ({{ $settings['currency_symbol'] ?? 'UGX' }})</th>
+                <th style="width: 17%;" class="text-right">Total ({{ $settings['currency_symbol'] ?? 'UGX' }})</th>
             </tr>
         </thead>
         <tbody>
