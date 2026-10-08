@@ -39,7 +39,9 @@ class ReceiptData
         public bool $isRepair = false,
         public ?string $repairCode = null,
         public ?string $repairDevice = null,
-        public ?string $repairImei = null
+        public ?string $repairImei = null,
+        public ?string $storeEmail = null,
+        public ?string $tinNumber = null
     ) {}
 
     public static function fromSale(Sale $sale, array $customSettings = []): self
@@ -57,6 +59,8 @@ class ReceiptData
         $storeName = $customSettings['shop_name'] ?? Setting::get('shop_name', 'SmartPOS Kampala');
         $storeAddress = $customSettings['shop_address'] ?? Setting::get('shop_address', '123 Kampala Road, Kampala');
         $storePhone = $customSettings['shop_phone'] ?? Setting::get('shop_phone', '+256 700 000 000');
+        $storeEmail = $customSettings['store_email'] ?? ($customSettings['shop_email'] ?? Setting::get('store_email', Setting::get('shop_email')));
+        $tinNumber = $customSettings['tin_number'] ?? Setting::get('tin_number');
         $storeLogo = $customSettings['store_logo'] ?? Setting::getLogoUrl();
         $currency = $customSettings['currency_symbol'] ?? Setting::get('currency_symbol', 'UGX');
         $footerNote = $customSettings['receipt_footer'] ?? Setting::get('receipt_footer', 'Thank you for shopping with us!');
@@ -182,7 +186,9 @@ class ReceiptData
             isRepair: $isRepair,
             repairCode: $repairCode,
             repairDevice: $repairDevice,
-            repairImei: $repairImei
+            repairImei: $repairImei,
+            storeEmail: $storeEmail,
+            tinNumber: $tinNumber
         );
     }
 }

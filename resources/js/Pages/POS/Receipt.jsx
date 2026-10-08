@@ -566,10 +566,10 @@ export default function Receipt({ sale, settings }) {
 
                     <div className="text-left sm:text-right">
                         <div className="inline-block px-2.5 py-0.5 bg-slate-900 text-white text-[10px] font-black uppercase tracking-widest rounded mb-1">
-                            Tax Invoice / Warranty Cert
+                            Retail Sales Receipt
                         </div>
                         <div className="text-[11px] text-slate-600 space-y-0.5 font-mono">
-                            <div>Invoice #: <strong className="text-slate-900 text-xs font-bold">#{sale.id}</strong></div>
+                            <div>Receipt #: <strong className="text-slate-900 text-xs font-bold">#{sale.id}</strong></div>
                             <div>Date: <strong className="text-slate-900">{new Date(sale.sale_date || sale.created_at).toLocaleString([], { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })}</strong></div>
                             <div>Sales Rep: <strong className="text-slate-900">{sale.user?.name || 'System'}</strong></div>
                             <div className="pt-0.5">
@@ -636,9 +636,9 @@ export default function Receipt({ sale, settings }) {
                                 <th className="py-2 px-2.5">Item & Specifications</th>
                                 <th className="py-2 px-2.5">IMEI / Serial Number</th>
                                 <th className="py-2 px-2.5 text-center w-20">Warranty</th>
-                                <th className="py-2 px-2.5 text-right w-24">Unit Price</th>
+                                <th className="py-2 px-2.5 text-right w-28 whitespace-nowrap">Unit Price ({currency})</th>
                                 <th className="py-2 px-2.5 text-center w-10">Qty</th>
-                                <th className="py-2 px-2.5 rounded-r-md text-right w-28">Total ({currency})</th>
+                                <th className="py-2 px-2.5 rounded-r-md text-right w-28 whitespace-nowrap">Total ({currency})</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-200">

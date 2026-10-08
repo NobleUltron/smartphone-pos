@@ -5,7 +5,7 @@
     <title>Official Receipt - #{{ $payment->receipt_number }}</title>
     <style>
         @page {
-            margin: 10mm 14mm;
+            margin: 10mm 12mm;
             size: a4 portrait;
         }
         body {
