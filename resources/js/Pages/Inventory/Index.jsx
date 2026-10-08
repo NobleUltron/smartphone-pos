@@ -45,6 +45,7 @@ export default function Inventory({ auth, products, allProducts = [], categories
     const [selectedCategory, setSelectedCategory] = useState(filters.category_id || 'all');
     const [selectedBrand, setSelectedBrand] = useState(filters.brand_id || 'all');
     const [selectedProduct, setSelectedProduct] = useState(filters.product_id || 'all');
+    const [stockStatus, setStockStatus] = useState(filters.stock_status || 'all');
     const [isInitialRender, setIsInitialRender] = useState(true);
 
     // View Modal State
@@ -71,12 +72,13 @@ export default function Inventory({ auth, products, allProducts = [], categories
             if (selectedCategory && selectedCategory !== 'all') params.category_id = selectedCategory;
             if (selectedBrand && selectedBrand !== 'all') params.brand_id = selectedBrand;
             if (selectedProduct && selectedProduct !== 'all') params.product_id = selectedProduct;
+            if (stockStatus && stockStatus !== 'all') params.stock_status = stockStatus;
 
             router.get('/inventory', params, { preserveState: true, replace: true });
         }, 300);
 
         return () => clearTimeout(timer);
-    }, [searchQuery, selectedCategory, selectedBrand, selectedProduct]);
+    }, [searchQuery, selectedCategory, selectedBrand, selectedProduct, stockStatus]);
 
     const handleAddProductSubmit = async () => {
         if (!newProduct.category_id || !newProduct.brand_id || !newProduct.model_name) {
@@ -377,6 +379,90 @@ export default function Inventory({ auth, products, allProducts = [], categories
                 </div>
             )}
 
+            {/* Segmented Stock Status Tabs */}
+            <div className="flex items-center overflow-x-auto pb-1 sm:pb-0 mb-4 animate-slide-up" style={{ animationDelay: '0.05s' }}>
+                <div className="flex items-center gap-1.5 p-1 bg-slate-100 dark:bg-slate-800/80 rounded-2xl border border-slate-200/70 dark:border-slate-700/60 shadow-inner">
+                    <button
+                        type="button"
+                        onClick={() => setStockStatus('all')}
+                        className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
+                            stockStatus === 'all'
+                                ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-sm ring-1 ring-slate-900/5'
+                                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-white/50'
+                        }`}
+                    >
+                        <span>All Products</span>
+                        <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-extrabold ${
+                            stockStatus === 'all'
+                                ? 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300'
+                                : 'bg-slate-200/70 dark:bg-slate-700/70 text-slate-600 dark:text-slate-400'
+                        }`}>
+                            {summary?.total_products || 0}
+                        </span>
+                    </button>
+
+                    <button
+                        type="button"
+                        onClick={() => setStockStatus('in_stock')}
+                        className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
+                            stockStatus === 'in_stock'
+                                ? 'bg-white dark:bg-slate-900 text-emerald-700 dark:text-emerald-400 shadow-sm ring-1 ring-emerald-500/20'
+                                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-white/50'
+                        }`}
+                    >
+                        <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0"></span>
+                        <span>In Stock Only</span>
+                        <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-extrabold ${
+                            stockStatus === 'in_stock'
+                                ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300'
+                                : 'bg-slate-200/70 dark:bg-slate-700/70 text-slate-600 dark:text-slate-400'
+                        }`}>
+                            {summary?.in_stock_count ?? (summary?.total_stock_units || 0)}
+                        </span>
+                    </button>
+
+                    <button
+                        type="button"
+                        onClick={() => setStockStatus('low_stock')}
+                        className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
+                            stockStatus === 'low_stock'
+                                ? 'bg-white dark:bg-slate-900 text-amber-700 dark:text-amber-400 shadow-sm ring-1 ring-amber-500/20'
+                                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-white/50'
+                        }`}
+                    >
+                        <span className="w-2 h-2 rounded-full bg-amber-500 shrink-0"></span>
+                        <span>Low Stock (&lt; 5)</span>
+                        <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-extrabold ${
+                            stockStatus === 'low_stock'
+                                ? 'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300'
+                                : 'bg-slate-200/70 dark:bg-slate-700/70 text-slate-600 dark:text-slate-400'
+                        }`}>
+                            {summary?.low_stock_count || 0}
+                        </span>
+                    </button>
+
+                    <button
+                        type="button"
+                        onClick={() => setStockStatus('out_of_stock')}
+                        className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
+                            stockStatus === 'out_of_stock'
+                                ? 'bg-white dark:bg-slate-900 text-rose-700 dark:text-rose-400 shadow-sm ring-1 ring-rose-500/20'
+                                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-white/50'
+                        }`}
+                    >
+                        <span className="w-2 h-2 rounded-full bg-rose-500 shrink-0"></span>
+                        <span>Out of Stock</span>
+                        <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-extrabold ${
+                            stockStatus === 'out_of_stock'
+                                ? 'bg-rose-100 text-rose-800 dark:bg-rose-950/60 dark:text-rose-300'
+                                : 'bg-slate-200/70 dark:bg-slate-700/70 text-slate-600 dark:text-slate-400'
+                        }`}>
+                            {summary?.out_of_stock_count || 0}
+                        </span>
+                    </button>
+                </div>
+            </div>
+
             {/* Search & Filter Bar */}
             <Card className="mb-6 animate-slide-up" style={{ animationDelay: '0.1s' }}>
                 <div className="flex flex-col md:flex-row gap-4">
@@ -463,13 +549,14 @@ export default function Inventory({ auth, products, allProducts = [], categories
                         </div>
                     )}
 
-                    {(searchQuery || selectedCategory !== 'all' || selectedBrand !== 'all' || selectedProduct !== 'all') && (
+                    {(searchQuery || selectedCategory !== 'all' || selectedBrand !== 'all' || selectedProduct !== 'all' || stockStatus !== 'all') && (
                         <div>
                             <Button variant="outline" onClick={() => { 
                                 setSearchQuery(''); 
                                 setSelectedCategory('all'); 
                                 setSelectedBrand('all');
                                 setSelectedProduct('all');
+                                setStockStatus('all');
                             }}>
                                 Clear Filters
                             </Button>
@@ -485,11 +572,36 @@ export default function Inventory({ auth, products, allProducts = [], categories
                     isEmpty={!products.data || products.data.length === 0}
                     emptyState={
                         <div className="p-12 text-center flex flex-col items-center justify-center">
-                            <div className="w-16 h-16 bg-slate-100 text-slate-400 rounded-full flex items-center justify-center mb-4">
+                            <div className="w-16 h-16 bg-slate-100 dark:bg-slate-800 text-slate-400 rounded-full flex items-center justify-center mb-4">
                                 <Smartphone size={32} />
                             </div>
-                            <h3 className="text-lg font-bold text-slate-700 mb-1">No products found</h3>
-                            <p className="text-slate-500 max-w-sm">There are no products matching your search criteria, or your inventory is currently empty.</p>
+                            <h3 className="text-lg font-bold text-slate-700 dark:text-slate-200 mb-1">
+                                {stockStatus === 'in_stock' 
+                                    ? 'No in-stock products found' 
+                                    : stockStatus === 'low_stock'
+                                        ? 'No low stock products found'
+                                        : stockStatus === 'out_of_stock'
+                                            ? 'No out-of-stock products found'
+                                            : 'No products found'}
+                            </h3>
+                            <p className="text-slate-500 max-w-sm">
+                                {stockStatus !== 'all' || searchQuery || selectedCategory !== 'all'
+                                    ? 'Try resetting or adjusting your active filters to view other inventory items.'
+                                    : 'There are no products matching your search criteria, or your inventory is currently empty.'}
+                            </p>
+                            {(searchQuery || selectedCategory !== 'all' || selectedBrand !== 'all' || selectedProduct !== 'all' || stockStatus !== 'all') && (
+                                <div className="mt-4">
+                                    <Button variant="outline" onClick={() => {
+                                        setSearchQuery('');
+                                        setSelectedCategory('all');
+                                        setSelectedBrand('all');
+                                        setSelectedProduct('all');
+                                        setStockStatus('all');
+                                    }}>
+                                        Reset All Filters
+                                    </Button>
+                                </div>
+                            )}
                         </div>
                     }
                 >

@@ -58,6 +58,57 @@ class ProductController extends Controller
             $query->where('products.id', $request->input('product_id'));
         }
 
+        if ($request->filled('stock_status') && $request->input('stock_status') !== 'all') {
+            $stockStatus = $request->input('stock_status');
+            if ($stockStatus === 'in_stock') {
+                $query->where(function ($q) {
+                    $q->where(function ($bulk) {
+                        $bulk->where('products.type', 'bulk')
+                             ->where('products.quantity', '>', 0);
+                    })->orWhere(function ($serialized) {
+                        $serialized->where(function ($t) {
+                            $t->whereNull('products.type')
+                              ->orWhere('products.type', '!=', 'bulk');
+                        })->whereHas('deviceImeis', function ($d) {
+                            $d->where('status', 'In Stock');
+                        });
+                    });
+                });
+            } elseif ($stockStatus === 'low_stock') {
+                $query->where(function ($q) {
+                    $q->where(function ($bulk) {
+                        $bulk->where('products.type', 'bulk')
+                             ->where('products.quantity', '>', 0)
+                             ->where('products.quantity', '<', 5);
+                    })->orWhere(function ($serialized) {
+                        $serialized->where(function ($t) {
+                            $t->whereNull('products.type')
+                              ->orWhere('products.type', '!=', 'bulk');
+                        })->whereHas('deviceImeis', function ($d) {
+                            $d->where('status', 'In Stock');
+                        }, '>=', 1)
+                        ->whereHas('deviceImeis', function ($d) {
+                            $d->where('status', 'In Stock');
+                        }, '<', 5);
+                    });
+                });
+            } elseif ($stockStatus === 'out_of_stock') {
+                $query->where(function ($q) {
+                    $q->where(function ($bulk) {
+                        $bulk->where('products.type', 'bulk')
+                             ->where('products.quantity', '<=', 0);
+                    })->orWhere(function ($serialized) {
+                        $serialized->where(function ($t) {
+                            $t->whereNull('products.type')
+                              ->orWhere('products.type', '!=', 'bulk');
+                        })->whereDoesntHave('deviceImeis', function ($d) {
+                            $d->where('status', 'In Stock');
+                        });
+                    });
+                });
+            }
+        }
+
         $products = $query->leftJoin('brands', 'products.brand_id', '=', 'brands.id')
             ->orderByRaw('COALESCE(brands.name, products.model_name) ASC')
             ->orderBy('products.model_name', 'asc')
@@ -79,6 +130,18 @@ class ProductController extends Controller
             return ($product->type === 'serialized' && $product->device_imeis_count < 5) || 
                    ($product->type === 'bulk' && $product->quantity < 5);
         })->count();
+
+        $inStockCount = Product::where(function ($q) {
+            $q->where(function ($bulk) {
+                $bulk->where('type', 'bulk')->where('quantity', '>', 0);
+            })->orWhere(function ($serialized) {
+                $serialized->where(function ($t) {
+                    $t->whereNull('type')->orWhere('type', '!=', 'bulk');
+                })->whereHas('deviceImeis', fn($d) => $d->where('status', 'In Stock'));
+            });
+        })->count();
+
+        $outOfStockCount = max(0, $totalProducts - $inStockCount);
         
         $bulkValue = Product::where('type', 'bulk')->sum(\Illuminate\Support\Facades\DB::raw('quantity * cost_price'));
         $serializedValue = \App\Models\DeviceImei::where('status', 'In Stock')->sum('cost_price');
@@ -89,11 +152,13 @@ class ProductController extends Controller
             'allProducts' => $allProducts,
             'categories' => $categories,
             'brands' => $brands,
-            'filters' => $request->only(['search', 'category_id']),
+            'filters' => $request->only(['search', 'category_id', 'brand_id', 'product_id', 'stock_status']),
             'summary' => [
                 'total_products' => $totalProducts,
                 'total_stock_units' => $totalStockUnits,
+                'in_stock_count' => $inStockCount,
                 'low_stock_count' => $lowStockCount,
+                'out_of_stock_count' => $outOfStockCount,
                 'inventory_value' => $totalInventoryValue,
             ]
         ]);
