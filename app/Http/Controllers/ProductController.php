@@ -124,11 +124,17 @@ class ProductController extends Controller
         $serializedStock = \App\Models\DeviceImei::where('status', 'In Stock')->count();
         $totalStockUnits = $bulkStock + $serializedStock;
         
-        $lowStockCount = Product::withCount(['deviceImeis' => function ($q) {
-            $q->where('status', 'In Stock');
-        }])->get()->filter(function ($product) {
-            return ($product->type === 'serialized' && $product->device_imeis_count < 5) || 
-                   ($product->type === 'bulk' && $product->quantity < 5);
+        $lowStockCount = Product::where(function ($q) {
+            $q->where(function ($bulk) {
+                $bulk->where('type', 'bulk')
+                     ->where('quantity', '>', 0)
+                     ->where('quantity', '<', 5);
+            })->orWhere(function ($serialized) {
+                $serialized->where(function ($t) {
+                    $t->whereNull('type')->orWhere('type', '!=', 'bulk');
+                })->whereHas('deviceImeis', fn($d) => $d->where('status', 'In Stock'), '>=', 1)
+                  ->whereHas('deviceImeis', fn($d) => $d->where('status', 'In Stock'), '<', 5);
+            });
         })->count();
 
         $inStockCount = Product::where(function ($q) {
