@@ -338,6 +338,16 @@ class WarrantyController extends Controller
                     'expense_date' => now(),
                 ]);
             }
+            $tillAccount = \App\Services\TreasuryService::getTillAccount();
+            \App\Services\TreasuryService::recordOutflow(
+                $tillAccount,
+                floatval($refundAmount),
+                'Refund',
+                $saleItem,
+                "Warranty Price Difference Refund for IMEI: " . ($saleItem->deviceImei?->imei ?? ''),
+                'WAR-REF-' . $saleItem->id,
+                auth()->id()
+            );
             $notes = " [Partial Refund of UGX " . number_format($refundAmount, 2) . " processed.]";
         }
 

@@ -299,6 +299,33 @@ class ExpenseController extends Controller
             $trx->delete();
         }
 
+        // If it was a Cash In funded by an inter-account transfer, reverse the transfer
+        if ($expense->category === 'Cash In' && str_starts_with($expense->description ?? '', 'From ')) {
+            $tillAccount = TreasuryService::getTillAccount();
+            $transfer = AccountTransfer::where('to_account_id', $tillAccount?->id)
+                ->where('amount', $expense->amount)
+                ->whereDate('created_at', $expense->expense_date ?? $expense->created_at)
+                ->first();
+
+            if ($transfer) {
+                $txs = AccountTransaction::where('reference_type', AccountTransfer::class)
+                    ->where('reference_id', $transfer->id)
+                    ->get();
+                foreach ($txs as $t) {
+                    $acct = $t->account;
+                    if ($acct) {
+                        if ($t->type === 'transfer_in') {
+                            $acct->decrement('current_balance', $t->amount);
+                        } elseif ($t->type === 'transfer_out') {
+                            $acct->increment('current_balance', $t->amount);
+                        }
+                    }
+                    $t->delete();
+                }
+                $transfer->delete();
+            }
+        }
+
         $expense->delete();
 
         return back()->with('success', 'Expense deleted.');

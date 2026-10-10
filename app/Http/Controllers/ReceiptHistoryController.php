@@ -143,6 +143,17 @@ class ReceiptHistoryController extends Controller
                 'description' => "Receipt Refund for Sale #{$sale->id}" . ($validated['notes'] ? " - " . $validated['notes'] : ''),
                 'recorded_by' => auth()->id(),
             ]);
+
+            $tillAccount = \App\Services\TreasuryService::getTillAccount();
+            \App\Services\TreasuryService::recordOutflow(
+                $tillAccount,
+                floatval($refundAmount),
+                'Refund',
+                $sale,
+                "POS Refund for Sale #{$sale->id}" . (!empty($validated['notes']) ? " - {$validated['notes']}" : ''),
+                'REF-' . $sale->id,
+                auth()->id()
+            );
         }
 
         // 4. Update device inventory statuses for items in this sale

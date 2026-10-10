@@ -24,7 +24,8 @@ import {
     TrendingDown,
     X,
     Calendar,
-    Trash2
+    Trash2,
+    RefreshCw
 } from 'lucide-react';
 import dayjs from 'dayjs';
 
@@ -105,7 +106,9 @@ export default function AccountShow({ account, allAccounts, transactions, trends
 
     const handleReconcile = (e) => {
         e.preventDefault();
+        if (reconcileForm.processing) return;
         reconcileForm.post(route('accounts.reconcile', account.id), {
+            preserveScroll: true,
             onSuccess: () => {
                 setShowReconcileModal(false);
                 reconcileForm.reset();
@@ -680,8 +683,9 @@ export default function AccountShow({ account, allAccounts, transactions, trends
                             <button
                                 type="submit"
                                 disabled={reconcileForm.processing}
-                                className="px-5 py-2.5 text-xs font-bold text-white bg-amber-600 hover:bg-amber-700 rounded-xl shadow-md shadow-amber-500/20 transition-all disabled:opacity-50"
+                                className="px-5 py-2.5 text-xs font-bold text-white bg-amber-600 hover:bg-amber-700 rounded-xl shadow-md shadow-amber-500/20 transition-all disabled:opacity-50 flex items-center gap-2"
                             >
+                                {reconcileForm.processing && <RefreshCw size={14} className="animate-spin" />}
                                 {reconcileForm.processing ? 'Saving...' : 'Save Reconciliation'}
                             </button>
                         </div>

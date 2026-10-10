@@ -114,10 +114,14 @@ export default function AccountsIndex({ accounts, metrics, transactions, filters
         setShowReconcileModal(true);
     };
 
+    // Live account from props so it updates instantly when refreshed
+    const activeAuditAccount = accounts.find(a => a.id === selectedAccountForAudit?.id) || selectedAccountForAudit;
+
     const handleReconcile = (e) => {
         e.preventDefault();
-        if (!selectedAccountForAudit) return;
+        if (!selectedAccountForAudit || reconcileForm.processing) return;
         reconcileForm.post(route('accounts.reconcile', selectedAccountForAudit.id), {
+            preserveScroll: true,
             onSuccess: () => {
                 setShowReconcileModal(false);
                 reconcileForm.reset();
@@ -775,7 +779,7 @@ export default function AccountsIndex({ accounts, metrics, transactions, filters
                             <div>
                                 <h3 className="text-base font-bold text-slate-900 dark:text-white">Reconcile & Audit Balance</h3>
                                 <p className="text-xs text-slate-500 dark:text-slate-400">
-                                    Auditing <strong className="text-slate-900 dark:text-white">{selectedAccountForAudit?.name}</strong>
+                                    Auditing <strong className="text-slate-900 dark:text-white">{activeAuditAccount?.name}</strong>
                                 </p>
                             </div>
                         </div>
@@ -793,7 +797,7 @@ export default function AccountsIndex({ accounts, metrics, transactions, filters
                             <div className="flex justify-between items-center">
                                 <span className="text-slate-500 font-medium">Recorded System Balance:</span>
                                 <span className="font-bold text-slate-900 dark:text-white text-sm">
-                                    UGX {Number(selectedAccountForAudit?.current_balance || 0).toLocaleString()}
+                                    UGX {Number(activeAuditAccount?.current_balance || 0).toLocaleString()}
                                 </span>
                             </div>
                         </div>
@@ -821,12 +825,12 @@ export default function AccountsIndex({ accounts, metrics, transactions, filters
                             <div className="text-xs font-bold p-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 flex justify-between items-center">
                                 <span className="text-slate-600 dark:text-slate-400">Variance / Discrepancy:</span>
                                 <span className={
-                                    (Number(reconcileForm.data.actual_balance) - (selectedAccountForAudit?.current_balance || 0)) >= 0
+                                    (Number(reconcileForm.data.actual_balance) - (activeAuditAccount?.current_balance || 0)) >= 0
                                         ? 'text-emerald-600 dark:text-emerald-400 font-black'
                                         : 'text-rose-600 dark:text-rose-400 font-black'
                                 }>
-                                    {((Number(reconcileForm.data.actual_balance) - (selectedAccountForAudit?.current_balance || 0)) >= 0 ? '+' : '')}
-                                    UGX {(Number(reconcileForm.data.actual_balance) - (selectedAccountForAudit?.current_balance || 0)).toLocaleString()}
+                                    {((Number(reconcileForm.data.actual_balance) - (activeAuditAccount?.current_balance || 0)) >= 0 ? '+' : '')}
+                                    UGX {(Number(reconcileForm.data.actual_balance) - (activeAuditAccount?.current_balance || 0)).toLocaleString()}
                                 </span>
                             </div>
                         )}
@@ -855,8 +859,9 @@ export default function AccountsIndex({ accounts, metrics, transactions, filters
                             <button
                                 type="submit"
                                 disabled={reconcileForm.processing}
-                                className="px-5 py-2.5 text-xs font-bold text-white bg-amber-600 hover:bg-amber-700 rounded-xl shadow-md shadow-amber-500/20 transition-all disabled:opacity-50"
+                                className="px-5 py-2.5 text-xs font-bold text-white bg-amber-600 hover:bg-amber-700 rounded-xl shadow-md shadow-amber-500/20 transition-all disabled:opacity-50 flex items-center gap-2"
                             >
+                                {reconcileForm.processing && <RefreshCw size={14} className="animate-spin" />}
                                 {reconcileForm.processing ? 'Saving...' : 'Save Reconciliation'}
                             </button>
                         </div>

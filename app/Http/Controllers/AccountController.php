@@ -178,7 +178,7 @@ class AccountController extends Controller
             'account_number' => $validated['account_number'] ?? null,
             'provider' => $validated['provider'] ?? null,
             'opening_balance' => $validated['opening_balance'] ?? 0,
-            'current_balance' => $validated['opening_balance'] ?? 0,
+            'current_balance' => 0, // Will be set to opening_balance by recordInflow below if > 0
             'description' => $validated['description'] ?? null,
             'is_active' => true,
         ]);
@@ -245,13 +245,23 @@ class AccountController extends Controller
         ]);
 
         try {
+            $priorBalance = (float) $account->current_balance;
+            $variance = (float) $validated['actual_balance'] - $priorBalance;
+
             TreasuryService::reconcile(
                 $account->id,
                 (float) $validated['actual_balance'],
                 $validated['reason'] ?? ''
             );
 
-            return redirect()->back()->with('success', "Account balance audited and reconciled to UGX " . number_format($validated['actual_balance']));
+            if ($variance == 0) {
+                $msg = "Account balance verified: Physical balance matches system balance of UGX " . number_format($validated['actual_balance']);
+            } else {
+                $formattedVariance = ($variance > 0 ? "+" : "") . number_format($variance) . " UGX";
+                $msg = "Account balance audited and reconciled to UGX " . number_format($validated['actual_balance']) . " (Variance: {$formattedVariance})";
+            }
+
+            return redirect()->back()->with('success', $msg);
         } catch (\Exception $e) {
             return redirect()->back()->withErrors(['actual_balance' => $e->getMessage()]);
         }

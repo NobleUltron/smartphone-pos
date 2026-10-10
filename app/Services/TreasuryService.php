@@ -106,11 +106,6 @@ class TreasuryService
     {
         self::ensureDefaultAccounts();
 
-        // 0. Remove known duplicate dealer settlement backfill transactions created from Expense #4 & Expense #5
-        AccountTransaction::whereIn('id', [32, 33])
-            ->where('category', 'Dealer Settlement')
-            ->delete();
-
         $cashAccount = PaymentAccount::where('name', 'Main Cash Register')->first()
             ?? PaymentAccount::where('type', 'cash')->first()
             ?? PaymentAccount::first();
@@ -145,7 +140,7 @@ class TreasuryService
             }
         }
 
-        // 2. Backfill Layaway Payments & Deposits
+        // 2. Backfill Layaway Payments & Deposits (prevent duplicating repair payments)
         $layawayPayments = \App\Models\LayawayPayment::where('amount_paid', '>', 0)->get();
 
         foreach ($layawayPayments as $payment) {
@@ -153,7 +148,15 @@ class TreasuryService
                 ->where('reference_id', $payment->id)
                 ->exists();
 
-            if (!$exists) {
+            // Also check if this payment belongs to a repair already recorded under Repair::class
+            $alreadyCoveredByRepair = false;
+            if ($payment->sale && $payment->sale->repair_id) {
+                $alreadyCoveredByRepair = AccountTransaction::where('reference_type', \App\Models\Repair::class)
+                    ->where('reference_id', $payment->sale->repair_id)
+                    ->exists();
+            }
+
+            if (!$exists && !$alreadyCoveredByRepair) {
                 $account = PaymentAccount::getForMethod($payment->payment_method) ?? $cashAccount;
 
                 AccountTransaction::create([
@@ -182,8 +185,22 @@ class TreasuryService
                 ->where('reference_id', $expense->id)
                 ->exists();
 
-            if (!$exists) {
+            // If it is a Cash In, check if it was funded by an inter-account transfer
+            $alreadyCoveredByTransfer = false;
+            if ($expense->category === 'Cash In') {
+                if (str_starts_with($expense->description ?? '', 'From ')) {
+                    $alreadyCoveredByTransfer = true;
+                } else {
+                    $alreadyCoveredByTransfer = AccountTransfer::where('amount', $expense->amount)
+                        ->where('to_account_id', $cashAccount->id)
+                        ->whereDate('created_at', $expense->expense_date ?? $expense->created_at)
+                        ->exists();
+                }
+            }
+
+            if (!$exists && !$alreadyCoveredByTransfer) {
                 $isInflow = $expense->category === 'Cash In';
+                $trxDate = $expense->created_at ?? ($expense->expense_date ? \Carbon\Carbon::parse($expense->expense_date)->setTimeFrom(now()) : now());
 
                 AccountTransaction::create([
                     'payment_account_id' => $cashAccount->id,
@@ -196,12 +213,12 @@ class TreasuryService
                     'transaction_reference' => 'EXP-' . $expense->id,
                     'description' => $expense->description ?: "Expense: {$expense->category}",
                     'user_id' => $expense->user_id ?? $expense->recorded_by,
-                    'transaction_date' => $expense->expense_date ?? $expense->created_at ?? now(),
+                    'transaction_date' => $trxDate,
                 ]);
             }
         }
 
-        // 4. Backfill Repairs with Deposits or Final Deliveries not already captured via LayawayPayment
+        // 4. Backfill Repairs with Deposits or Final Deliveries not already captured via LayawayPayment or Repair
         $repairs = \App\Models\Repair::where(function ($q) {
             $q->where('deposit', '>', 0)->orWhere('status', 'Delivered');
         })->get();
@@ -243,7 +260,10 @@ class TreasuryService
                 ->orderBy('id', 'asc')
                 ->get();
 
-            $runningBalance = (float) ($account->opening_balance ?? 0);
+            $hasOpeningTrx = AccountTransaction::where('payment_account_id', $account->id)
+                ->where('category', 'Opening Balance')
+                ->exists();
+            $runningBalance = $hasOpeningTrx ? 0 : (float) ($account->opening_balance ?? 0);
 
             foreach ($transactions as $trx) {
                 if (in_array($trx->type, ['inflow', 'transfer_in'])) {
@@ -251,14 +271,8 @@ class TreasuryService
                 } elseif (in_array($trx->type, ['outflow', 'transfer_out'])) {
                     $runningBalance -= (float) $trx->amount;
                 } elseif ($trx->type === 'adjustment') {
-                    $desc = strtolower($trx->description ?? '');
-                    if (str_contains($desc, 'positive')) {
-                        $runningBalance += (float) $trx->amount;
-                    } elseif (str_contains($desc, 'negative')) {
-                        $runningBalance -= (float) $trx->amount;
-                    } else {
-                        $runningBalance = (float) $trx->balance_after;
-                    }
+                    // An audit adjustment sets an authoritative verified milestone
+                    $runningBalance = (float) $trx->balance_after;
                 }
 
                 $trx->update(['balance_after' => $runningBalance]);
@@ -461,10 +475,23 @@ class TreasuryService
             $variance = $actualBalance - $account->current_balance;
 
             if ($variance == 0) {
-                throw new Exception("Recorded system balance already matches actual balance.");
+                return AccountTransaction::create([
+                    'payment_account_id' => $account->id,
+                    'type' => 'adjustment',
+                    'amount' => 0,
+                    'balance_after' => $actualBalance,
+                    'category' => 'Audit Verification',
+                    'transaction_reference' => 'AUDIT-' . date('Ymd'),
+                    'description' => "Audit Verification: Confirmed physical balance matches recorded balance of UGX " . number_format($actualBalance) . ($reason ? ": {$reason}" : ''),
+                    'user_id' => $userId ?? auth()->id(),
+                    'transaction_date' => now(),
+                ]);
             }
 
             $isPositive = $variance > 0;
+
+            // Immediately synchronize current_balance on the account
+            $account->update(['current_balance' => $actualBalance]);
 
             return AccountTransaction::create([
                 'payment_account_id' => $account->id,
