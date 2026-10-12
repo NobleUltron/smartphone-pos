@@ -90,6 +90,17 @@ class CashDrawerController extends Controller
         $sourceAccount = null;
         $tillAccount = TreasuryService::getTillAccount();
 
+        // 1. If user claims cash was already in the register till, verify the register has that balance on the books
+        if ($startingCash > 0 && ($sourceId === 'existing' || empty($sourceId))) {
+            $tillBalance = floatval($tillAccount?->current_balance ?? 0);
+            if ($tillBalance < $startingCash) {
+                return back()->withErrors([
+                    'source_account_id' => "Cannot claim UGX " . number_format($startingCash) . " is 'Already in Register' because the register balance on the books is only UGX " . number_format($tillBalance) . ". Please select Shop Safe or External Cash Injection to avoid ghost money."
+                ]);
+            }
+        }
+
+        // 2. If user selected a funding account (e.g. Shop Safe), verify it has sufficient balance
         if ($startingCash > 0 && $sourceId && $sourceId !== 'existing' && $sourceId !== 'external') {
             if (is_numeric($sourceId) && (int)$sourceId !== (int)$tillAccount?->id) {
                 $sourceAccount = PaymentAccount::find($sourceId);

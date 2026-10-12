@@ -168,26 +168,37 @@ export default function Index({ auth, activeDrawer, accounts = [] }) {
                                             value={openForm.data.source_account_id}
                                             onChange={e => openForm.setData('source_account_id', e.target.value)}
                                         >
-                                            <option value="existing">Till Cash (Already in Register - No Transfer)</option>
-                                            <option value="external">External / Owner Cash (Direct Injection)</option>
+                                            <option 
+                                                value="existing" 
+                                                disabled={Number(openForm.data.starting_cash) > Number(tillAccount?.current_balance || 0)}
+                                            >
+                                                Till Cash (Already in Register — On Books: UGX {Number(tillAccount?.current_balance || 0).toLocaleString()})
+                                                {Number(openForm.data.starting_cash) > Number(tillAccount?.current_balance || 0) ? ' [Insufficient]' : ''}
+                                            </option>
                                             {fundingAccounts.length > 0 && (
                                                 <optgroup label="Transfer From Payment Accounts">
                                                     {fundingAccounts.map(acc => (
                                                         <option key={acc.id} value={acc.id}>
-                                                            {acc.name} (Balance: UGX {Number(acc.current_balance).toLocaleString()})
+                                                            {acc.name} (Available: UGX {Number(acc.current_balance).toLocaleString()})
                                                         </option>
                                                     ))}
                                                 </optgroup>
                                             )}
+                                            <option value="external">External / Owner Cash (Direct Injection from personal wallet)</option>
                                         </select>
+                                        {Number(openForm.data.starting_cash) > Number(tillAccount?.current_balance || 0) && openForm.data.source_account_id === 'existing' && (
+                                            <div className="p-2.5 rounded-lg bg-amber-50 border border-amber-200 text-[11px] text-amber-800 font-medium">
+                                                ⚠️ Register balance on the books is <strong>UGX {Number(tillAccount?.current_balance || 0).toLocaleString()}</strong>. To prevent ghost money, please select <strong>Shop Safe</strong> or <strong>External / Owner Cash</strong>.
+                                            </div>
+                                        )}
                                         {openForm.errors.source_account_id && (
                                             <p className="text-xs text-rose-600 font-bold mt-1">{openForm.errors.source_account_id}</p>
                                         )}
                                         <p className="text-[11px] text-slate-500">
                                             {openForm.data.source_account_id === 'existing'
-                                                ? 'Counted from cash already in register. Account balances remain unchanged.'
+                                                ? 'Counted from verified cash already in register. Account balances remain unchanged.'
                                                 : openForm.data.source_account_id === 'external'
-                                                ? 'Records direct cash injection into Main Cash Register.'
+                                                ? 'Records direct cash injection into Main Cash Register from external personal funds.'
                                                 : `Will transfer UGX ${Number(openForm.data.starting_cash || 0).toLocaleString()} from ${accounts.find(a => String(a.id) === String(openForm.data.source_account_id))?.name || 'source'} to Main Cash Register.`}
                                         </p>
                                     </div>
