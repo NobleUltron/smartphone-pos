@@ -493,6 +493,16 @@ class RepairController extends Controller
                  $sale->update(['payment_status' => 'Paid']);
             }
 
+            \App\Services\TreasuryService::recordInflow(
+                $validated['payment_method'],
+                floatval($validated['amount_paid']),
+                'Repair Payment',
+                $repair,
+                "Repair Payment for Ticket #{$repair->repair_code}",
+                'REP-PAY-' . $repair->id,
+                auth()->id()
+            );
+
             \DB::commit();
             return redirect()->back()->with('success', 'Repair payment recorded successfully.');
         } catch (\Exception $e) {

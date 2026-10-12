@@ -324,6 +324,16 @@ class WarrantyController extends Controller
                 'notes' => "Warranty Replacement Upgrade\nNew Phone: {$newDeviceName} (" . number_format($newPrice, 0) . " UGX)\nSwapped Phone: {$oldDeviceName} (-" . number_format($oldPrice, 0) . " UGX)"
             ]);
 
+            \App\Services\TreasuryService::recordInflow(
+                $paymentMethod ?? 'Cash',
+                floatval($difference),
+                'Warranty Upgrade',
+                $sale,
+                "Warranty Replacement Upgrade for IMEI: " . ($saleItem->deviceImei?->imei ?? ''),
+                'WAR-UPG-' . $sale->id,
+                auth()->id()
+            );
+
             $notes = " [Upgrade Fee of UGX " . number_format($difference, 2) . " charged and paid.]";
         } elseif ($difference < 0) {
             // Store refunds the customer the difference

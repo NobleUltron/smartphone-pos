@@ -833,6 +833,19 @@ class DealerController extends Controller
             $item->sale_id = $sale->id;
             $item->save();
 
+            // Record Treasury Account Inflow
+            if ($sale->payment_status === 'Paid' && $totalPrice > 0) {
+                \App\Services\TreasuryService::recordInflow(
+                    $sale->payment_method,
+                    $totalPrice,
+                    'Sale',
+                    $sale,
+                    "Dealer Consignment Sale #{$sale->id}" . ($item->deviceImei ? " ({$item->deviceImei->imei})" : ''),
+                    'POS-' . $sale->id,
+                    auth()->id()
+                );
+            }
+
             DB::commit();
             return redirect()->back()->with('success', 'Items marked as sold successfully.');
         } catch (\Exception $e) {
