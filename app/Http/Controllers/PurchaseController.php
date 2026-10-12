@@ -372,35 +372,43 @@ class PurchaseController extends Controller
             $purchase->save();
             $purchase->supplier?->recalculateBalance();
 
-            // Record in Cash Drawer Expenses if payment method / account is Cash Register
-            $isCash = ($account && $account->type === 'cash') || (strtolower($validated['payment_method'] ?? '') === 'cash');
-            if ($isCash) {
+            // Record in Cash Drawer Expenses only if paying specifically from the Cash Register Till (not the Shop Safe)
+            $isTill = $account 
+                ? ($account->type === 'cash' && stripos($account->name, 'Safe') === false && ($account->provider ?? '') !== 'Safe')
+                : (strtolower($validated['payment_method'] ?? '') === 'cash');
+
+            $user = auth()->user();
+            $isAdminOrManager = $user && in_array(strtolower($user->role ?? ''), ['admin', 'manager', 'owner']);
+
+            if ($isTill) {
                 $activeDrawer = \App\Models\CashDrawer::where('user_id', auth()->id())
                     ->where('status', 'open')
                     ->first();
 
-                if (!$activeDrawer) {
+                if (!$activeDrawer && !$isAdminOrManager) {
                     throw \Illuminate\Validation\ValidationException::withMessages([
-                        'payment_method' => 'You must have an open shift to pay cash from drawer. Please open a shift or select Mobile Money / Bank Transfer.'
+                        'payment_method' => 'You must have an open shift to pay cash from the drawer register. Please open a shift or pay from Shop Safe / Mobile Money / Bank Transfer.'
                     ]);
                 }
 
-                $availableCash = $activeDrawer->calculateExpectedCash();
-                if ($validated['amount'] > $availableCash) {
-                    throw \Illuminate\Validation\ValidationException::withMessages([
-                        'amount' => 'Insufficient cash in active shift! Available cash in drawer is ' . number_format(max(0, $availableCash)) . ' UGX. Please add starting cash float or use Mobile Money / Bank Transfer.'
+                if ($activeDrawer) {
+                    $availableCash = $activeDrawer->calculateExpectedCash();
+                    if ($validated['amount'] > $availableCash) {
+                        throw \Illuminate\Validation\ValidationException::withMessages([
+                            'amount' => 'Insufficient cash in active register shift! Available cash in drawer is ' . number_format(max(0, $availableCash)) . ' UGX. Please pay from Shop Safe, Bank, or Mobile Money.'
+                        ]);
+                    }
+
+                    \App\Models\Expense::create([
+                        'cash_drawer_id' => $activeDrawer->id,
+                        'payment_account_id' => $account?->id,
+                        'user_id' => auth()->id(),
+                        'category' => 'Supplier Payment',
+                        'amount' => $validated['amount'],
+                        'description' => "Payment towards Purchase #{$purchase->id} (" . ($purchase->supplier->name ?? 'Supplier') . "). " . ($validated['notes'] ?? ''),
+                        'expense_date' => now(),
                     ]);
                 }
-
-                \App\Models\Expense::create([
-                    'cash_drawer_id' => $activeDrawer->id,
-                    'payment_account_id' => $account?->id,
-                    'user_id' => auth()->id(),
-                    'category' => 'Supplier Payment',
-                    'amount' => $validated['amount'],
-                    'description' => "Payment towards Purchase #{$purchase->id} (" . ($purchase->supplier->name ?? 'Supplier') . "). " . ($validated['notes'] ?? ''),
-                    'expense_date' => now(),
-                ]);
             }
 
             // Sync with Treasury Service
