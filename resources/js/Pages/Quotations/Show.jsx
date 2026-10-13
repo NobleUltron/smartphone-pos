@@ -15,12 +15,15 @@ import {
     CheckCircle2, 
     Edit2,
     Trash2,
-    FileText
+    FileText,
+    AlertTriangle
 } from 'lucide-react';
 import dayjs from 'dayjs';
 
 export default function QuotationsShow({ quotation }) {
     const [showConvertModal, setShowConvertModal] = useState(false);
+    const [showDeleteModal, setShowDeleteModal] = useState(false);
+    const [isDeleting, setIsDeleting] = useState(false);
 
     const convertForm = useForm({
         po_number: '',
@@ -35,10 +38,14 @@ export default function QuotationsShow({ quotation }) {
         });
     };
 
-    const handleDelete = () => {
-        if (confirm(`Are you sure you want to delete Quotation #${quotation.quotation_number}? This cannot be undone.`)) {
-            router.delete(route('quotations.destroy', quotation.id));
-        }
+    const confirmDelete = (e) => {
+        e.preventDefault();
+        setIsDeleting(true);
+        router.delete(route('quotations.destroy', quotation.id), {
+            preserveScroll: true,
+            onSuccess: () => setShowDeleteModal(false),
+            onFinish: () => setIsDeleting(false),
+        });
     };
 
     const isConverted = quotation.status === 'Converted' || !!quotation.invoice;
@@ -99,7 +106,7 @@ export default function QuotationsShow({ quotation }) {
                                     <CheckCircle2 size={15} /> Convert to Invoice
                                 </button>
                                 <button
-                                    onClick={handleDelete}
+                                    onClick={() => setShowDeleteModal(true)}
                                     className="px-3.5 py-2 bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/40 dark:hover:bg-rose-900/40 text-rose-600 dark:text-rose-400 border border-rose-200 dark:border-rose-900/50 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5"
                                     title="Delete Quotation"
                                 >
@@ -294,6 +301,51 @@ export default function QuotationsShow({ quotation }) {
                             className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold shadow-md shadow-emerald-600/20"
                         >
                             {convertForm.processing ? 'Generating...' : 'Confirm & Generate Invoice'}
+                        </button>
+                    </div>
+                </form>
+            </Modal>
+
+            {/* Custom Delete Quotation Modal */}
+            <Modal show={showDeleteModal} onClose={() => setShowDeleteModal(false)} maxWidth="md">
+                <form onSubmit={confirmDelete} className="p-6 bg-white dark:bg-slate-900 rounded-2xl space-y-4">
+                    <div className="flex items-center gap-3 pb-3 border-b border-slate-100 dark:border-slate-800">
+                        <div className="p-2.5 rounded-xl bg-rose-50 dark:bg-rose-950/60 text-rose-600 dark:text-rose-400">
+                            <Trash2 size={22} />
+                        </div>
+                        <div>
+                            <h3 className="text-base font-bold text-slate-900 dark:text-white">
+                                Delete Quotation #{quotation.quotation_number}
+                            </h3>
+                            <p className="text-xs text-slate-500">
+                                Permanently remove proposal and all line items
+                            </p>
+                        </div>
+                    </div>
+
+                    <div className="p-3.5 bg-rose-50/70 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-900/50 rounded-xl text-xs text-rose-800 dark:text-rose-300 space-y-1">
+                        <p className="font-bold flex items-center gap-1.5">
+                            <AlertTriangle size={14} /> Warning: This action cannot be undone
+                        </p>
+                        <p className="text-[11px] text-rose-700 dark:text-rose-300/90 leading-relaxed">
+                            This quotation will be permanently purged. Because it has not been converted into a tax invoice, your stock inventory and accounting balances remain completely untouched.
+                        </p>
+                    </div>
+
+                    <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100 dark:border-slate-800">
+                        <button
+                            type="button"
+                            onClick={() => setShowDeleteModal(false)}
+                            className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-xl text-xs font-bold transition-all"
+                        >
+                            Keep Quotation
+                        </button>
+                        <button
+                            type="submit"
+                            disabled={isDeleting}
+                            className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold transition-all shadow-md shadow-rose-600/20 disabled:opacity-50"
+                        >
+                            {isDeleting ? 'Deleting...' : 'Yes, Permanently Delete'}
                         </button>
                     </div>
                 </form>

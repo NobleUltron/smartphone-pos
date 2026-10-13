@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import { Head, Link, router } from '@inertiajs/react';
+import Modal from '@/Components/Modal';
 import { 
     FileSpreadsheet, 
     Plus, 
@@ -14,13 +15,16 @@ import {
     DollarSign,
     Download,
     Eye,
-    Trash2
+    Trash2,
+    AlertTriangle
 } from 'lucide-react';
 import dayjs from 'dayjs';
 
 export default function QuotationsIndex({ quotations, filters, metrics }) {
     const [search, setSearch] = useState(filters.search || '');
     const [status, setStatus] = useState(filters.status || 'all');
+    const [deletingQuote, setDeletingQuote] = useState(null);
+    const [isDeleting, setIsDeleting] = useState(false);
 
     const handleFilter = (newFilters = {}) => {
         router.get(route('quotations.index'), {
@@ -33,10 +37,15 @@ export default function QuotationsIndex({ quotations, filters, metrics }) {
         });
     };
 
-    const handleDelete = (quote) => {
-        if (confirm(`Are you sure you want to delete Quotation #${quote.quotation_number}? This cannot be undone.`)) {
-            router.delete(route('quotations.destroy', quote.id));
-        }
+    const confirmDelete = (e) => {
+        e.preventDefault();
+        if (!deletingQuote) return;
+        setIsDeleting(true);
+        router.delete(route('quotations.destroy', deletingQuote.id), {
+            preserveScroll: true,
+            onSuccess: () => setDeletingQuote(null),
+            onFinish: () => setIsDeleting(false),
+        });
     };
 
     const getStatusBadge = (st) => {
@@ -257,7 +266,7 @@ export default function QuotationsIndex({ quotations, filters, metrics }) {
                                                 {q.status !== 'Converted' && (
                                                     <button
                                                         type="button"
-                                                        onClick={() => handleDelete(q)}
+                                                        onClick={() => setDeletingQuote(q)}
                                                         className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-lg transition-colors"
                                                         title="Delete Quotation"
                                                     >
@@ -280,6 +289,53 @@ export default function QuotationsIndex({ quotations, filters, metrics }) {
                     </div>
                 </div>
             </div>
+
+            {/* Custom Delete Quotation Modal */}
+            <Modal show={!!deletingQuote} onClose={() => setDeletingQuote(null)} maxWidth="md">
+                {deletingQuote && (
+                    <form onSubmit={confirmDelete} className="p-6 bg-white dark:bg-slate-900 rounded-2xl space-y-4">
+                        <div className="flex items-center gap-3 pb-3 border-b border-slate-100 dark:border-slate-800">
+                            <div className="p-2.5 rounded-xl bg-rose-50 dark:bg-rose-950/60 text-rose-600 dark:text-rose-400">
+                                <Trash2 size={22} />
+                            </div>
+                            <div>
+                                <h3 className="text-base font-bold text-slate-900 dark:text-white">
+                                    Delete Quotation #{deletingQuote.quotation_number}
+                                </h3>
+                                <p className="text-xs text-slate-500">
+                                    Remove draft proposal and all line items
+                                </p>
+                            </div>
+                        </div>
+
+                        <div className="p-3.5 bg-rose-50/70 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-900/50 rounded-xl text-xs text-rose-800 dark:text-rose-300 space-y-1">
+                            <p className="font-bold flex items-center gap-1.5">
+                                <AlertTriangle size={14} /> Warning: This action cannot be undone
+                            </p>
+                            <p className="text-[11px] text-rose-700 dark:text-rose-300/90 leading-relaxed">
+                                This quotation record will be permanently purged. Since it has not been converted into an active tax invoice, no stock inventory or accounting balances will be affected.
+                            </p>
+                        </div>
+
+                        <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100 dark:border-slate-800">
+                            <button
+                                type="button"
+                                onClick={() => setDeletingQuote(null)}
+                                className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-xl text-xs font-bold transition-all"
+                            >
+                                Keep Quotation
+                            </button>
+                            <button
+                                type="submit"
+                                disabled={isDeleting}
+                                className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold transition-all shadow-md shadow-rose-600/20 disabled:opacity-50"
+                            >
+                                {isDeleting ? 'Deleting...' : 'Yes, Permanently Delete'}
+                            </button>
+                        </div>
+                    </form>
+                )}
+            </Modal>
         </AuthenticatedLayout>
     );
 }
