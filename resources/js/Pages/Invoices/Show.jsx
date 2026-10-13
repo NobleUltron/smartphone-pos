@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
-import { Head, Link, useForm } from '@inertiajs/react';
+import { Head, Link, useForm, router } from '@inertiajs/react';
 import Modal from '@/Components/Modal';
 import { 
     FileText, 
@@ -13,17 +13,33 @@ import {
     Clock, 
     CheckCircle2, 
     AlertCircle,
+    AlertTriangle,
     User,
     DollarSign,
     Receipt,
     Wallet,
     FileSpreadsheet,
-    FileCheck
+    FileCheck,
+    Ban,
+    Trash2
 } from 'lucide-react';
 import dayjs from 'dayjs';
 
 export default function InvoicesShow({ invoice, paymentAccounts }) {
     const [showPaymentModal, setShowPaymentModal] = useState(false);
+    
+    // Cancellation & Deletion States
+    const [showCancelModal, setShowCancelModal] = useState(false);
+    const [cancelReason, setCancelReason] = useState('');
+    const [isCancelling, setIsCancelling] = useState(false);
+
+    const [showDeleteModal, setShowDeleteModal] = useState(false);
+    const [isDeleting, setIsDeleting] = useState(false);
+
+    const isCancelled = invoice.status === 'Cancelled' || invoice.payment_status === 'Cancelled';
+    const isPaid = invoice.payment_status === 'Paid';
+    const isOverdue = invoice.payment_status === 'Overdue';
+    const isPartial = invoice.payment_status === 'Partial';
 
     const balanceDue = (invoice.balance_due !== undefined && invoice.balance_due !== null)
         ? Number(invoice.balance_due)
@@ -48,9 +64,32 @@ export default function InvoicesShow({ invoice, paymentAccounts }) {
         });
     };
 
-    const isPaid = invoice.payment_status === 'Paid';
-    const isOverdue = invoice.payment_status === 'Overdue';
-    const isPartial = invoice.payment_status === 'Partial';
+    const handleCancelInvoice = (e) => {
+        e.preventDefault();
+        setIsCancelling(true);
+        router.post(route('invoices.cancel', invoice.id), {
+            reason: cancelReason,
+        }, {
+            preserveScroll: true,
+            onSuccess: () => {
+                setShowCancelModal(false);
+                setCancelReason('');
+            },
+            onFinish: () => setIsCancelling(false),
+        });
+    };
+
+    const handleDeleteInvoice = (e) => {
+        e.preventDefault();
+        setIsDeleting(true);
+        router.delete(route('invoices.destroy', invoice.id), {
+            preserveScroll: true,
+            onSuccess: () => {
+                setShowDeleteModal(false);
+            },
+            onFinish: () => setIsDeleting(false),
+        });
+    };
 
     const percentPaid = invoice.total_amount > 0 
         ? Math.min(100, Math.round((Number(invoice.paid_amount) / Number(invoice.total_amount)) * 100))
@@ -76,13 +115,15 @@ export default function InvoicesShow({ invoice, paymentAccounts }) {
                                     Invoice #{invoice.invoice_number}
                                 </h1>
                                 <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold border uppercase ${
-                                    isPaid 
-                                        ? 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/60 dark:text-emerald-400' 
-                                        : isOverdue 
-                                            ? 'bg-red-50 text-red-700 border-red-200 dark:bg-red-950/60 dark:text-red-400'
-                                            : isPartial 
-                                                ? 'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/60 dark:text-blue-400'
-                                                : 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/60 dark:text-amber-400'
+                                    isCancelled
+                                        ? 'bg-slate-100 text-slate-500 border-slate-300 dark:bg-slate-800 dark:text-slate-400 dark:border-slate-700 line-through'
+                                        : isPaid 
+                                            ? 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/60 dark:text-emerald-400' 
+                                            : isOverdue 
+                                                ? 'bg-red-50 text-red-700 border-red-200 dark:bg-red-950/60 dark:text-red-400'
+                                                : isPartial 
+                                                    ? 'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/60 dark:text-blue-400'
+                                                    : 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/60 dark:text-amber-400'
                                 }`}>
                                     {invoice.payment_status}
                                 </span>
@@ -90,7 +131,7 @@ export default function InvoicesShow({ invoice, paymentAccounts }) {
                             <div className="flex items-center gap-3 text-xs text-slate-500 font-mono mt-0.5">
                                 <span>Issued: {dayjs(invoice.issue_date).format('DD MMM YYYY')}</span>
                                 <span>•</span>
-                                <span className={isOverdue ? 'text-red-600 font-bold' : ''}>
+                                <span className={isOverdue && !isCancelled ? 'text-red-600 font-bold' : ''}>
                                     Due: {dayjs(invoice.due_date).format('DD MMM YYYY')} ({invoice.payment_terms})
                                 </span>
                                 {invoice.po_number && (
@@ -122,7 +163,30 @@ export default function InvoicesShow({ invoice, paymentAccounts }) {
                             <Download size={15} /> A4 Tax Invoice PDF
                         </a>
 
-                        {!isPaid && (
+                        {!isCancelled && (
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    setCancelReason('');
+                                    setShowCancelModal(true);
+                                }}
+                                className="px-3.5 py-2 bg-amber-50 hover:bg-amber-100 dark:bg-amber-950/50 dark:hover:bg-amber-900/60 text-amber-700 dark:text-amber-300 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 border border-amber-200 dark:border-amber-800"
+                            >
+                                <Ban size={15} /> Cancel Invoice
+                            </button>
+                        )}
+
+                        {Number(invoice.paid_amount) === 0 && (
+                            <button
+                                type="button"
+                                onClick={() => setShowDeleteModal(true)}
+                                className="px-3.5 py-2 bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/50 dark:hover:bg-rose-900/60 text-rose-700 dark:text-rose-300 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 border border-rose-200 dark:border-rose-800"
+                            >
+                                <Trash2 size={15} /> Delete
+                            </button>
+                        )}
+
+                        {!isPaid && !isCancelled && (
                             <button
                                 onClick={() => {
                                     paymentForm.setData('amount', balanceDue);
@@ -135,6 +199,23 @@ export default function InvoicesShow({ invoice, paymentAccounts }) {
                         )}
                     </div>
                 </div>
+
+                {/* Cancelled Warning Banner */}
+                {isCancelled && (
+                    <div className="p-4 rounded-2xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900/60 flex items-start gap-3.5 text-amber-800 dark:text-amber-300 shadow-sm">
+                        <div className="p-2.5 rounded-xl bg-amber-100 dark:bg-amber-900/60 text-amber-700 dark:text-amber-300 mt-0.5">
+                            <Ban size={20} />
+                        </div>
+                        <div className="space-y-1">
+                            <h4 className="font-black text-sm uppercase tracking-wide flex items-center gap-2">
+                                Voided & Cancelled Invoice
+                            </h4>
+                            <p className="text-xs text-amber-700 dark:text-amber-300/90 leading-relaxed">
+                                This invoice has been cancelled and voided. All reserved items and serialized device IMEIs were automatically returned to active inventory stock. Debtors and receivables metrics have been adjusted accordingly.
+                            </p>
+                        </div>
+                    </div>
+                )}
 
                 {/* Overview Cards */}
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -205,20 +286,24 @@ export default function InvoicesShow({ invoice, paymentAccounts }) {
 
                     {/* Outstanding Balance Banner */}
                     <div className={`p-5 rounded-2xl shadow-md space-y-2 text-white flex flex-col justify-between ${
-                        balanceDue > 0 
-                            ? 'bg-gradient-to-br from-slate-900 via-slate-800 to-indigo-950' 
-                            : 'bg-gradient-to-br from-emerald-900 to-teal-950'
+                        isCancelled
+                            ? 'bg-gradient-to-br from-slate-800 to-slate-900 border border-slate-700/60'
+                            : balanceDue > 0 
+                                ? 'bg-gradient-to-br from-slate-900 via-slate-800 to-indigo-950' 
+                                : 'bg-gradient-to-br from-emerald-900 to-teal-950'
                     }`}>
                         <div>
                             <div className="text-[10px] font-bold uppercase tracking-wider text-slate-300">
-                                {balanceDue > 0 ? 'Outstanding Due' : 'Invoice Settlement'}
+                                {isCancelled ? 'Invoice Status' : balanceDue > 0 ? 'Outstanding Due' : 'Invoice Settlement'}
                             </div>
-                            <div className="text-3xl font-black font-mono mt-1">
-                                {balanceDue > 0 ? `UGX ${balanceDue.toLocaleString()}` : 'Fully Paid'}
+                            <div className={`text-3xl font-black font-mono mt-1 ${isCancelled ? 'line-through text-slate-300' : ''}`}>
+                                {isCancelled ? 'CANCELLED' : balanceDue > 0 ? `UGX ${balanceDue.toLocaleString()}` : 'Fully Paid'}
                             </div>
                         </div>
                         <div className="text-xs text-slate-300/80">
-                            {balanceDue > 0 ? (
+                            {isCancelled ? (
+                                <span>This invoice was voided and all items restored to stock.</span>
+                            ) : balanceDue > 0 ? (
                                 <span>Payment terms: <strong>{invoice.payment_terms}</strong> due by {dayjs(invoice.due_date).format('DD MMM YYYY')}.</span>
                             ) : (
                                 <span>All payments have been settled and credited to Treasury accounts.</span>
@@ -302,7 +387,7 @@ export default function InvoicesShow({ invoice, paymentAccounts }) {
                             <Receipt size={18} className="text-emerald-600" />
                             <span>Payment Receipts & Treasury Collection History</span>
                         </div>
-                        {!isPaid && (
+                        {!isPaid && !isCancelled && (
                             <button
                                 onClick={() => {
                                     paymentForm.setData('amount', balanceDue);
@@ -552,6 +637,113 @@ export default function InvoicesShow({ invoice, paymentAccounts }) {
                             className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-all shadow-md shadow-emerald-600/20 disabled:opacity-50"
                         >
                             {paymentForm.processing ? 'Recording...' : 'Confirm & Issue Receipt'}
+                        </button>
+                    </div>
+                </form>
+            </Modal>
+
+            {/* Cancel Modal */}
+            <Modal show={showCancelModal} onClose={() => setShowCancelModal(false)} maxWidth="md">
+                <form onSubmit={handleCancelInvoice} className="p-6 bg-white dark:bg-slate-900 rounded-2xl space-y-4">
+                    <div className="flex items-center gap-3 pb-3 border-b border-slate-100 dark:border-slate-800">
+                        <div className="p-2.5 rounded-xl bg-amber-50 dark:bg-amber-950/60 text-amber-600 dark:text-amber-400">
+                            <Ban size={22} />
+                        </div>
+                        <div>
+                            <h3 className="text-base font-bold text-slate-900 dark:text-white">
+                                Cancel Invoice #{invoice.invoice_number}
+                            </h3>
+                            <p className="text-xs text-slate-500">
+                                Void document & restore reserved stock to inventory
+                            </p>
+                        </div>
+                    </div>
+
+                    <div className="p-3.5 bg-amber-50/70 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900/50 rounded-xl text-xs text-amber-800 dark:text-amber-300 space-y-1">
+                        <p className="font-bold flex items-center gap-1.5">
+                            <AlertTriangle size={14} /> What happens when you cancel:
+                        </p>
+                        <ul className="list-disc pl-5 space-y-0.5 text-[11px] text-amber-700 dark:text-amber-300/90">
+                            <li>All line items and serialized devices will be restocked immediately.</li>
+                            <li>If linked to a quotation, the quote status will revert to Approved.</li>
+                            <li>Invoice status will become Cancelled (audit trail is retained).</li>
+                        </ul>
+                    </div>
+
+                    <div className="space-y-1">
+                        <label className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                            Reason for Cancellation (Optional)
+                        </label>
+                        <textarea
+                            rows="3"
+                            placeholder="e.g. Client cancelled agreement, pricing amended, or wrong items billed..."
+                            value={cancelReason}
+                            onChange={(e) => setCancelReason(e.target.value)}
+                            className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs focus:ring-2 focus:ring-amber-500"
+                        />
+                    </div>
+
+                    <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100 dark:border-slate-800">
+                        <button
+                            type="button"
+                            onClick={() => setShowCancelModal(false)}
+                            className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-xl text-xs font-bold transition-all"
+                        >
+                            Never Mind
+                        </button>
+                        <button
+                            type="submit"
+                            disabled={isCancelling}
+                            className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-bold transition-all shadow-md shadow-amber-600/20 disabled:opacity-50"
+                        >
+                            {isCancelling ? 'Cancelling...' : 'Confirm & Cancel Invoice'}
+                        </button>
+                    </div>
+                </form>
+            </Modal>
+
+            {/* Delete Modal */}
+            <Modal show={showDeleteModal} onClose={() => setShowDeleteModal(false)} maxWidth="md">
+                <form onSubmit={handleDeleteInvoice} className="p-6 bg-white dark:bg-slate-900 rounded-2xl space-y-4">
+                    <div className="flex items-center gap-3 pb-3 border-b border-slate-100 dark:border-slate-800">
+                        <div className="p-2.5 rounded-xl bg-rose-50 dark:bg-rose-950/60 text-rose-600 dark:text-rose-400">
+                            <Trash2 size={22} />
+                        </div>
+                        <div>
+                            <h3 className="text-base font-bold text-slate-900 dark:text-white">
+                                Permanently Delete Invoice #{invoice.invoice_number}
+                            </h3>
+                            <p className="text-xs text-slate-500">
+                                Permanent database removal & inventory restock
+                            </p>
+                        </div>
+                    </div>
+
+                    <div className="p-3.5 bg-rose-50/70 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-900/50 rounded-xl text-xs text-rose-800 dark:text-rose-300 space-y-1">
+                        <p className="font-bold flex items-center gap-1.5">
+                            <AlertTriangle size={14} /> Warning: This action cannot be undone
+                        </p>
+                        <ul className="list-disc pl-5 space-y-0.5 text-[11px] text-rose-700 dark:text-rose-300/90">
+                            <li>The invoice record and all line items will be purged forever.</li>
+                            <li>If not previously cancelled, all items will be automatically returned to stock.</li>
+                            <li>Any linked quotation will return to Approved status.</li>
+                        </ul>
+                    </div>
+
+                    <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100 dark:border-slate-800">
+                        <button
+                            type="button"
+                            onClick={() => setShowDeleteModal(false)}
+                            className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-xl text-xs font-bold transition-all"
+                        >
+                            Keep Invoice
+                        </button>
+                        <button
+                            type="submit"
+                            disabled={isDeleting}
+                            className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold transition-all shadow-md shadow-rose-600/20 disabled:opacity-50"
+                        >
+                            {isDeleting ? 'Deleting...' : 'Yes, Permanently Delete'}
                         </button>
                     </div>
                 </form>

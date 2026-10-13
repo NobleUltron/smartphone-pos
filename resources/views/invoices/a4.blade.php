@@ -68,6 +68,7 @@
         .status-partial { background: #fef9c3; color: #a16207; border: 1px solid #fde047; }
         .status-unpaid { background: #fee2e2; color: #b91c1c; border: 1px solid #fca5a5; }
         .status-overdue { background: #f43f5e; color: #ffffff; }
+        .status-cancelled { background: #f1f5f9; color: #64748b; border: 1px solid #cbd5e1; text-decoration: line-through; }
 
         .meta-table {
             width: 100%;
@@ -280,6 +281,12 @@
             </td>
         </tr>
     </table>
+ 
+    @if($invoice->status === 'Cancelled' || $invoice->payment_status === 'Cancelled')
+        <div style="background: #fef2f2; border: 1.5px solid #ef4444; color: #991b1b; padding: 7px 12px; border-radius: 6px; margin-bottom: 12px; font-weight: 800; text-align: center; font-size: 11px; letter-spacing: 0.5px; text-transform: uppercase;">
+            ⚠️ VOID / CANCELLED INVOICE — All reserved inventory was restored to stock.
+        </div>
+    @endif
 
     <!-- Client and Bank Details -->
     <table class="meta-table">

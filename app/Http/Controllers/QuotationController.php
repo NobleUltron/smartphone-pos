@@ -269,9 +269,9 @@ class QuotationController extends Controller
 
     public function convertToInvoice(Request $request, Quotation $quotation)
     {
-        if ($quotation->invoice) {
+        if ($quotation->invoice && $quotation->invoice->status !== 'Cancelled') {
             return redirect()->route('invoices.show', $quotation->invoice->id)
-                ->with('info', 'This quotation has already been converted to an invoice.');
+                ->with('info', 'This quotation has already been converted to an active invoice.');
         }
 
         $request->validate([

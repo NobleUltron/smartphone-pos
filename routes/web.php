@@ -266,6 +266,8 @@ Route::middleware('auth')->group(function () {
         Route::post('/invoices/{invoice}/payments', [\App\Http\Controllers\InvoiceController::class, 'recordPayment'])->name('invoices.payments.store');
         Route::get('/invoices/{invoice}/pdf', [\App\Http\Controllers\InvoiceController::class, 'printPdf'])->name('invoices.pdf');
         Route::get('/invoices/payments/{payment}/receipt-pdf', [\App\Http\Controllers\InvoiceController::class, 'printReceiptPdf'])->name('invoices.payments.receipt-pdf');
+        Route::post('/invoices/{invoice}/cancel', [\App\Http\Controllers\InvoiceController::class, 'cancel'])->name('invoices.cancel');
+        Route::delete('/invoices/{invoice}', [\App\Http\Controllers\InvoiceController::class, 'destroy'])->name('invoices.destroy');
     });
 
     Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');

@@ -1,25 +1,37 @@
 import React, { useState } from 'react';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import { Head, Link, router } from '@inertiajs/react';
+import Modal from '@/Components/Modal';
 import { 
     FileText, 
     Plus, 
     Search, 
     DollarSign, 
     AlertCircle, 
+    AlertTriangle,
     CheckCircle2, 
     Clock, 
     Building2,
     Download,
     Eye,
     TrendingUp,
-    FileSpreadsheet
+    FileSpreadsheet,
+    Ban,
+    Trash2
 } from 'lucide-react';
 import dayjs from 'dayjs';
 
 export default function InvoicesIndex({ invoices, filters, metrics }) {
     const [search, setSearch] = useState(filters.search || '');
     const [paymentStatus, setPaymentStatus] = useState(filters.payment_status || 'all');
+    
+    // Cancellation & Deletion States
+    const [cancellingInvoice, setCancellingInvoice] = useState(null);
+    const [cancelReason, setCancelReason] = useState('');
+    const [isSubmittingCancel, setIsSubmittingCancel] = useState(false);
+
+    const [deletingInvoice, setDeletingInvoice] = useState(null);
+    const [isSubmittingDelete, setIsSubmittingDelete] = useState(false);
 
     const handleFilter = (newFilters = {}) => {
         router.get(route('invoices.index'), {
@@ -40,9 +52,40 @@ export default function InvoicesIndex({ invoices, filters, metrics }) {
                 return 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/50 dark:text-amber-300 dark:border-amber-800';
             case 'Overdue':
                 return 'bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-950/50 dark:text-rose-300 dark:border-rose-800 font-black animate-pulse';
+            case 'Cancelled':
+                return 'bg-slate-100 text-slate-500 border-slate-300 dark:bg-slate-800 dark:text-slate-400 dark:border-slate-700 line-through';
             default:
                 return 'bg-slate-100 text-slate-700 border-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700';
         }
+    };
+
+    const handleCancelInvoice = (e) => {
+        e.preventDefault();
+        if (!cancellingInvoice) return;
+        setIsSubmittingCancel(true);
+        router.post(route('invoices.cancel', cancellingInvoice.id), {
+            reason: cancelReason,
+        }, {
+            preserveScroll: true,
+            onSuccess: () => {
+                setCancellingInvoice(null);
+                setCancelReason('');
+            },
+            onFinish: () => setIsSubmittingCancel(false),
+        });
+    };
+
+    const handleDeleteInvoice = (e) => {
+        e.preventDefault();
+        if (!deletingInvoice) return;
+        setIsSubmittingDelete(true);
+        router.delete(route('invoices.destroy', deletingInvoice.id), {
+            preserveScroll: true,
+            onSuccess: () => {
+                setDeletingInvoice(null);
+            },
+            onFinish: () => setIsSubmittingDelete(false),
+        });
     };
 
     return (
@@ -173,6 +216,7 @@ export default function InvoicesIndex({ invoices, filters, metrics }) {
                                 <option value="Partial">Partially Paid</option>
                                 <option value="Paid">Fully Paid</option>
                                 <option value="Overdue">Overdue</option>
+                                <option value="Cancelled">Cancelled</option>
                             </select>
                         </div>
                     </div>
@@ -253,6 +297,36 @@ export default function InvoicesIndex({ invoices, filters, metrics }) {
                                                     >
                                                         <Download size={15} />
                                                     </a>
+                                                    {inv.status !== 'Cancelled' && (
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => {
+                                                                setCancellingInvoice(inv);
+                                                                setCancelReason('');
+                                                            }}
+                                                            className="p-1.5 text-slate-400 hover:text-amber-600 hover:bg-amber-50 dark:hover:bg-slate-800 rounded-lg transition-colors"
+                                                            title="Cancel / Void Invoice"
+                                                        >
+                                                            <Ban size={15} />
+                                                        </button>
+                                                    )}
+                                                    {Number(inv.paid_amount) === 0 ? (
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => setDeletingInvoice(inv)}
+                                                            className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-slate-800 rounded-lg transition-colors"
+                                                            title="Permanently Delete Invoice"
+                                                        >
+                                                            <Trash2 size={15} />
+                                                        </button>
+                                                    ) : (
+                                                        <span
+                                                            className="p-1.5 text-slate-200 dark:text-slate-700 cursor-not-allowed"
+                                                            title="Cannot delete: payments have been collected"
+                                                        >
+                                                            <Trash2 size={15} />
+                                                        </span>
+                                                    )}
                                                 </div>
                                             </td>
                                         </tr>
@@ -270,6 +344,117 @@ export default function InvoicesIndex({ invoices, filters, metrics }) {
                     </div>
                 </div>
             </div>
+
+            {/* Cancel Modal */}
+            <Modal show={!!cancellingInvoice} onClose={() => setCancellingInvoice(null)} maxWidth="md">
+                {cancellingInvoice && (
+                    <form onSubmit={handleCancelInvoice} className="p-6 bg-white dark:bg-slate-900 rounded-2xl space-y-4">
+                        <div className="flex items-center gap-3 pb-3 border-b border-slate-100 dark:border-slate-800">
+                            <div className="p-2.5 rounded-xl bg-amber-50 dark:bg-amber-950/60 text-amber-600 dark:text-amber-400">
+                                <Ban size={22} />
+                            </div>
+                            <div>
+                                <h3 className="text-base font-bold text-slate-900 dark:text-white">
+                                    Cancel Invoice #{cancellingInvoice.invoice_number}
+                                </h3>
+                                <p className="text-xs text-slate-500">
+                                    Void document & return reserved stock to inventory
+                                </p>
+                            </div>
+                        </div>
+
+                        <div className="p-3.5 bg-amber-50/70 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900/50 rounded-xl text-xs text-amber-800 dark:text-amber-300 space-y-1">
+                            <p className="font-bold flex items-center gap-1.5">
+                                <AlertTriangle size={14} /> What happens when you cancel:
+                            </p>
+                            <ul className="list-disc pl-5 space-y-0.5 text-[11px] text-amber-700 dark:text-amber-300/90">
+                                <li>All bulk quantities and serialized devices will be restocked immediately.</li>
+                                <li>If linked to a quotation, the quote status will revert to Approved.</li>
+                                <li>Invoice status will become Cancelled (audit trail is retained).</li>
+                            </ul>
+                        </div>
+
+                        <div className="space-y-1">
+                            <label className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                                Reason for Cancellation (Optional)
+                            </label>
+                            <textarea
+                                rows="3"
+                                placeholder="e.g. Order cancelled by client; incorrect price quote; re-issuing new terms..."
+                                value={cancelReason}
+                                onChange={(e) => setCancelReason(e.target.value)}
+                                className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs focus:ring-2 focus:ring-amber-500"
+                            />
+                        </div>
+
+                        <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100 dark:border-slate-800">
+                            <button
+                                type="button"
+                                onClick={() => setCancellingInvoice(null)}
+                                className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-xl text-xs font-bold transition-all"
+                            >
+                                Never Mind
+                            </button>
+                            <button
+                                type="submit"
+                                disabled={isSubmittingCancel}
+                                className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-bold transition-all shadow-md shadow-amber-600/20 disabled:opacity-50"
+                            >
+                                {isSubmittingCancel ? 'Cancelling...' : 'Confirm & Cancel Invoice'}
+                            </button>
+                        </div>
+                    </form>
+                )}
+            </Modal>
+
+            {/* Delete Modal */}
+            <Modal show={!!deletingInvoice} onClose={() => setDeletingInvoice(null)} maxWidth="md">
+                {deletingInvoice && (
+                    <form onSubmit={handleDeleteInvoice} className="p-6 bg-white dark:bg-slate-900 rounded-2xl space-y-4">
+                        <div className="flex items-center gap-3 pb-3 border-b border-slate-100 dark:border-slate-800">
+                            <div className="p-2.5 rounded-xl bg-rose-50 dark:bg-rose-950/60 text-rose-600 dark:text-rose-400">
+                                <Trash2 size={22} />
+                            </div>
+                            <div>
+                                <h3 className="text-base font-bold text-slate-900 dark:text-white">
+                                    Permanently Delete Invoice #{deletingInvoice.invoice_number}
+                                </h3>
+                                <p className="text-xs text-slate-500">
+                                    Permanent database removal & inventory restock
+                                </p>
+                            </div>
+                        </div>
+
+                        <div className="p-3.5 bg-rose-50/70 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-900/50 rounded-xl text-xs text-rose-800 dark:text-rose-300 space-y-1">
+                            <p className="font-bold flex items-center gap-1.5">
+                                <AlertTriangle size={14} /> Warning: This action cannot be undone
+                            </p>
+                            <ul className="list-disc pl-5 space-y-0.5 text-[11px] text-rose-700 dark:text-rose-300/90">
+                                <li>The invoice record and all line items will be purged forever.</li>
+                                <li>If not previously cancelled, all items will be automatically returned to stock.</li>
+                                <li>Any linked quotation will return to Approved status.</li>
+                            </ul>
+                        </div>
+
+                        <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100 dark:border-slate-800">
+                            <button
+                                type="button"
+                                onClick={() => setDeletingInvoice(null)}
+                                className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-xl text-xs font-bold transition-all"
+                            >
+                                Keep Invoice
+                            </button>
+                            <button
+                                type="submit"
+                                disabled={isSubmittingDelete}
+                                className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold transition-all shadow-md shadow-rose-600/20 disabled:opacity-50"
+                            >
+                                {isSubmittingDelete ? 'Deleting...' : 'Yes, Permanently Delete'}
+                            </button>
+                        </div>
+                    </form>
+                )}
+            </Modal>
         </AuthenticatedLayout>
     );
 }

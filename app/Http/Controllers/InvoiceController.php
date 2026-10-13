@@ -41,9 +41,9 @@ class InvoiceController extends Controller
 
         $invoices = $query->paginate(15)->withQueryString();
 
-        // Update overdue status dynamically on load
+        // Update overdue status dynamically on load (exclude Cancelled)
         foreach ($invoices as $inv) {
-            if ($inv->payment_status !== 'Paid' && now()->gt($inv->due_date) && $inv->payment_status !== 'Overdue') {
+            if ($inv->status !== 'Cancelled' && $inv->payment_status !== 'Cancelled' && $inv->payment_status !== 'Paid' && now()->gt($inv->due_date) && $inv->payment_status !== 'Overdue') {
                 $inv->update(['payment_status' => 'Overdue']);
             }
         }
@@ -52,6 +52,7 @@ class InvoiceController extends Controller
         $totalCollected = InvoicePayment::sum('amount');
         $totalOutstanding = max(0, $totalInvoiced - $totalCollected);
         $overdueAmount = Invoice::where('payment_status', 'Overdue')
+            ->where('status', '!=', 'Cancelled')
             ->selectRaw('SUM(total_amount - paid_amount) as remaining')
             ->value('remaining') ?? 0;
 
@@ -60,8 +61,8 @@ class InvoiceController extends Controller
             'total_collected' => $totalCollected,
             'total_outstanding' => $totalOutstanding,
             'overdue_amount' => $overdueAmount,
-            'overdue_count' => Invoice::where('payment_status', 'Overdue')->count(),
-            'pending_count' => Invoice::whereIn('payment_status', ['Unpaid', 'Partial'])->count(),
+            'overdue_count' => Invoice::where('payment_status', 'Overdue')->where('status', '!=', 'Cancelled')->count(),
+            'pending_count' => Invoice::whereIn('payment_status', ['Unpaid', 'Partial'])->where('status', '!=', 'Cancelled')->count(),
         ];
 
         return Inertia::render('Invoices/Index', [
@@ -196,6 +197,10 @@ class InvoiceController extends Controller
 
     public function recordPayment(Request $request, Invoice $invoice)
     {
+        if ($invoice->status === 'Cancelled') {
+            return redirect()->back()->withErrors(['amount' => 'Cannot record payment for a cancelled invoice.']);
+        }
+
         $balanceRemaining = $invoice->balance_due;
 
         if ($balanceRemaining <= 0) {
@@ -291,5 +296,86 @@ class InvoiceController extends Controller
         return request()->query('download') === '1'
             ? $pdf->download($filename)
             : $pdf->stream($filename);
+    }
+
+    public function cancel(Request $request, Invoice $invoice)
+    {
+        if ($invoice->status === 'Cancelled') {
+            return redirect()->back()->withErrors(['error' => 'This invoice has already been cancelled.']);
+        }
+
+        if ($invoice->paid_amount > 0 || $invoice->payments()->exists()) {
+            return redirect()->back()->withErrors(['error' => 'Invoices with recorded payments cannot be cancelled directly. Please refund or reverse the recorded receipts first to preserve Treasury integrity.']);
+        }
+
+        $reason = $request->input('reason', 'Cancelled by manager/admin');
+
+        DB::transaction(function () use ($invoice, $reason) {
+            // 1. Restock bulk products and serialized devices
+            foreach ($invoice->items as $item) {
+                if ($item->type === 'product' && !empty($item->product_id)) {
+                    $prod = Product::find($item->product_id);
+                    if ($prod && $prod->type === 'bulk') {
+                        $prod->increment('quantity', $item->quantity);
+                    }
+                }
+
+                if (!empty($item->imeis) && is_array($item->imeis)) {
+                    DeviceImei::whereIn('imei', $item->imeis)->update(['status' => 'In Stock']);
+                }
+            }
+
+            // 2. Revert linked quotation status to Approved if applicable
+            if ($invoice->quotation) {
+                $invoice->quotation->update(['status' => 'Approved']);
+            }
+
+            // 3. Update invoice status to Cancelled
+            $invoice->update([
+                'status' => 'Cancelled',
+                'payment_status' => 'Cancelled',
+                'notes' => trim(($invoice->notes ?? '') . "\n[Cancelled on " . now()->format('Y-m-d H:i') . ": " . $reason . "]"),
+            ]);
+        });
+
+        return redirect()->back()->with('success', "Invoice #{$invoice->invoice_number} has been cancelled and reserved inventory has been returned to stock.");
+    }
+
+    public function destroy(Invoice $invoice)
+    {
+        if ($invoice->paid_amount > 0 || $invoice->payments()->exists()) {
+            return redirect()->back()->withErrors(['error' => 'Invoices with recorded payments cannot be deleted to preserve Treasury and financial audit integrity. Please reverse the payments first or mark the invoice as Cancelled.']);
+        }
+
+        $invoiceNumber = $invoice->invoice_number;
+
+        DB::transaction(function () use ($invoice) {
+            // 1. Restock inventory if not already cancelled (if it was already cancelled, stock was already returned)
+            if ($invoice->status !== 'Cancelled') {
+                foreach ($invoice->items as $item) {
+                    if ($item->type === 'product' && !empty($item->product_id)) {
+                        $prod = Product::find($item->product_id);
+                        if ($prod && $prod->type === 'bulk') {
+                            $prod->increment('quantity', $item->quantity);
+                        }
+                    }
+
+                    if (!empty($item->imeis) && is_array($item->imeis)) {
+                        DeviceImei::whereIn('imei', $item->imeis)->update(['status' => 'In Stock']);
+                    }
+                }
+            }
+
+            // 2. Revert linked quotation status to Approved if applicable
+            if ($invoice->quotation) {
+                $invoice->quotation->update(['status' => 'Approved']);
+            }
+
+            // 3. Delete items and invoice
+            $invoice->items()->delete();
+            $invoice->delete();
+        });
+
+        return redirect()->route('invoices.index')->with('success', "Invoice #{$invoiceNumber} has been permanently deleted and inventory returned to stock.");
     }
 }
