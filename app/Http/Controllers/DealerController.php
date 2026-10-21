@@ -18,21 +18,66 @@ class DealerController extends Controller
 {
     public function dashboard()
     {
+        $outwardQuery = DealerItem::where(function ($q) {
+            $q->where('direction', 'outward')->orWhereNull('direction');
+        });
+
+        $inwardQuery = DealerItem::where('direction', 'inward');
+
+        $inwardItemsAll = $inwardQuery->clone()->get();
+
+        $weOweDealers = (float) $inwardItemsAll->where('quantity_sold', '>', 0)->sum(function ($item) {
+            $unitCost = floatval($item->wholesale_cost ?? $item->dealer_price ?? 0);
+            $totalOwed = $unitCost * $item->quantity_sold;
+            $alreadyPaid = floatval($item->settlement_amount ?? 0);
+            return max(0, $totalOwed - $alreadyPaid);
+        });
+
+        $inwardStockUnits = (int) $inwardItemsAll->sum(function ($item) {
+            return max(0, $item->quantity - $item->quantity_sold - $item->quantity_returned);
+        });
+
+        $inwardSoldUnits = (int) $inwardItemsAll->sum('quantity_sold');
+        $inwardTotalUnits = (int) $inwardItemsAll->sum('quantity');
+
+        $unsettledInwardCount = $inwardItemsAll->filter(function ($item) {
+            if ($item->quantity_sold <= 0) return false;
+            $unitCost = floatval($item->wholesale_cost ?? $item->dealer_price ?? 0);
+            $totalOwed = $unitCost * $item->quantity_sold;
+            $alreadyPaid = floatval($item->settlement_amount ?? 0);
+            return ($totalOwed - $alreadyPaid) > 0;
+        })->count();
+
         $metrics = [
-            'items_out' => DealerItem::where('status', 'Pending')->count(),
-            'pending_value' => DealerItem::where('status', 'Pending')->sum('dealer_price'),
-            'sold_value' => DealerItem::where('status', 'Sold')->sum('dealer_price'),
-            'items_sold' => DealerItem::where('status', 'Sold')->count(),
-            'returned_value' => DealerItem::where('status', 'Returned')->sum('dealer_price'),
-            'items_returned' => DealerItem::where('status', 'Returned')->count(),
-            'overdue_items' => DealerItem::where('status', 'Pending')
+            // Outward (Given to Dealers)
+            'items_out' => $outwardQuery->clone()->where('status', 'Pending')->count(),
+            'pending_value' => (float) $outwardQuery->clone()->where('status', 'Pending')->sum('dealer_price'),
+            'sold_value' => (float) $outwardQuery->clone()->where('status', 'Sold')->sum('dealer_price'),
+            'items_sold' => $outwardQuery->clone()->where('status', 'Sold')->count(),
+            'returned_value' => (float) $outwardQuery->clone()->where('status', 'Returned')->sum('dealer_price'),
+            'items_returned' => $outwardQuery->clone()->where('status', 'Returned')->count(),
+            'overdue_items' => $outwardQuery->clone()->where('status', 'Pending')
                                          ->whereNotNull('expected_return_date')
                                          ->where('expected_return_date', '<', Carbon::today())
                                          ->count(),
+            // Inward (Taken from Dealers)
+            'we_owe_dealers' => $weOweDealers,
+            'inward_stock_units' => $inwardStockUnits,
+            'inward_sold_units' => $inwardSoldUnits,
+            'inward_total_units' => $inwardTotalUnits,
+            'unsettled_inward_count' => $unsettledInwardCount,
         ];
 
         $pendingItems = DealerItem::with(['dealer', 'deviceImei.product.brand', 'product.brand'])
+            ->where(function ($q) {
+                $q->where('direction', 'outward')->orWhereNull('direction');
+            })
             ->where('status', 'Pending')
+            ->orderBy('issued_at', 'desc')
+            ->get();
+
+        $inwardItems = DealerItem::with(['dealer', 'deviceImei.product.brand', 'product.brand', 'user', 'sale'])
+            ->where('direction', 'inward')
             ->orderBy('issued_at', 'desc')
             ->get();
             
@@ -66,6 +111,9 @@ class DealerController extends Controller
             $endOfMonth = $date->copy()->endOfMonth();
 
             $issuedValue = DealerItem::whereBetween('issued_at', [$startOfMonth, $endOfMonth])
+                ->where(function ($q) {
+                    $q->where('direction', 'outward')->orWhereNull('direction');
+                })
                 ->sum('dealer_price');
 
             $soldValue = DealerItem::where('status', 'Sold')
@@ -89,9 +137,16 @@ class DealerController extends Controller
         $brands = \App\Models\Brand::all();
         $products = \App\Models\Product::with(['brand', 'category'])->orderBy('model_name')->get();
 
+        $userActiveDrawer = CashDrawer::where('user_id', auth()->id())
+            ->where('status', 'open')
+            ->first();
+        $activeDrawerCash = $userActiveDrawer ? floatval($userActiveDrawer->calculateExpectedCash()) : 0;
+        $paymentAccounts = \App\Models\PaymentAccount::where('is_active', true)->get(['id', 'name', 'type', 'provider', 'current_balance']);
+
         return Inertia::render('Dealers/Dashboard', [
             'metrics' => $metrics,
             'pendingItems' => $pendingItems,
+            'inwardItems' => $inwardItems,
             'recentSold' => $recentSold,
             'recentReturned' => $recentReturned,
             'topDealers' => $topDealers,
@@ -100,6 +155,9 @@ class DealerController extends Controller
             'categories' => $categories,
             'brands' => $brands,
             'products' => $products,
+            'hasActiveDrawer' => !is_null($userActiveDrawer),
+            'activeDrawerCash' => $activeDrawerCash,
+            'paymentAccounts' => $paymentAccounts,
         ]);
     }
 
