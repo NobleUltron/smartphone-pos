@@ -88,7 +88,7 @@ export default function POSIndex({ auth, customers = [], hasActiveDrawer }) {
                     type: 'bulk',
                     id: item.id,
                     imei: item.sku || `BULK-${item.id}`,
-                    name: `${item.brand?.name || ''} ${item.model_name}`.trim(),
+                    name: `${item.brand?.name || ''} ${item.model_name}${item.storage_capacity ? ' - ' + item.storage_capacity : ''}`.trim(),
                     price: item.selling_price,
                     quantity: 1
                 }]);
@@ -572,7 +572,14 @@ export default function POSIndex({ auth, customers = [], hasActiveDrawer }) {
                                     inventoryResults.map(product => (
                                         <div key={`prod-${product.id}`} className="flex items-center justify-between p-3 bg-slate-50 rounded-xl hover:bg-slate-100 transition-colors border border-slate-100">
                                             <div>
-                                                <div className="font-bold text-slate-900">{product.brand?.name} {product.model_name}</div>
+                                                <div className="font-bold text-slate-900 flex items-center gap-2">
+                                                    <span>{product.brand?.name} {product.model_name}</span>
+                                                    {product.storage_capacity && (
+                                                        <span className="px-1.5 py-0.5 rounded text-[10px] font-black bg-indigo-50 text-indigo-700 border border-indigo-200">
+                                                            {product.storage_capacity}
+                                                        </span>
+                                                    )}
+                                                </div>
                                                 <div className="text-xs text-slate-500">
                                                     {product.type === 'bulk' ? `Stock: ${product.quantity} | SKU: ${product.sku || 'N/A'}` : `Available Devices: ${product.device_imeis?.length || 0}`}
                                                 </div>

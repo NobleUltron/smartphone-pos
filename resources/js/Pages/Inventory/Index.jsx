@@ -23,7 +23,7 @@ export default function Inventory({ auth, products, allProducts = [], categories
     // Add Product Modal State
     const [showAddProductModal, setShowAddProductModal] = useState(false);
     const [isEditingProduct, setIsEditingProduct] = useState(false);
-    const [newProduct, setNewProduct] = useState({ id: null, category_id: '', brand_id: '', model_name: '', type: 'serialized', sku: '', quantity: '', cost_price: '', selling_price: '' });
+    const [newProduct, setNewProduct] = useState({ id: null, category_id: '', brand_id: '', model_name: '', storage_capacity: '', type: 'serialized', sku: '', quantity: '', cost_price: '', selling_price: '' });
 
     const [showAddModal, setShowAddModal] = useState(false);
     const [productId, setProductId] = useState('');
@@ -94,7 +94,7 @@ export default function Inventory({ auth, products, allProducts = [], categories
                 toast.success("Product model added successfully!");
             }
             setShowAddProductModal(false);
-            setNewProduct({ id: null, category_id: '', brand_id: '', model_name: '', type: 'serialized', sku: '', quantity: '', cost_price: '', selling_price: '' });
+            setNewProduct({ id: null, category_id: '', brand_id: '', model_name: '', storage_capacity: '', type: 'serialized', sku: '', quantity: '', cost_price: '', selling_price: '' });
             setIsEditingProduct(false);
             router.reload();
         } catch (error) {
@@ -109,6 +109,7 @@ export default function Inventory({ auth, products, allProducts = [], categories
             category_id: product.category_id,
             brand_id: product.brand_id || '',
             model_name: product.model_name,
+            storage_capacity: product.storage_capacity || '',
             type: product.type || 'serialized',
             sku: product.sku || '',
             quantity: product.quantity || '',
@@ -609,10 +610,20 @@ export default function Inventory({ auth, products, allProducts = [], categories
                         <tr key={product.id}>
                             <td>
                                 <div className="flex items-center gap-3">
-                                    <div className="w-10 h-10 rounded-xl flex justify-center items-center font-bold text-white shadow-sm bg-gradient-to-br from-slate-700 to-slate-900">
+                                    <div className="w-10 h-10 rounded-xl flex justify-center items-center font-bold text-white shadow-sm bg-gradient-to-br from-slate-700 to-slate-900 shrink-0">
                                         {product.brand?.name ? product.brand.name.charAt(0) : 'P'}
                                     </div>
-                                    <div className="font-bold text-slate-900">{product.brand?.name} {product.model_name}</div>
+                                    <div>
+                                        <div className="font-bold text-slate-900 flex items-center gap-2 flex-wrap">
+                                            <span>{product.brand?.name} {product.model_name}</span>
+                                            {product.storage_capacity && (
+                                                <span className="px-2 py-0.5 rounded-md text-[11px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200">
+                                                    {product.storage_capacity}
+                                                </span>
+                                            )}
+                                        </div>
+                                        {product.sku && <div className="text-xs text-slate-400 font-mono mt-0.5">SKU: {product.sku}</div>}
+                                    </div>
                                 </div>
                             </td>
                             <td>
@@ -746,6 +757,35 @@ export default function Inventory({ auth, products, allProducts = [], categories
                         {newProduct.type === 'bulk' && (
                             <>
                                 <div className="saas-form-group">
+                                    <label className="saas-label">
+                                        Storage Capacity <span className="text-slate-400 font-normal">(Optional for Storage Devices & Memory)</span>
+                                    </label>
+                                    <input 
+                                        type="text" 
+                                        className="saas-input" 
+                                        placeholder="e.g. 256GB, 512GB, 1TB" 
+                                        value={newProduct.storage_capacity || ''} 
+                                        onChange={e => setNewProduct({...newProduct, storage_capacity: e.target.value})} 
+                                    />
+                                    {/* Quick Capacity Select Pills */}
+                                    <div className="flex flex-wrap gap-1.5 mt-2">
+                                        {['16GB', '32GB', '64GB', '128GB', '256GB', '512GB', '1TB', '2TB'].map(cap => (
+                                            <button
+                                                key={cap}
+                                                type="button"
+                                                onClick={() => setNewProduct({...newProduct, storage_capacity: cap})}
+                                                className={`px-2 py-0.5 rounded-lg text-xs font-bold transition-colors ${
+                                                    newProduct.storage_capacity === cap
+                                                        ? 'bg-indigo-600 text-white shadow-sm'
+                                                        : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
+                                                }`}
+                                            >
+                                                {cap}
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+                                <div className="saas-form-group">
                                     <label className="saas-label">SKU / Barcode</label>
                                     <input type="text" className="saas-input" placeholder="e.g. CHG-001" value={newProduct.sku} onChange={e => setNewProduct({...newProduct, sku: e.target.value})} />
                                 </div>
@@ -872,7 +912,13 @@ export default function Inventory({ auth, products, allProducts = [], categories
                         
                         {viewProduct?.type === 'bulk' ? (
                             <div className="p-6">
-                                <div className="grid grid-cols-2 gap-4">
+                                <div className={`grid gap-4 mb-4 ${viewProduct.storage_capacity ? 'grid-cols-2 sm:grid-cols-4' : 'grid-cols-3'}`}>
+                                    {viewProduct.storage_capacity && (
+                                        <div className="p-4 bg-indigo-50/70 rounded-xl border border-indigo-100">
+                                            <p className="text-xs text-indigo-600 font-bold uppercase tracking-wider mb-1">Storage Capacity</p>
+                                            <p className="font-extrabold text-slate-900 text-base">{viewProduct.storage_capacity}</p>
+                                        </div>
+                                    )}
                                     <div className="p-4 bg-slate-50 rounded-xl">
                                         <p className="text-sm text-slate-500 mb-1">SKU / Barcode</p>
                                         <p className="font-bold text-slate-900">{viewProduct.sku || 'N/A'}</p>
@@ -904,7 +950,7 @@ export default function Inventory({ auth, products, allProducts = [], categories
                                                     labelData: {
                                                         barcode: viewProduct.sku || ('PROD-' + String(viewProduct.id).padStart(6, '0')),
                                                         title: brandName + viewProduct.model_name,
-                                                        subtitle: 'Accessory',
+                                                        subtitle: viewProduct.storage_capacity ? `${viewProduct.storage_capacity} Storage` : 'Accessory',
                                                         condition: 'Brand New',
                                                         price: viewProduct.selling_price
                                                     }

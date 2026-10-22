@@ -32,6 +32,7 @@ class ProductController extends Controller
             $query->where(function($q) use ($term) {
                 $q->whereRaw('LOWER(products.model_name) LIKE ?', [$term])
                   ->orWhereRaw('LOWER(COALESCE(products.sku, \'\')) LIKE ?', [$term])
+                  ->orWhereRaw('LOWER(COALESCE(products.storage_capacity, \'\')) LIKE ?', [$term])
                   ->orWhereHas('brand', function($bQuery) use ($term) {
                       $bQuery->whereRaw('LOWER(name) LIKE ?', [$term]);
                   })
@@ -184,6 +185,7 @@ class ProductController extends Controller
             'category_id' => 'required|exists:categories,id',
             'brand_id' => 'required|exists:brands,id',
             'model_name' => 'required|string|max:255',
+            'storage_capacity' => 'nullable|string|max:50',
             'type' => 'nullable|string|in:serialized,bulk',
             'sku' => 'nullable|string|unique:products,sku',
             'quantity' => 'nullable|integer|min:0',
@@ -210,6 +212,7 @@ class ProductController extends Controller
             'category_id' => 'required|exists:categories,id',
             'brand_id' => 'required|exists:brands,id',
             'model_name' => 'required|string|max:255',
+            'storage_capacity' => 'nullable|string|max:50',
             'type' => 'nullable|string|in:serialized,bulk',
             'sku' => 'nullable|string|unique:products,sku,' . $product->id,
             'quantity' => 'nullable|integer|min:0',
@@ -261,7 +264,7 @@ class ProductController extends Controller
             $labelData = [
                 'barcode' => $barcode,
                 'title' => ($product->brand ? $product->brand->name . ' ' : '') . $product->model_name,
-                'subtitle' => 'Accessory',
+                'subtitle' => $product->storage_capacity ? ($product->storage_capacity . ' Storage') : 'Accessory',
                 'condition' => 'Brand New',
                 'price' => $product->selling_price,
             ];

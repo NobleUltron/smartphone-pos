@@ -69,6 +69,7 @@ class POSController extends Controller
             $bulkProducts->where(function($q) use ($query) {
                 $q->where('model_name', 'like', "%{$query}%")
                   ->orWhere('sku', 'like', "%{$query}%")
+                  ->orWhere('storage_capacity', 'like', "%{$query}%")
                   ->orWhereHas('brand', function($q2) use ($query) {
                       $q2->where('name', 'like', "%{$query}%");
                   });
@@ -78,6 +79,14 @@ class POSController extends Controller
                 $q->where('model_name', 'like', "%{$query}%")
                   ->orWhereHas('brand', function($q2) use ($query) {
                       $q2->where('name', 'like', "%{$query}%");
+                  })
+                  ->orWhereHas('deviceImeis', function($dQuery) use ($query) {
+                      $dQuery->where('status', 'In Stock')
+                             ->where(function($dq) use ($query) {
+                                 $dq->where('storage_capacity', 'like', "%{$query}%")
+                                    ->orWhere('imei', 'like', "%{$query}%")
+                                    ->orWhere('color', 'like', "%{$query}%");
+                             });
                   });
             });
         }
