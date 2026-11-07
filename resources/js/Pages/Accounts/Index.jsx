@@ -171,9 +171,10 @@ export default function AccountsIndex({ accounts, metrics, transactions, filters
             <Head title="Money & Treasury Management" />
 
             <div className="space-y-6 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-                {/* Header */}
-                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 bg-white dark:bg-slate-900 p-6 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-sm">
-                    <div>
+                {/* Header & Navigation Tabs */}
+                <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-sm space-y-4">
+                    {/* Top Row: Title + Action Buttons */}
+                    <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
                         <div className="flex items-center gap-3">
                             <div className="p-3 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-xl text-white shadow-md shadow-indigo-500/20">
                                 <Landmark size={24} />
@@ -187,37 +188,37 @@ export default function AccountsIndex({ accounts, metrics, transactions, filters
                                 </p>
                             </div>
                         </div>
+
+                        <div className="flex items-center gap-2.5 flex-wrap">
+                            <button
+                                type="button"
+                                onClick={handleSyncHistorical}
+                                disabled={isSyncing}
+                                className="px-3.5 py-2.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold transition-all flex items-center gap-2 shadow-sm whitespace-nowrap"
+                                title="Recalculate balances and sync past POS sales & expenses into accounts"
+                            >
+                                <RefreshCw size={15} className={isSyncing ? 'animate-spin text-indigo-600' : ''} />
+                                {isSyncing ? 'Syncing...' : 'Sync Past Data'}
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => setShowTransferModal(true)}
+                                className="px-3.5 py-2.5 bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950/50 dark:hover:bg-indigo-900 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 rounded-xl text-xs font-bold transition-all flex items-center gap-2 shadow-sm whitespace-nowrap"
+                            >
+                                <ArrowRightLeft size={15} /> Inter-Account Transfer
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => setShowCreateModal(true)}
+                                className="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold transition-all flex items-center gap-2 shadow-md shadow-indigo-500/20 whitespace-nowrap"
+                            >
+                                <Plus size={16} /> Add Payment Account
+                            </button>
+                        </div>
                     </div>
 
-                    <div className="flex items-center gap-3 flex-wrap">
-                        <button
-                            type="button"
-                            onClick={handleSyncHistorical}
-                            disabled={isSyncing}
-                            className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold transition-all flex items-center gap-2 shadow-sm"
-                            title="Recalculate balances and sync past POS sales & expenses into accounts"
-                        >
-                            <RefreshCw size={16} className={isSyncing ? 'animate-spin text-indigo-600' : ''} />
-                            {isSyncing ? 'Syncing...' : 'Sync Past Data'}
-                        </button>
-                        <button
-                            type="button"
-                            onClick={() => setShowTransferModal(true)}
-                            className="px-4 py-2.5 bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950/50 dark:hover:bg-indigo-900 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 rounded-xl text-xs font-bold transition-all flex items-center gap-2 shadow-sm"
-                        >
-                            <ArrowRightLeft size={16} /> Inter-Account Transfer
-                        </button>
-                        <button
-                            type="button"
-                            onClick={() => setShowCreateModal(true)}
-                            className="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold transition-all flex items-center gap-2 shadow-md shadow-indigo-500/20"
-                        >
-                            <Plus size={16} /> Add Payment Account
-                        </button>
-                    </div>
-
-                    {/* Navigation Tabs */}
-                    <div className="flex items-center gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+                    {/* Bottom Row: Navigation Tabs */}
+                    <div className="flex items-center gap-2 pt-3 border-t border-slate-100 dark:border-slate-800">
                         <span className="px-4 py-2 rounded-xl text-xs font-bold bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 border border-indigo-200/80 dark:border-indigo-800 flex items-center gap-2">
                             <Wallet size={16} /> Business Wallets & Accounts
                         </span>
@@ -225,7 +226,7 @@ export default function AccountsIndex({ accounts, metrics, transactions, filters
                             href={route('partners.index')}
                             className="px-4 py-2 rounded-xl text-xs font-bold text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition-all flex items-center gap-2"
                         >
-                            <Users size={16} /> Partner & Family Capital
+                            <Users size={16} /> Partner & Family Capital ({metrics.partnersCount || 0})
                         </Link>
                     </div>
                 </div>
