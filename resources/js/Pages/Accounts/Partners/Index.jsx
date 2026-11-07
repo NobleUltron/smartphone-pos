@@ -2,11 +2,6 @@ import React, { useState } from 'react';
 import { Head, Link, router, useForm } from '@inertiajs/react';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import Modal from '@/Components/Modal';
-import PrimaryButton from '@/Components/PrimaryButton';
-import SecondaryButton from '@/Components/SecondaryButton';
-import TextInput from '@/Components/TextInput';
-import InputLabel from '@/Components/InputLabel';
-import InputError from '@/Components/InputError';
 import { 
     Users, 
     Landmark, 
@@ -443,61 +438,75 @@ export default function PartnersIndex({ partners, metrics, paymentAccounts, unas
             <Modal show={showCreateModal} onClose={() => setShowCreateModal(false)} maxWidth="md">
                 <form onSubmit={handleCreatePartner} className="p-6 space-y-4">
                     <div className="flex items-center justify-between pb-3 border-b border-slate-200 dark:border-slate-800">
-                        <h3 className="text-base font-black text-slate-900 dark:text-white flex items-center gap-2">
-                            <Users className="text-indigo-600" size={18} /> New Partner Capital Profile
-                        </h3>
-                        <button type="button" onClick={() => setShowCreateModal(false)} className="text-slate-400 hover:text-slate-600">
+                        <div className="flex items-center gap-2.5">
+                            <div className="p-2 bg-indigo-50 dark:bg-indigo-950/60 rounded-xl text-indigo-600 dark:text-indigo-400">
+                                <Users size={18} />
+                            </div>
+                            <div>
+                                <h3 className="text-base font-bold text-slate-900 dark:text-white">New Partner Capital Profile</h3>
+                                <p className="text-xs text-slate-500 dark:text-slate-400">Create a profile to monitor family/partner funds and phone profit</p>
+                            </div>
+                        </div>
+                        <button type="button" onClick={() => setShowCreateModal(false)} className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">
                             <X size={18} />
                         </button>
                     </div>
 
-                    <div>
-                        <InputLabel value="Partner / Family Member Name *" />
-                        <TextInput
+                    <div className="space-y-1">
+                        <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">
+                            Partner / Family Member Name *
+                        </label>
+                        <input
                             type="text"
                             required
-                            className="w-full mt-1"
+                            className="w-full px-3.5 py-2.5 text-sm font-semibold rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/80 text-slate-900 dark:text-white placeholder-slate-400 focus:bg-white dark:focus:bg-slate-800 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all shadow-sm"
                             placeholder="e.g. David Byamukama (Brother), Sarah Investor"
                             value={createForm.data.name}
                             onChange={e => createForm.setData('name', e.target.value)}
                         />
-                        <InputError message={createForm.errors.name} />
+                        {createForm.errors.name && <p className="text-xs text-rose-500 font-bold mt-1">{createForm.errors.name}</p>}
                     </div>
 
                     <div className="grid grid-cols-2 gap-3">
-                        <div>
-                            <InputLabel value="Phone Number (WhatsApp)" />
-                            <TextInput
+                        <div className="space-y-1">
+                            <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">
+                                Phone (WhatsApp)
+                            </label>
+                            <input
                                 type="text"
-                                className="w-full mt-1"
+                                className="w-full px-3.5 py-2.5 text-sm font-semibold rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/80 text-slate-900 dark:text-white placeholder-slate-400 focus:bg-white dark:focus:bg-slate-800 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all shadow-sm"
                                 placeholder="+256 700 000 000"
                                 value={createForm.data.phone}
                                 onChange={e => createForm.setData('phone', e.target.value)}
                             />
                         </div>
-                        <div>
-                            <InputLabel value="Profit Share (%)" />
-                            <TextInput
+                        <div className="space-y-1">
+                            <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">
+                                Profit Share (%)
+                            </label>
+                            <input
                                 type="number"
                                 min="0"
                                 max="100"
                                 step="1"
-                                className="w-full mt-1"
+                                className="w-full px-3.5 py-2.5 text-sm font-semibold rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/80 text-slate-900 dark:text-white placeholder-slate-400 focus:bg-white dark:focus:bg-slate-800 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all shadow-sm"
                                 placeholder="100"
                                 value={createForm.data.profit_share_percentage}
                                 onChange={e => createForm.setData('profit_share_percentage', e.target.value)}
                             />
-                            <p className="text-[10px] text-slate-400 mt-0.5">100% = Partner gets all profit. 50% = 50/50 split.</p>
+                            <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-0.5">100% = Partner gets all profit. 50% = 50/50 split.</p>
                         </div>
                     </div>
 
-                    <div>
-                        <InputLabel value="Initial Capital Deposit (Optional UGX)" />
-                        <TextInput
+                    <div className="space-y-1">
+                        <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">
+                            Initial Capital Deposit (Optional UGX)
+                        </label>
+                        <input
                             type="number"
                             min="0"
                             step="any"
-                            className="w-full mt-1"
+                            className="w-full px-3.5 py-2.5 text-sm font-semibold rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/80 text-slate-900 dark:text-white placeholder-slate-400 focus:bg-white dark:focus:bg-slate-800 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all shadow-sm"
                             placeholder="e.g. 5000000"
                             value={createForm.data.initial_deposit}
                             onChange={e => createForm.setData('initial_deposit', e.target.value)}
@@ -505,10 +514,12 @@ export default function PartnersIndex({ partners, metrics, paymentAccounts, unas
                     </div>
 
                     {createForm.data.initial_deposit > 0 && (
-                        <div>
-                            <InputLabel value="Payment Wallet Receiving the Cash" />
+                        <div className="space-y-1">
+                            <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">
+                                Payment Wallet Receiving Cash
+                            </label>
                             <select
-                                className="w-full mt-1 rounded-xl border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs text-slate-900 dark:text-white"
+                                className="w-full px-3.5 py-2.5 text-sm font-semibold rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/80 text-slate-900 dark:text-white focus:bg-white dark:focus:bg-slate-800 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all shadow-sm"
                                 value={createForm.data.payment_account_id}
                                 onChange={e => createForm.setData('payment_account_id', e.target.value)}
                             >
@@ -521,10 +532,12 @@ export default function PartnersIndex({ partners, metrics, paymentAccounts, unas
                         </div>
                     )}
 
-                    <div>
-                        <InputLabel value="Notes / Terms (Optional)" />
+                    <div className="space-y-1">
+                        <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">
+                            Notes / Terms (Optional)
+                        </label>
                         <textarea
-                            className="w-full mt-1 rounded-xl border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs text-slate-900 dark:text-white"
+                            className="w-full px-3.5 py-2.5 text-sm font-semibold rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/80 text-slate-900 dark:text-white placeholder-slate-400 focus:bg-white dark:focus:bg-slate-800 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all shadow-sm"
                             rows={2}
                             placeholder="e.g. 3-month capital pool for buying iPhones from Dubai"
                             value={createForm.data.notes}
@@ -533,8 +546,20 @@ export default function PartnersIndex({ partners, metrics, paymentAccounts, unas
                     </div>
 
                     <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-200 dark:border-slate-800">
-                        <SecondaryButton onClick={() => setShowCreateModal(false)}>Cancel</SecondaryButton>
-                        <PrimaryButton disabled={createForm.processing}>Save Profile</PrimaryButton>
+                        <button
+                            type="button"
+                            onClick={() => setShowCreateModal(false)}
+                            className="px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-all"
+                        >
+                            Cancel
+                        </button>
+                        <button
+                            type="submit"
+                            disabled={createForm.processing}
+                            className="px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold transition-all shadow-md shadow-indigo-500/20 disabled:opacity-50"
+                        >
+                            Save Profile
+                        </button>
                     </div>
                 </form>
             </Modal>
@@ -543,18 +568,26 @@ export default function PartnersIndex({ partners, metrics, paymentAccounts, unas
             <Modal show={showDepositModal} onClose={() => setShowDepositModal(false)} maxWidth="md">
                 <form onSubmit={handleDeposit} className="p-6 space-y-4">
                     <div className="flex items-center justify-between pb-3 border-b border-slate-200 dark:border-slate-800">
-                        <h3 className="text-base font-black text-slate-900 dark:text-white flex items-center gap-2">
-                            <Plus className="text-emerald-600" size={18} /> Record Capital Deposit
-                        </h3>
-                        <button type="button" onClick={() => setShowDepositModal(false)} className="text-slate-400 hover:text-slate-600">
+                        <div className="flex items-center gap-2.5">
+                            <div className="p-2 bg-emerald-50 dark:bg-emerald-950/60 rounded-xl text-emerald-600 dark:text-emerald-400">
+                                <Plus size={18} />
+                            </div>
+                            <div>
+                                <h3 className="text-base font-bold text-slate-900 dark:text-white">Record Capital Deposit</h3>
+                                <p className="text-xs text-slate-500 dark:text-slate-400">Add cash received from partner into a shop account</p>
+                            </div>
+                        </div>
+                        <button type="button" onClick={() => setShowDepositModal(false)} className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">
                             <X size={18} />
                         </button>
                     </div>
 
-                    <div>
-                        <InputLabel value="Partner / Investor" />
+                    <div className="space-y-1">
+                        <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">
+                            Partner / Investor *
+                        </label>
                         <select
-                            className="w-full mt-1 rounded-xl border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs text-slate-900 dark:text-white"
+                            className="w-full px-3.5 py-2.5 text-sm font-semibold rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/80 text-slate-900 dark:text-white focus:bg-white dark:focus:bg-slate-800 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all shadow-sm"
                             value={depositForm.data.partner_id}
                             onChange={e => depositForm.setData('partner_id', e.target.value)}
                         >
@@ -565,35 +598,41 @@ export default function PartnersIndex({ partners, metrics, paymentAccounts, unas
                     </div>
 
                     <div className="grid grid-cols-2 gap-3">
-                        <div>
-                            <InputLabel value="Amount (UGX) *" />
-                            <TextInput
+                        <div className="space-y-1">
+                            <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">
+                                Amount (UGX) *
+                            </label>
+                            <input
                                 type="number"
                                 required
                                 min="1000"
                                 step="any"
-                                className="w-full mt-1"
+                                className="w-full px-3.5 py-2.5 text-sm font-semibold rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/80 text-slate-900 dark:text-white placeholder-slate-400 focus:bg-white dark:focus:bg-slate-800 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all shadow-sm"
                                 placeholder="e.g. 2000000"
                                 value={depositForm.data.amount}
                                 onChange={e => depositForm.setData('amount', e.target.value)}
                             />
                         </div>
-                        <div>
-                            <InputLabel value="Date *" />
-                            <TextInput
+                        <div className="space-y-1">
+                            <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">
+                                Date *
+                            </label>
+                            <input
                                 type="date"
                                 required
-                                className="w-full mt-1"
+                                className="w-full px-3.5 py-2.5 text-sm font-semibold rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/80 text-slate-900 dark:text-white focus:bg-white dark:focus:bg-slate-800 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all shadow-sm"
                                 value={depositForm.data.transaction_date}
                                 onChange={e => depositForm.setData('transaction_date', e.target.value)}
                             />
                         </div>
                     </div>
 
-                    <div>
-                        <InputLabel value="Receiving Payment Wallet (Shop Account)" />
+                    <div className="space-y-1">
+                        <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">
+                            Receiving Payment Wallet (Shop Account)
+                        </label>
                         <select
-                            className="w-full mt-1 rounded-xl border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs text-slate-900 dark:text-white"
+                            className="w-full px-3.5 py-2.5 text-sm font-semibold rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/80 text-slate-900 dark:text-white focus:bg-white dark:focus:bg-slate-800 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all shadow-sm"
                             value={depositForm.data.payment_account_id}
                             onChange={e => depositForm.setData('payment_account_id', e.target.value)}
                         >
@@ -606,11 +645,13 @@ export default function PartnersIndex({ partners, metrics, paymentAccounts, unas
                         <p className="text-[10px] text-slate-400 mt-0.5">This will automatically credit this wallet's balance in Money & Accounts.</p>
                     </div>
 
-                    <div>
-                        <InputLabel value="Reference / Notes" />
-                        <TextInput
+                    <div className="space-y-1">
+                        <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">
+                            Reference / Notes
+                        </label>
+                        <input
                             type="text"
-                            className="w-full mt-1"
+                            className="w-full px-3.5 py-2.5 text-sm font-semibold rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/80 text-slate-900 dark:text-white placeholder-slate-400 focus:bg-white dark:focus:bg-slate-800 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all shadow-sm"
                             placeholder="e.g. Cash handed over in shop, MTN MoMo transaction ID"
                             value={depositForm.data.notes}
                             onChange={e => depositForm.setData('notes', e.target.value)}
@@ -618,8 +659,20 @@ export default function PartnersIndex({ partners, metrics, paymentAccounts, unas
                     </div>
 
                     <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-200 dark:border-slate-800">
-                        <SecondaryButton onClick={() => setShowDepositModal(false)}>Cancel</SecondaryButton>
-                        <PrimaryButton disabled={depositForm.processing}>Record Deposit</PrimaryButton>
+                        <button
+                            type="button"
+                            onClick={() => setShowDepositModal(false)}
+                            className="px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-all"
+                        >
+                            Cancel
+                        </button>
+                        <button
+                            type="submit"
+                            disabled={depositForm.processing}
+                            className="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition-all shadow-md shadow-emerald-500/20 disabled:opacity-50"
+                        >
+                            Record Deposit
+                        </button>
                     </div>
                 </form>
             </Modal>
@@ -628,18 +681,26 @@ export default function PartnersIndex({ partners, metrics, paymentAccounts, unas
             <Modal show={showPayoutModal} onClose={() => setShowPayoutModal(false)} maxWidth="md">
                 <form onSubmit={handlePayout} className="p-6 space-y-4">
                     <div className="flex items-center justify-between pb-3 border-b border-slate-200 dark:border-slate-800">
-                        <h3 className="text-base font-black text-slate-900 dark:text-white flex items-center gap-2">
-                            <ArrowUpRight className="text-emerald-600" size={18} /> Payout to Partner
-                        </h3>
-                        <button type="button" onClick={() => setShowPayoutModal(false)} className="text-slate-400 hover:text-slate-600">
+                        <div className="flex items-center gap-2.5">
+                            <div className="p-2 bg-indigo-50 dark:bg-indigo-950/60 rounded-xl text-indigo-600 dark:text-indigo-400">
+                                <ArrowUpRight size={18} />
+                            </div>
+                            <div>
+                                <h3 className="text-base font-bold text-slate-900 dark:text-white">Payout to Partner</h3>
+                                <p className="text-xs text-slate-500 dark:text-slate-400">Disburse profit or return principal capital</p>
+                            </div>
+                        </div>
+                        <button type="button" onClick={() => setShowPayoutModal(false)} className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">
                             <X size={18} />
                         </button>
                     </div>
 
-                    <div>
-                        <InputLabel value="Partner / Investor" />
+                    <div className="space-y-1">
+                        <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">
+                            Partner / Investor *
+                        </label>
                         <select
-                            className="w-full mt-1 rounded-xl border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs text-slate-900 dark:text-white"
+                            className="w-full px-3.5 py-2.5 text-sm font-semibold rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/80 text-slate-900 dark:text-white focus:bg-white dark:focus:bg-slate-800 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all shadow-sm"
                             value={payoutForm.data.partner_id}
                             onChange={e => payoutForm.setData('partner_id', e.target.value)}
                         >
@@ -652,10 +713,12 @@ export default function PartnersIndex({ partners, metrics, paymentAccounts, unas
                     </div>
 
                     <div className="grid grid-cols-2 gap-3">
-                        <div>
-                            <InputLabel value="Payout Type" />
+                        <div className="space-y-1">
+                            <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">
+                                Payout Type
+                            </label>
                             <select
-                                className="w-full mt-1 rounded-xl border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs text-slate-900 dark:text-white"
+                                className="w-full px-3.5 py-2.5 text-sm font-semibold rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/80 text-slate-900 dark:text-white focus:bg-white dark:focus:bg-slate-800 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all shadow-sm"
                                 value={payoutForm.data.type}
                                 onChange={e => payoutForm.setData('type', e.target.value)}
                             >
@@ -663,14 +726,16 @@ export default function PartnersIndex({ partners, metrics, paymentAccounts, unas
                                 <option value="payout">Principal Capital Return</option>
                             </select>
                         </div>
-                        <div>
-                            <InputLabel value="Amount (UGX) *" />
-                            <TextInput
+                        <div className="space-y-1">
+                            <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">
+                                Amount (UGX) *
+                            </label>
+                            <input
                                 type="number"
                                 required
                                 min="1000"
                                 step="any"
-                                className="w-full mt-1"
+                                className="w-full px-3.5 py-2.5 text-sm font-semibold rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/80 text-slate-900 dark:text-white placeholder-slate-400 focus:bg-white dark:focus:bg-slate-800 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all shadow-sm"
                                 placeholder="Amount to pay"
                                 value={payoutForm.data.amount}
                                 onChange={e => payoutForm.setData('amount', e.target.value)}
@@ -678,10 +743,12 @@ export default function PartnersIndex({ partners, metrics, paymentAccounts, unas
                         </div>
                     </div>
 
-                    <div>
-                        <InputLabel value="Disburse From Wallet *" />
+                    <div className="space-y-1">
+                        <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">
+                            Disburse From Wallet *
+                        </label>
                         <select
-                            className="w-full mt-1 rounded-xl border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs text-slate-900 dark:text-white"
+                            className="w-full px-3.5 py-2.5 text-sm font-semibold rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/80 text-slate-900 dark:text-white focus:bg-white dark:focus:bg-slate-800 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all shadow-sm"
                             value={payoutForm.data.payment_account_id}
                             onChange={e => payoutForm.setData('payment_account_id', e.target.value)}
                         >
@@ -693,11 +760,13 @@ export default function PartnersIndex({ partners, metrics, paymentAccounts, unas
                         </select>
                     </div>
 
-                    <div>
-                        <InputLabel value="Notes" />
-                        <TextInput
+                    <div className="space-y-1">
+                        <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">
+                            Notes / Reference
+                        </label>
+                        <input
                             type="text"
-                            className="w-full mt-1"
+                            className="w-full px-3.5 py-2.5 text-sm font-semibold rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/80 text-slate-900 dark:text-white placeholder-slate-400 focus:bg-white dark:focus:bg-slate-800 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all shadow-sm"
                             placeholder="e.g. Sent via Airtel Money float to partner"
                             value={payoutForm.data.notes}
                             onChange={e => payoutForm.setData('notes', e.target.value)}
@@ -705,8 +774,20 @@ export default function PartnersIndex({ partners, metrics, paymentAccounts, unas
                     </div>
 
                     <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-200 dark:border-slate-800">
-                        <SecondaryButton onClick={() => setShowPayoutModal(false)}>Cancel</SecondaryButton>
-                        <PrimaryButton disabled={payoutForm.processing}>Disburse Payout</PrimaryButton>
+                        <button
+                            type="button"
+                            onClick={() => setShowPayoutModal(false)}
+                            className="px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-all"
+                        >
+                            Cancel
+                        </button>
+                        <button
+                            type="submit"
+                            disabled={payoutForm.processing}
+                            className="px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold transition-all shadow-md shadow-indigo-500/20 disabled:opacity-50"
+                        >
+                            Disburse Payout
+                        </button>
                     </div>
                 </form>
             </Modal>
@@ -715,15 +796,21 @@ export default function PartnersIndex({ partners, metrics, paymentAccounts, unas
             <Modal show={showAssignModal} onClose={() => setShowAssignModal(false)} maxWidth="lg">
                 <form onSubmit={handleAssignStock} className="p-6 space-y-4">
                     <div className="flex items-center justify-between pb-3 border-b border-slate-200 dark:border-slate-800">
-                        <h3 className="text-base font-black text-slate-900 dark:text-white flex items-center gap-2">
-                            <Tag className="text-indigo-600" size={18} /> Link In-Stock Phones to {activePartner?.name}
-                        </h3>
-                        <button type="button" onClick={() => setShowAssignModal(false)} className="text-slate-400 hover:text-slate-600">
+                        <div className="flex items-center gap-2.5">
+                            <div className="p-2 bg-indigo-50 dark:bg-indigo-950/60 rounded-xl text-indigo-600 dark:text-indigo-400">
+                                <Tag size={18} />
+                            </div>
+                            <div>
+                                <h3 className="text-base font-bold text-slate-900 dark:text-white">Link In-Stock Phones to {activePartner?.name}</h3>
+                                <p className="text-xs text-slate-500 dark:text-slate-400">Select phones bought using their funds</p>
+                            </div>
+                        </div>
+                        <button type="button" onClick={() => setShowAssignModal(false)} className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">
                             <X size={18} />
                         </button>
                     </div>
 
-                    <p className="text-xs text-slate-500">
+                    <p className="text-xs text-slate-500 dark:text-slate-400">
                         Select which existing phones in your shop inventory were funded by {activePartner?.name}'s capital. Their cost will be added to this partner's stock ledger.
                     </p>
 
@@ -766,10 +853,20 @@ export default function PartnersIndex({ partners, metrics, paymentAccounts, unas
                             {assignForm.data.device_imei_ids.length} phone(s) selected
                         </span>
                         <div className="flex items-center gap-2">
-                            <SecondaryButton onClick={() => setShowAssignModal(false)}>Cancel</SecondaryButton>
-                            <PrimaryButton disabled={assignForm.data.device_imei_ids.length === 0 || assignForm.processing}>
+                            <button
+                                type="button"
+                                onClick={() => setShowAssignModal(false)}
+                                className="px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-all"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                type="submit"
+                                disabled={assignForm.data.device_imei_ids.length === 0 || assignForm.processing}
+                                className="px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold transition-all shadow-md shadow-indigo-500/20 disabled:opacity-50"
+                            >
                                 Link Selected Phones
-                            </PrimaryButton>
+                            </button>
                         </div>
                     </div>
                 </form>
@@ -928,7 +1025,13 @@ export default function PartnersIndex({ partners, metrics, paymentAccounts, unas
                         )}
 
                         <div className="flex items-center justify-end pt-3 border-t border-slate-200 dark:border-slate-800">
-                            <SecondaryButton onClick={() => setShowStatementModal(false)}>Close</SecondaryButton>
+                            <button
+                                type="button"
+                                onClick={() => setShowStatementModal(false)}
+                                className="px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-all"
+                            >
+                                Close
+                            </button>
                         </div>
                     </div>
                 )}
