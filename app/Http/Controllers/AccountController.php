@@ -7,6 +7,7 @@ use App\Models\AccountTransaction;
 use App\Models\AccountTransfer;
 use App\Models\DeviceImei;
 use App\Models\Product;
+use App\Models\PartnerInvestor;
 use App\Models\Setting;
 use App\Services\TreasuryService;
 use Illuminate\Http\Request;
@@ -50,6 +51,15 @@ class AccountController extends Controller
         $totalStockCount = $serializedCount + $bulkCount;
 
         $totalBusinessCapital = $totalLiquidity + $totalStockCost;
+
+        // Partner & Family Capital Metrics
+        $partnerInvestors = PartnerInvestor::where('is_active', true)->get();
+        $partnerSummaries = $partnerInvestors->map(fn($p) => $p->getPortfolioSummary());
+        $partnerFundsTotal = (float) $partnerSummaries->sum('total_deposits');
+        $partnerStockCost = (float) $partnerSummaries->sum('in_stock_cost');
+        $partnerCashAvailable = (float) $partnerSummaries->sum('cash_balance_available');
+        $partnerPortfolioValue = (float) $partnerSummaries->sum('total_portfolio_value');
+        $partnersCount = $partnerInvestors->count();
 
         $query = AccountTransaction::with(['account', 'user']);
 
@@ -102,6 +112,11 @@ class AccountController extends Controller
                 'totalBusinessCapital' => $totalBusinessCapital,
                 'personalReserveTotal' => $personalReserveTotal,
                 'personalAccountsCount' => $personalAccounts->count(),
+                'partnerFundsTotal' => $partnerFundsTotal,
+                'partnerStockCost' => $partnerStockCost,
+                'partnerCashAvailable' => $partnerCashAvailable,
+                'partnerPortfolioValue' => $partnerPortfolioValue,
+                'partnersCount' => $partnersCount,
             ],
             'transactions' => $transactions,
             'filters' => $request->only(['account_id', 'type', 'category', 'search', 'date_from', 'date_to']),

@@ -230,11 +230,12 @@ export default function AccountsIndex({ accounts, metrics, transactions, filters
                     </div>
                 </div>
 
-                {/* 6-Card Capital & Liquidity Overview */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
-                    <div className="p-5 rounded-2xl bg-gradient-to-br from-indigo-900 via-indigo-800 to-purple-900 text-white shadow-lg shadow-indigo-900/20 relative overflow-hidden flex flex-col justify-between">
+                {/* TIER 1: Strategic Macro Capital Overview (3 Cards) */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    {/* Card 1: Total Working Capital */}
+                    <div className="p-5 rounded-2xl bg-gradient-to-br from-indigo-900 via-indigo-800 to-purple-900 text-white shadow-lg shadow-indigo-900/20 relative overflow-hidden flex flex-col justify-between min-h-[140px]">
                         <div className="absolute right-3 top-3 opacity-10">
-                            <Landmark size={80} />
+                            <Landmark size={90} />
                         </div>
                         <div>
                             <div className="text-[11px] font-bold text-indigo-200 uppercase tracking-wider flex items-center gap-1.5">
@@ -244,7 +245,7 @@ export default function AccountsIndex({ accounts, metrics, transactions, filters
                                 UGX {Number(metrics.totalBusinessCapital || metrics.totalLiquidity || 0).toLocaleString()}
                             </div>
                         </div>
-                        <div className="mt-2.5 pt-2 border-t border-indigo-700/50 flex items-center justify-between text-[10px] text-indigo-200/90 font-medium">
+                        <div className="mt-3 pt-2.5 border-t border-indigo-700/50 flex items-center justify-between text-[11px] text-indigo-200/90 font-medium">
                             <span title="Liquid funds in cash, mobile money and bank accounts">
                                 <strong className="text-white">UGX {Number(metrics.totalLiquidity || 0).toLocaleString()}</strong> Liquid
                             </span>
@@ -255,6 +256,57 @@ export default function AccountsIndex({ accounts, metrics, transactions, filters
                         </div>
                     </div>
 
+                    {/* Card 2: Owner Personal Reserve */}
+                    <div className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-purple-200 dark:border-purple-900/60 shadow-sm flex flex-col justify-between min-h-[140px] relative overflow-hidden">
+                        <div className="absolute top-0 right-0 w-2 h-full bg-purple-500"></div>
+                        <div>
+                            <div className="flex items-center justify-between text-xs font-bold text-purple-700 dark:text-purple-300">
+                                <span className="uppercase tracking-wider">Owner Personal Reserve</span>
+                                <div className="p-2 rounded-xl bg-purple-100 dark:bg-purple-950/70 text-purple-700 dark:text-purple-300">
+                                    <User size={18} />
+                                </div>
+                            </div>
+                            <div className="text-2xl font-black text-slate-900 dark:text-white mt-2">
+                                UGX {Number(metrics.personalReserveTotal || 0).toLocaleString()}
+                            </div>
+                        </div>
+                        <div className="mt-3 pt-2.5 border-t border-purple-100 dark:border-purple-900/40 flex items-center justify-between text-[11px] text-purple-600 dark:text-purple-400 font-semibold">
+                            <span>Private owner bank (Equity Bank)</span>
+                            <span className="text-[10px] uppercase font-black px-2 py-0.5 rounded bg-purple-100 dark:bg-purple-900/60 text-purple-800 dark:text-purple-300">
+                                Separate
+                            </span>
+                        </div>
+                    </div>
+
+                    {/* Card 3: Total Partner Funds Managed */}
+                    <div className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-emerald-200 dark:border-emerald-900/60 shadow-sm flex flex-col justify-between min-h-[140px] relative overflow-hidden">
+                        <div className="absolute top-0 right-0 w-2 h-full bg-emerald-500"></div>
+                        <div>
+                            <div className="flex items-center justify-between text-xs font-bold text-emerald-700 dark:text-emerald-400">
+                                <span className="uppercase tracking-wider">Partner & Family Funds Managed</span>
+                                <div className="p-2 rounded-xl bg-emerald-100 dark:bg-emerald-950/70 text-emerald-700 dark:text-emerald-300">
+                                    <Users size={18} />
+                                </div>
+                            </div>
+                            <div className="text-2xl font-black text-slate-900 dark:text-white mt-2">
+                                UGX {Number(metrics.partnerFundsTotal || 0).toLocaleString()}
+                            </div>
+                        </div>
+                        <div className="mt-3 pt-2.5 border-t border-emerald-100 dark:border-emerald-900/40 flex items-center justify-between text-[11px] text-slate-500 dark:text-slate-400 font-semibold">
+                            <span>{metrics.partnersCount || 0} active partner pools</span>
+                            <Link
+                                href={route('partners.index')}
+                                className="text-emerald-600 dark:text-emerald-400 hover:text-emerald-700 dark:hover:text-emerald-300 font-bold flex items-center gap-0.5"
+                                title="Go to Partner & Family Capital"
+                            >
+                                Manage <ChevronRight size={13} />
+                            </Link>
+                        </div>
+                    </div>
+                </div>
+
+                {/* TIER 2: Tactical Shop Asset Breakdown (4 Cards) */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                     <div className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-sm flex flex-col justify-between">
                         <div>
                             <div className="flex items-center justify-between text-xs font-bold text-slate-500 dark:text-slate-400">
@@ -327,25 +379,6 @@ export default function AccountsIndex({ accounts, metrics, transactions, filters
                             >
                                 View <ChevronRight size={12} />
                             </Link>
-                        </div>
-                    </div>
-
-                    <div className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-purple-200 dark:border-purple-900/60 shadow-sm flex flex-col justify-between relative overflow-hidden">
-                        <div className="absolute top-0 right-0 w-2 h-full bg-purple-500"></div>
-                        <div>
-                            <div className="flex items-center justify-between text-xs font-bold text-purple-700 dark:text-purple-300">
-                                <span className="uppercase tracking-wider">Owner Personal Reserve</span>
-                                <div className="p-2 rounded-xl bg-purple-100 dark:bg-purple-950/70 text-purple-700 dark:text-purple-300">
-                                    <User size={18} />
-                                </div>
-                            </div>
-                            <div className="text-xl font-black text-slate-900 dark:text-white mt-2">
-                                UGX {Number(metrics.personalReserveTotal || 0).toLocaleString()}
-                            </div>
-                        </div>
-                        <div className="text-[10px] text-purple-600 dark:text-purple-400 font-semibold mt-2 pt-2 border-t border-purple-100 dark:border-purple-900/40 flex items-center justify-between">
-                            <span>Private owner bank (Equity Bank)</span>
-                            <span className="text-[9px] uppercase font-bold px-1.5 py-0.5 rounded bg-purple-100 dark:bg-purple-900/60">Separate</span>
                         </div>
                     </div>
                 </div>
