@@ -14,6 +14,8 @@ import {
     Building2, 
     ArrowLeft, 
     ArrowRightLeft, 
+    ArrowUpRight,
+    ArrowDownLeft,
     FileText, 
     Scale, 
     Edit2, 
@@ -25,7 +27,8 @@ import {
     X,
     Calendar,
     Trash2,
-    RefreshCw
+    RefreshCw,
+    User
 } from 'lucide-react';
 import dayjs from 'dayjs';
 
@@ -51,6 +54,7 @@ export default function AccountShow({ account, allAccounts, transactions, trends
         provider: account.provider || '',
         description: account.description || '',
         is_active: account.is_active,
+        is_personal: Boolean(account.is_personal),
     });
 
     const transferForm = useForm({
@@ -153,10 +157,15 @@ export default function AccountShow({ account, allAccounts, transactions, trends
                                 {getAccountIcon(account.type, account.provider)}
                             </div>
                             <div>
-                                <div className="flex items-center gap-2">
+                                <div className="flex items-center gap-2 flex-wrap">
                                     <h1 className="text-2xl font-black text-slate-900 dark:text-white tracking-tight">
                                         {account.name}
                                     </h1>
+                                    {account.is_personal && (
+                                        <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black bg-purple-100 text-purple-800 dark:bg-purple-950/70 dark:text-purple-300 border border-purple-300 dark:border-purple-700 uppercase flex items-center gap-1">
+                                            <User size={11} /> Personal / Owner Reserve
+                                        </span>
+                                    )}
                                     <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-indigo-50 text-indigo-700 dark:bg-indigo-950/60 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 uppercase">
                                         {account.provider || account.type}
                                     </span>
@@ -472,6 +481,19 @@ export default function AccountShow({ account, allAccounts, transactions, trends
                             />
                         </div>
 
+                        <div className="flex items-center gap-2.5 p-3 rounded-xl bg-purple-50/60 dark:bg-purple-950/30 border border-purple-200/80 dark:border-purple-900/50">
+                            <input
+                                type="checkbox"
+                                id="edit_is_personal"
+                                className="rounded border-purple-300 dark:border-purple-700 text-purple-600 focus:ring-purple-500 w-4 h-4 cursor-pointer"
+                                checked={editForm.data.is_personal}
+                                onChange={e => editForm.setData('is_personal', e.target.checked)}
+                            />
+                            <label htmlFor="edit_is_personal" className="text-xs font-bold text-purple-900 dark:text-purple-200 cursor-pointer">
+                                Mark as Personal / Owner Account (Excluded from Business Working Capital)
+                            </label>
+                        </div>
+
                         <div className="mt-6 flex items-center justify-end gap-2.5 pt-4 border-t border-slate-100 dark:border-slate-800">
                             <button
                                 type="button"
@@ -538,6 +560,48 @@ export default function AccountShow({ account, allAccounts, transactions, trends
                             </select>
                             {transferForm.errors.to_account_id && <p className="text-xs text-rose-500 font-bold">{transferForm.errors.to_account_id}</p>}
                         </div>
+
+                        {/* Smart Accounting Notice */}
+                        {(() => {
+                            const toAcc = allAccounts.find(a => String(a.id) === String(transferForm.data.to_account_id));
+                            if (account.is_personal && !toAcc?.is_personal) {
+                                return (
+                                    <div className="p-3 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 rounded-xl text-xs text-emerald-800 dark:text-emerald-300 flex items-start gap-2.5">
+                                        <div className="p-1.5 bg-emerald-100 dark:bg-emerald-900/60 rounded-lg text-emerald-700 dark:text-emerald-300 shrink-0 mt-0.5">
+                                            <ArrowDownLeft size={16} />
+                                        </div>
+                                        <div>
+                                            <div className="font-bold flex items-center gap-1.5">
+                                                <span>Owner Capital Injection (Float Top-up)</span>
+                                                <span className="text-[9px] px-1.5 py-0.5 rounded bg-emerald-200 dark:bg-emerald-800 text-emerald-900 dark:text-emerald-100 font-bold uppercase">+Shop Capital</span>
+                                            </div>
+                                            <p className="text-[11px] mt-0.5 text-emerald-700 dark:text-emerald-400">
+                                                Transferring from your private <strong>{account.name}</strong> into shop account <strong>{toAcc?.name}</strong> will be logged as Owner Capital Injection and will increase Business Working Capital.
+                                            </p>
+                                        </div>
+                                    </div>
+                                );
+                            }
+                            if (!account.is_personal && toAcc?.is_personal) {
+                                return (
+                                    <div className="p-3 bg-purple-50 dark:bg-purple-950/40 border border-purple-200 dark:border-purple-800 rounded-xl text-xs text-purple-800 dark:text-purple-300 flex items-start gap-2.5">
+                                        <div className="p-1.5 bg-purple-100 dark:bg-purple-900/60 rounded-lg text-purple-700 dark:text-purple-300 shrink-0 mt-0.5">
+                                            <ArrowUpRight size={16} />
+                                        </div>
+                                        <div>
+                                            <div className="font-bold flex items-center gap-1.5">
+                                                <span>Owner Drawings (Personal Withdrawal)</span>
+                                                <span className="text-[9px] px-1.5 py-0.5 rounded bg-purple-200 dark:bg-purple-800 text-purple-900 dark:text-purple-100 font-bold uppercase">Personal Use</span>
+                                            </div>
+                                            <p className="text-[11px] mt-0.5 text-purple-700 dark:text-purple-400">
+                                                Transferring from shop account <strong>{account.name}</strong> to your private <strong>{toAcc?.name}</strong> is logged as Personal Drawings. It reduces shop liquid capital without counting as an operating business expense.
+                                            </p>
+                                        </div>
+                                    </div>
+                                );
+                            }
+                            return null;
+                        })()}
 
                         <div className="space-y-1.5">
                             <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">

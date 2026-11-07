@@ -420,6 +420,27 @@ class TreasuryService
                 'user_id' => $userId ?? auth()->id(),
             ]);
 
+            // Determine accounting classification based on business vs personal ownership
+            $isOwnerInjection = $fromAccount->is_personal && !$toAccount->is_personal;
+            $isOwnerDrawings  = !$fromAccount->is_personal && $toAccount->is_personal;
+
+            $fromCategory = 'Transfer Out';
+            $toCategory   = 'Transfer In';
+            $fromDesc     = "Transfer to {$toAccount->name}" . ($notes ? " ({$notes})" : '');
+            $toDesc       = "Transfer from {$fromAccount->name}" . ($notes ? " ({$notes})" : '');
+
+            if ($isOwnerInjection) {
+                $fromCategory = 'Owner Capital Injection';
+                $toCategory   = 'Owner Capital Injection';
+                $fromDesc     = "Owner Float Top-up to {$toAccount->name}" . ($notes ? " ({$notes})" : '');
+                $toDesc       = "Owner Capital Injection from {$fromAccount->name} (Float Top-up)" . ($notes ? " ({$notes})" : '');
+            } elseif ($isOwnerDrawings) {
+                $fromCategory = 'Owner Drawings';
+                $toCategory   = 'Owner Drawings';
+                $fromDesc     = "Owner Drawings to {$toAccount->name} (Personal Withdrawal)" . ($notes ? " ({$notes})" : '');
+                $toDesc       = "Personal Withdrawal from {$fromAccount->name}" . ($notes ? " ({$notes})" : '');
+            }
+
             // Deduct from Source Account
             $fromBalanceAfter = $fromAccount->current_balance - $amount;
             $fromAccount->update(['current_balance' => $fromBalanceAfter]);
@@ -429,11 +450,11 @@ class TreasuryService
                 'type' => 'transfer_out',
                 'amount' => $amount,
                 'balance_after' => $fromBalanceAfter,
-                'category' => 'Transfer Out',
+                'category' => $fromCategory,
                 'reference_type' => AccountTransfer::class,
                 'reference_id' => $transfer->id,
                 'transaction_reference' => $refNumber,
-                'description' => "Transfer to {$toAccount->name}" . ($notes ? " ({$notes})" : ''),
+                'description' => $fromDesc,
                 'user_id' => $userId ?? auth()->id(),
                 'transaction_date' => now(),
             ]);
@@ -447,11 +468,11 @@ class TreasuryService
                 'type' => 'transfer_in',
                 'amount' => $amount,
                 'balance_after' => $toBalanceAfter,
-                'category' => 'Transfer In',
+                'category' => $toCategory,
                 'reference_type' => AccountTransfer::class,
                 'reference_id' => $transfer->id,
                 'transaction_reference' => $refNumber,
-                'description' => "Transfer from {$fromAccount->name}" . ($notes ? " ({$notes})" : ''),
+                'description' => $toDesc,
                 'user_id' => $userId ?? auth()->id(),
                 'transaction_date' => now(),
             ]);

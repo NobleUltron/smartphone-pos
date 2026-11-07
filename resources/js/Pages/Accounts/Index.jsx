@@ -30,6 +30,7 @@ import {
     ShieldCheck,
     Package,
     Users,
+    User,
     X
 } from 'lucide-react';
 import dayjs from 'dayjs';
@@ -56,6 +57,7 @@ export default function AccountsIndex({ accounts, metrics, transactions, filters
         account_number: '',
         opening_balance: '',
         description: '',
+        is_personal: false,
     });
 
     // Form: Transfer
@@ -228,8 +230,8 @@ export default function AccountsIndex({ accounts, metrics, transactions, filters
                     </div>
                 </div>
 
-                {/* 5-Card Capital & Liquidity Overview */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
+                {/* 6-Card Capital & Liquidity Overview */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
                     <div className="p-5 rounded-2xl bg-gradient-to-br from-indigo-900 via-indigo-800 to-purple-900 text-white shadow-lg shadow-indigo-900/20 relative overflow-hidden flex flex-col justify-between">
                         <div className="absolute right-3 top-3 opacity-10">
                             <Landmark size={80} />
@@ -327,6 +329,25 @@ export default function AccountsIndex({ accounts, metrics, transactions, filters
                             </Link>
                         </div>
                     </div>
+
+                    <div className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-purple-200 dark:border-purple-900/60 shadow-sm flex flex-col justify-between relative overflow-hidden">
+                        <div className="absolute top-0 right-0 w-2 h-full bg-purple-500"></div>
+                        <div>
+                            <div className="flex items-center justify-between text-xs font-bold text-purple-700 dark:text-purple-300">
+                                <span className="uppercase tracking-wider">Owner Personal Reserve</span>
+                                <div className="p-2 rounded-xl bg-purple-100 dark:bg-purple-950/70 text-purple-700 dark:text-purple-300">
+                                    <User size={18} />
+                                </div>
+                            </div>
+                            <div className="text-xl font-black text-slate-900 dark:text-white mt-2">
+                                UGX {Number(metrics.personalReserveTotal || 0).toLocaleString()}
+                            </div>
+                        </div>
+                        <div className="text-[10px] text-purple-600 dark:text-purple-400 font-semibold mt-2 pt-2 border-t border-purple-100 dark:border-purple-900/40 flex items-center justify-between">
+                            <span>Private owner bank (Equity Bank)</span>
+                            <span className="text-[9px] uppercase font-bold px-1.5 py-0.5 rounded bg-purple-100 dark:bg-purple-900/60">Separate</span>
+                        </div>
+                    </div>
                 </div>
 
                 {/* Account Cards Grid */}
@@ -344,16 +365,27 @@ export default function AccountsIndex({ accounts, metrics, transactions, filters
                         {accounts.map(acc => (
                             <div 
                                 key={acc.id}
-                                className="p-5 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-sm hover:shadow-md transition-all flex flex-col justify-between"
+                                className={`p-5 bg-white dark:bg-slate-900 rounded-2xl border shadow-sm hover:shadow-md transition-all flex flex-col justify-between ${
+                                    acc.is_personal 
+                                        ? 'border-purple-300 dark:border-purple-800/80 ring-1 ring-purple-200/70 dark:ring-purple-900/30' 
+                                        : 'border-slate-200/80 dark:border-slate-800'
+                                }`}
                             >
                                 <div>
                                     <div className="flex items-center justify-between mb-3">
                                         <div className="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-100 dark:border-slate-700">
                                             {getAccountIcon(acc.type, acc.provider)}
                                         </div>
-                                        <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold border uppercase ${getAccountBadgeColor(acc.type, acc.provider)}`}>
-                                            {acc.provider || acc.type}
-                                        </span>
+                                        <div className="flex items-center gap-1.5 flex-wrap justify-end">
+                                            {acc.is_personal && (
+                                                <span className="px-2 py-0.5 rounded-full text-[9px] font-black border uppercase bg-purple-100 text-purple-800 dark:bg-purple-950/70 dark:text-purple-300 border-purple-300 dark:border-purple-700 flex items-center gap-1">
+                                                    <User size={10} /> Personal
+                                                </span>
+                                            )}
+                                            <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold border uppercase ${getAccountBadgeColor(acc.type, acc.provider)}`}>
+                                                {acc.provider || acc.type}
+                                            </span>
+                                        </div>
                                     </div>
 
                                     <h3 className="text-base font-bold text-slate-900 dark:text-white truncate" title={acc.name}>
@@ -366,7 +398,14 @@ export default function AccountsIndex({ accounts, metrics, transactions, filters
                                     )}
 
                                     <div className="mt-4 pt-3 border-t border-slate-100 dark:border-slate-800">
-                                        <div className="text-[10px] uppercase font-bold text-slate-400">Current Balance</div>
+                                        <div className="flex items-center justify-between">
+                                            <span className="text-[10px] uppercase font-bold text-slate-400">Current Balance</span>
+                                            {acc.is_personal && (
+                                                <span className="text-[9px] font-bold text-purple-600 dark:text-purple-400 uppercase">
+                                                    Owner Reserve
+                                                </span>
+                                            )}
+                                        </div>
                                         <div className="text-xl font-black text-slate-900 dark:text-white mt-0.5">
                                             UGX {Number(acc.current_balance || 0).toLocaleString()}
                                         </div>
@@ -678,6 +717,19 @@ export default function AccountsIndex({ accounts, metrics, transactions, filters
                             />
                         </div>
 
+                        <div className="flex items-center gap-2.5 p-3 rounded-xl bg-purple-50/60 dark:bg-purple-950/30 border border-purple-200/80 dark:border-purple-900/50">
+                            <input
+                                type="checkbox"
+                                id="create_is_personal"
+                                className="rounded border-purple-300 dark:border-purple-700 text-purple-600 focus:ring-purple-500 w-4 h-4 cursor-pointer"
+                                checked={createForm.data.is_personal}
+                                onChange={e => createForm.setData('is_personal', e.target.checked)}
+                            />
+                            <label htmlFor="create_is_personal" className="text-xs font-bold text-purple-900 dark:text-purple-200 cursor-pointer">
+                                Mark as Personal / Owner Account (Excluded from Business Working Capital)
+                            </label>
+                        </div>
+
                         <div className="mt-6 flex items-center justify-end gap-2.5 pt-4 border-t border-slate-100 dark:border-slate-800">
                             <button
                                 type="button"
@@ -767,6 +819,49 @@ export default function AccountsIndex({ accounts, metrics, transactions, filters
                             </select>
                             {transferForm.errors.to_account_id && <p className="text-xs text-rose-500 font-bold">{transferForm.errors.to_account_id}</p>}
                         </div>
+
+                        {/* Smart Accounting Notice */}
+                        {(() => {
+                            const fromAcc = accounts.find(a => String(a.id) === String(transferForm.data.from_account_id));
+                            const toAcc = accounts.find(a => String(a.id) === String(transferForm.data.to_account_id));
+                            if (fromAcc?.is_personal && !toAcc?.is_personal) {
+                                return (
+                                    <div className="p-3 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 rounded-xl text-xs text-emerald-800 dark:text-emerald-300 flex items-start gap-2.5">
+                                        <div className="p-1.5 bg-emerald-100 dark:bg-emerald-900/60 rounded-lg text-emerald-700 dark:text-emerald-300 shrink-0 mt-0.5">
+                                            <ArrowDownLeft size={16} />
+                                        </div>
+                                        <div>
+                                            <div className="font-bold flex items-center gap-1.5">
+                                                <span>Owner Capital Injection (Float Top-up)</span>
+                                                <span className="text-[9px] px-1.5 py-0.5 rounded bg-emerald-200 dark:bg-emerald-800 text-emerald-900 dark:text-emerald-100 font-bold uppercase">+Shop Capital</span>
+                                            </div>
+                                            <p className="text-[11px] mt-0.5 text-emerald-700 dark:text-emerald-400">
+                                                Transferring from your private <strong>{fromAcc?.name}</strong> into shop account <strong>{toAcc?.name}</strong> will be logged as Owner Capital Injection and will increase Business Working Capital.
+                                            </p>
+                                        </div>
+                                    </div>
+                                );
+                            }
+                            if (!fromAcc?.is_personal && toAcc?.is_personal) {
+                                return (
+                                    <div className="p-3 bg-purple-50 dark:bg-purple-950/40 border border-purple-200 dark:border-purple-800 rounded-xl text-xs text-purple-800 dark:text-purple-300 flex items-start gap-2.5">
+                                        <div className="p-1.5 bg-purple-100 dark:bg-purple-900/60 rounded-lg text-purple-700 dark:text-purple-300 shrink-0 mt-0.5">
+                                            <ArrowUpRight size={16} />
+                                        </div>
+                                        <div>
+                                            <div className="font-bold flex items-center gap-1.5">
+                                                <span>Owner Drawings (Personal Withdrawal)</span>
+                                                <span className="text-[9px] px-1.5 py-0.5 rounded bg-purple-200 dark:bg-purple-800 text-purple-900 dark:text-purple-100 font-bold uppercase">Personal Use</span>
+                                            </div>
+                                            <p className="text-[11px] mt-0.5 text-purple-700 dark:text-purple-400">
+                                                Transferring from shop account <strong>{fromAcc?.name}</strong> to your private <strong>{toAcc?.name}</strong> is logged as Personal Drawings. It reduces shop liquid capital without counting as an operational store expense.
+                                            </p>
+                                        </div>
+                                    </div>
+                                );
+                            }
+                            return null;
+                        })()}
 
                         <div className="space-y-1.5">
                             <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">

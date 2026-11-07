@@ -31,10 +31,14 @@ class AccountController extends Controller
 
         $accounts = PaymentAccount::withCount('transactions')->get();
 
-        $totalLiquidity = (float) $accounts->sum('current_balance');
-        $cashOnHand = (float) $accounts->where('type', 'cash')->sum('current_balance');
-        $mobileMoneyTotal = (float) $accounts->where('type', 'mobile_money')->sum('current_balance');
-        $bankTotal = (float) $accounts->where('type', 'bank')->sum('current_balance');
+        $businessAccounts = $accounts->where('is_personal', false);
+        $personalAccounts = $accounts->where('is_personal', true);
+
+        $totalLiquidity = (float) $businessAccounts->sum('current_balance');
+        $cashOnHand = (float) $businessAccounts->where('type', 'cash')->sum('current_balance');
+        $mobileMoneyTotal = (float) $businessAccounts->where('type', 'mobile_money')->sum('current_balance');
+        $bankTotal = (float) $businessAccounts->where('type', 'bank')->sum('current_balance');
+        $personalReserveTotal = (float) $personalAccounts->sum('current_balance');
 
         // Inventory Stock Valuation at Cost (Lower of cost or net realizable value principle)
         $serializedStockCost = (float) DeviceImei::where('status', 'In Stock')->sum('cost_price');
@@ -96,6 +100,8 @@ class AccountController extends Controller
                 'serializedCount' => $serializedCount,
                 'bulkCount' => $bulkCount,
                 'totalBusinessCapital' => $totalBusinessCapital,
+                'personalReserveTotal' => $personalReserveTotal,
+                'personalAccountsCount' => $personalAccounts->count(),
             ],
             'transactions' => $transactions,
             'filters' => $request->only(['account_id', 'type', 'category', 'search', 'date_from', 'date_to']),
@@ -190,6 +196,7 @@ class AccountController extends Controller
             'account_number' => 'nullable|string|max:100',
             'provider' => 'nullable|string|max:100',
             'opening_balance' => 'nullable|numeric|min:0',
+            'is_personal' => 'nullable|boolean',
             'description' => 'nullable|string|max:255',
         ]);
 
@@ -200,6 +207,7 @@ class AccountController extends Controller
             'provider' => $validated['provider'] ?? null,
             'opening_balance' => $validated['opening_balance'] ?? 0,
             'current_balance' => 0, // Will be set to opening_balance by recordInflow below if > 0
+            'is_personal' => (bool) ($validated['is_personal'] ?? false),
             'description' => $validated['description'] ?? null,
             'is_active' => true,
         ]);
@@ -227,6 +235,7 @@ class AccountController extends Controller
             'provider' => 'nullable|string|max:100',
             'description' => 'nullable|string|max:255',
             'is_active' => 'boolean',
+            'is_personal' => 'boolean',
         ]);
 
         $account->update($validated);

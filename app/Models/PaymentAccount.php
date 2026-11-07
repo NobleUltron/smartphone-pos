@@ -18,6 +18,7 @@ class PaymentAccount extends Model
         'current_balance',
         'opening_balance',
         'is_active',
+        'is_personal',
         'description',
     ];
 
@@ -25,7 +26,18 @@ class PaymentAccount extends Model
         'current_balance' => 'float',
         'opening_balance' => 'float',
         'is_active' => 'boolean',
+        'is_personal' => 'boolean',
     ];
+
+    public function scopeBusiness($query)
+    {
+        return $query->where('is_personal', false);
+    }
+
+    public function scopePersonal($query)
+    {
+        return $query->where('is_personal', true);
+    }
 
     public function transactions(): HasMany
     {
@@ -123,16 +135,19 @@ class PaymentAccount extends Model
         }
 
         if (stripos($method, 'Bank') !== false || stripos($method, 'Transfer') !== false || stripos($method, 'Card') !== false || stripos($method, 'Stanbic') !== false) {
-            return self::where('type', 'bank')->first()
+            return self::where('type', 'bank')->where('is_personal', false)->first()
+                ?? self::where('type', 'bank')->first()
                 ?? self::firstOrCreate(['name' => 'Primary Bank Account'], [
                     'type' => 'bank',
                     'provider' => 'Stanbic',
+                    'is_personal' => false,
                     'is_active' => true
                 ]);
         }
 
         return self::where('name', 'Main Cash Register')->first()
-            ?? self::where('type', 'cash')->first()
+            ?? self::where('type', 'cash')->where('is_personal', false)->first()
+            ?? self::where('is_personal', false)->first()
             ?? self::first();
     }
 }
