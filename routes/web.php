@@ -392,13 +392,8 @@ Route::middleware('auth')->group(function () {
         Route::post('/accounts', [\App\Http\Controllers\AccountController::class, 'store'])->name('accounts.store');
         Route::post('/accounts/sync', [\App\Http\Controllers\AccountController::class, 'syncHistorical'])->name('accounts.sync');
         Route::post('/accounts/transfer', [\App\Http\Controllers\AccountController::class, 'transfer'])->name('accounts.transfer');
-        Route::get('/accounts/{account}', [\App\Http\Controllers\AccountController::class, 'show'])->name('accounts.show');
-        Route::put('/accounts/{account}', [\App\Http\Controllers\AccountController::class, 'update'])->name('accounts.update');
-        Route::post('/accounts/{account}/reconcile', [\App\Http\Controllers\AccountController::class, 'reconcile'])->name('accounts.reconcile');
-        Route::delete('/accounts/{account}', [\App\Http\Controllers\AccountController::class, 'destroy'])->name('accounts.destroy');
-        Route::get('/accounts/{account}/statement', [\App\Http\Controllers\AccountController::class, 'statement'])->name('accounts.statement');
 
-        // Partner & Family Capital Management
+        // Partner & Family Capital Management (must be defined BEFORE /accounts/{account} wildcard)
         Route::get('/accounts/partners', [\App\Http\Controllers\PartnerInvestorController::class, 'index'])->name('partners.index');
         Route::post('/accounts/partners', [\App\Http\Controllers\PartnerInvestorController::class, 'store'])->name('partners.store');
         Route::put('/accounts/partners/{partner}', [\App\Http\Controllers\PartnerInvestorController::class, 'update'])->name('partners.update');
@@ -408,6 +403,13 @@ Route::middleware('auth')->group(function () {
         Route::post('/accounts/partners/{partner}/assign-stock', [\App\Http\Controllers\PartnerInvestorController::class, 'assignStock'])->name('partners.assign-stock');
         Route::delete('/accounts/partners/unassign-stock/{deviceImei}', [\App\Http\Controllers\PartnerInvestorController::class, 'unassignStock'])->name('partners.unassign-stock');
         Route::get('/accounts/partners/{partner}/pdf', [\App\Http\Controllers\PartnerInvestorController::class, 'printPdf'])->name('partners.pdf');
+
+        // Account wildcard routes
+        Route::get('/accounts/{account}', [\App\Http\Controllers\AccountController::class, 'show'])->whereNumber('account')->name('accounts.show');
+        Route::put('/accounts/{account}', [\App\Http\Controllers\AccountController::class, 'update'])->whereNumber('account')->name('accounts.update');
+        Route::post('/accounts/{account}/reconcile', [\App\Http\Controllers\AccountController::class, 'reconcile'])->whereNumber('account')->name('accounts.reconcile');
+        Route::delete('/accounts/{account}', [\App\Http\Controllers\AccountController::class, 'destroy'])->whereNumber('account')->name('accounts.destroy');
+        Route::get('/accounts/{account}/statement', [\App\Http\Controllers\AccountController::class, 'statement'])->whereNumber('account')->name('accounts.statement');
 
         // Store & Thermal Printing Settings
         Route::get('/settings', [SettingController::class, 'index'])->name('settings.index');

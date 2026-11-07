@@ -278,3 +278,4 @@ class PartnerInvestorController extends Controller
         return $pdf->setPaper('a4', 'portrait')->stream("Statement-{$partner->name}-" . now()->format('Ymd') . ".pdf");
     }
 }
+

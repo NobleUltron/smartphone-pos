@@ -937,3 +937,4 @@ export default function PartnersIndex({ partners, metrics, paymentAccounts, unas
         </AuthenticatedLayout>
     );
 }
+
