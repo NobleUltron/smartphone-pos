@@ -28,6 +28,7 @@ import {
     DollarSign,
     RefreshCw,
     ShieldCheck,
+    Package,
     X
 } from 'lucide-react';
 import dayjs from 'dayjs';
@@ -213,65 +214,103 @@ export default function AccountsIndex({ accounts, metrics, transactions, filters
                     </div>
                 </div>
 
-                {/* 4-Card Liquidity Overview */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                    <div className="p-5 rounded-2xl bg-gradient-to-br from-indigo-900 via-indigo-800 to-purple-900 text-white shadow-lg shadow-indigo-900/20 relative overflow-hidden">
+                {/* 5-Card Capital & Liquidity Overview */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
+                    <div className="p-5 rounded-2xl bg-gradient-to-br from-indigo-900 via-indigo-800 to-purple-900 text-white shadow-lg shadow-indigo-900/20 relative overflow-hidden flex flex-col justify-between">
                         <div className="absolute right-3 top-3 opacity-10">
                             <Landmark size={80} />
                         </div>
-                        <div className="text-[11px] font-bold text-indigo-200 uppercase tracking-wider flex items-center gap-1.5">
-                            <TrendingUp size={14} /> Total Liquid Capital
+                        <div>
+                            <div className="text-[11px] font-bold text-indigo-200 uppercase tracking-wider flex items-center gap-1.5">
+                                <TrendingUp size={14} /> Total Working Capital
+                            </div>
+                            <div className="text-2xl font-black mt-2">
+                                UGX {Number(metrics.totalBusinessCapital || metrics.totalLiquidity || 0).toLocaleString()}
+                            </div>
                         </div>
-                        <div className="text-2xl font-black mt-2">
-                            UGX {Number(metrics.totalLiquidity || 0).toLocaleString()}
-                        </div>
-                        <div className="text-[10px] text-indigo-200/80 mt-1">
-                            Across {accounts.length} active business accounts
+                        <div className="mt-2.5 pt-2 border-t border-indigo-700/50 flex items-center justify-between text-[10px] text-indigo-200/90 font-medium">
+                            <span title="Liquid funds in cash, mobile money and bank accounts">
+                                <strong className="text-white">UGX {Number(metrics.totalLiquidity || 0).toLocaleString()}</strong> Liquid
+                            </span>
+                            <span>•</span>
+                            <span title="Active inventory valuation at purchase cost">
+                                <strong className="text-amber-300">UGX {Number(metrics.stockCost || 0).toLocaleString()}</strong> Stock
+                            </span>
                         </div>
                     </div>
 
-                    <div className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-sm">
-                        <div className="flex items-center justify-between text-xs font-bold text-slate-500 dark:text-slate-400">
-                            <span className="uppercase tracking-wider">Cash on Hand</span>
-                            <div className="p-2 rounded-xl bg-emerald-50 dark:bg-emerald-950/50 text-emerald-600 dark:text-emerald-400">
-                                <Wallet size={18} />
+                    <div className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-sm flex flex-col justify-between">
+                        <div>
+                            <div className="flex items-center justify-between text-xs font-bold text-slate-500 dark:text-slate-400">
+                                <span className="uppercase tracking-wider">Cash on Hand</span>
+                                <div className="p-2 rounded-xl bg-emerald-50 dark:bg-emerald-950/50 text-emerald-600 dark:text-emerald-400">
+                                    <Wallet size={18} />
+                                </div>
+                            </div>
+                            <div className="text-xl font-black text-slate-900 dark:text-white mt-2">
+                                UGX {Number(metrics.cashOnHand || 0).toLocaleString()}
                             </div>
                         </div>
-                        <div className="text-xl font-black text-slate-900 dark:text-white mt-2">
-                            UGX {Number(metrics.cashOnHand || 0).toLocaleString()}
-                        </div>
-                        <div className="text-[10px] text-emerald-600 dark:text-emerald-400 font-semibold mt-1">
+                        <div className="text-[10px] text-emerald-600 dark:text-emerald-400 font-semibold mt-2 pt-2 border-t border-slate-100 dark:border-slate-800/80">
                             Physical cash in drawer & register
                         </div>
                     </div>
 
-                    <div className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-sm">
-                        <div className="flex items-center justify-between text-xs font-bold text-slate-500 dark:text-slate-400">
-                            <span className="uppercase tracking-wider">Mobile Money Float</span>
-                            <div className="p-2 rounded-xl bg-amber-50 dark:bg-amber-950/50 text-amber-600 dark:text-amber-400">
-                                <Smartphone size={18} />
+                    <div className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-sm flex flex-col justify-between">
+                        <div>
+                            <div className="flex items-center justify-between text-xs font-bold text-slate-500 dark:text-slate-400">
+                                <span className="uppercase tracking-wider">Mobile Money Float</span>
+                                <div className="p-2 rounded-xl bg-amber-50 dark:bg-amber-950/50 text-amber-600 dark:text-amber-400">
+                                    <Smartphone size={18} />
+                                </div>
+                            </div>
+                            <div className="text-xl font-black text-slate-900 dark:text-white mt-2">
+                                UGX {Number(metrics.mobileMoneyTotal || 0).toLocaleString()}
                             </div>
                         </div>
-                        <div className="text-xl font-black text-slate-900 dark:text-white mt-2">
-                            UGX {Number(metrics.mobileMoneyTotal || 0).toLocaleString()}
-                        </div>
-                        <div className="text-[10px] text-amber-600 dark:text-amber-400 font-semibold mt-1">
+                        <div className="text-[10px] text-amber-600 dark:text-amber-400 font-semibold mt-2 pt-2 border-t border-slate-100 dark:border-slate-800/80">
                             MTN MoMo & Airtel float SIMs
                         </div>
                     </div>
 
-                    <div className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-sm">
-                        <div className="flex items-center justify-between text-xs font-bold text-slate-500 dark:text-slate-400">
-                            <span className="uppercase tracking-wider">Bank Deposits</span>
-                            <div className="p-2 rounded-xl bg-indigo-50 dark:bg-indigo-950/50 text-indigo-600 dark:text-indigo-400">
-                                <Building2 size={18} />
+                    <div className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-sm flex flex-col justify-between">
+                        <div>
+                            <div className="flex items-center justify-between text-xs font-bold text-slate-500 dark:text-slate-400">
+                                <span className="uppercase tracking-wider">Bank Deposits</span>
+                                <div className="p-2 rounded-xl bg-indigo-50 dark:bg-indigo-950/50 text-indigo-600 dark:text-indigo-400">
+                                    <Building2 size={18} />
+                                </div>
+                            </div>
+                            <div className="text-xl font-black text-slate-900 dark:text-white mt-2">
+                                UGX {Number(metrics.bankTotal || 0).toLocaleString()}
                             </div>
                         </div>
-                        <div className="text-xl font-black text-slate-900 dark:text-white mt-2">
-                            UGX {Number(metrics.bankTotal || 0).toLocaleString()}
-                        </div>
-                        <div className="text-[10px] text-indigo-600 dark:text-indigo-400 font-semibold mt-1">
+                        <div className="text-[10px] text-indigo-600 dark:text-indigo-400 font-semibold mt-2 pt-2 border-t border-slate-100 dark:border-slate-800/80">
                             Commercial bank accounts
+                        </div>
+                    </div>
+
+                    <div className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-sm flex flex-col justify-between">
+                        <div>
+                            <div className="flex items-center justify-between text-xs font-bold text-slate-500 dark:text-slate-400">
+                                <span className="uppercase tracking-wider">Stock on Hand (Cost)</span>
+                                <div className="p-2 rounded-xl bg-purple-50 dark:bg-purple-950/50 text-purple-600 dark:text-purple-400">
+                                    <Package size={18} />
+                                </div>
+                            </div>
+                            <div className="text-xl font-black text-slate-900 dark:text-white mt-2">
+                                UGX {Number(metrics.stockCost || 0).toLocaleString()}
+                            </div>
+                        </div>
+                        <div className="flex items-center justify-between text-[10px] text-slate-500 dark:text-slate-400 font-semibold mt-2 pt-2 border-t border-slate-100 dark:border-slate-800/80">
+                            <span>{metrics.stockCount || 0} in stock ({metrics.serializedCount || 0} dev, {metrics.bulkCount || 0} acc)</span>
+                            <Link 
+                                href={route('inventory.index')} 
+                                className="text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 font-bold flex items-center gap-0.5"
+                                title="Go to Inventory Management"
+                            >
+                                View <ChevronRight size={12} />
+                            </Link>
                         </div>
                     </div>
                 </div>

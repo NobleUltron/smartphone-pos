@@ -5,9 +5,12 @@ namespace App\Http\Controllers;
 use App\Models\PaymentAccount;
 use App\Models\AccountTransaction;
 use App\Models\AccountTransfer;
+use App\Models\DeviceImei;
+use App\Models\Product;
 use App\Models\Setting;
 use App\Services\TreasuryService;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Carbon\Carbon;
@@ -32,6 +35,17 @@ class AccountController extends Controller
         $cashOnHand = (float) $accounts->where('type', 'cash')->sum('current_balance');
         $mobileMoneyTotal = (float) $accounts->where('type', 'mobile_money')->sum('current_balance');
         $bankTotal = (float) $accounts->where('type', 'bank')->sum('current_balance');
+
+        // Inventory Stock Valuation at Cost (Lower of cost or net realizable value principle)
+        $serializedStockCost = (float) DeviceImei::where('status', 'In Stock')->sum('cost_price');
+        $bulkStockCost = (float) Product::where('type', 'bulk')->where('quantity', '>', 0)->sum(DB::raw('cost_price * quantity'));
+        $totalStockCost = $serializedStockCost + $bulkStockCost;
+
+        $serializedCount = DeviceImei::where('status', 'In Stock')->count();
+        $bulkCount = (int) Product::where('type', 'bulk')->where('quantity', '>', 0)->sum('quantity');
+        $totalStockCount = $serializedCount + $bulkCount;
+
+        $totalBusinessCapital = $totalLiquidity + $totalStockCost;
 
         $query = AccountTransaction::with(['account', 'user']);
 
@@ -75,6 +89,13 @@ class AccountController extends Controller
                 'cashOnHand' => $cashOnHand,
                 'mobileMoneyTotal' => $mobileMoneyTotal,
                 'bankTotal' => $bankTotal,
+                'stockCost' => $totalStockCost,
+                'serializedStockCost' => $serializedStockCost,
+                'bulkStockCost' => $bulkStockCost,
+                'stockCount' => $totalStockCount,
+                'serializedCount' => $serializedCount,
+                'bulkCount' => $bulkCount,
+                'totalBusinessCapital' => $totalBusinessCapital,
             ],
             'transactions' => $transactions,
             'filters' => $request->only(['account_id', 'type', 'category', 'search', 'date_from', 'date_to']),
