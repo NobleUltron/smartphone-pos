@@ -398,6 +398,17 @@ Route::middleware('auth')->group(function () {
         Route::delete('/accounts/{account}', [\App\Http\Controllers\AccountController::class, 'destroy'])->name('accounts.destroy');
         Route::get('/accounts/{account}/statement', [\App\Http\Controllers\AccountController::class, 'statement'])->name('accounts.statement');
 
+        // Partner & Family Capital Management
+        Route::get('/accounts/partners', [\App\Http\Controllers\PartnerInvestorController::class, 'index'])->name('partners.index');
+        Route::post('/accounts/partners', [\App\Http\Controllers\PartnerInvestorController::class, 'store'])->name('partners.store');
+        Route::put('/accounts/partners/{partner}', [\App\Http\Controllers\PartnerInvestorController::class, 'update'])->name('partners.update');
+        Route::delete('/accounts/partners/{partner}', [\App\Http\Controllers\PartnerInvestorController::class, 'destroy'])->name('partners.destroy');
+        Route::post('/accounts/partners/{partner}/capital', [\App\Http\Controllers\PartnerInvestorController::class, 'addCapital'])->name('partners.add-capital');
+        Route::post('/accounts/partners/{partner}/payout', [\App\Http\Controllers\PartnerInvestorController::class, 'payout'])->name('partners.payout');
+        Route::post('/accounts/partners/{partner}/assign-stock', [\App\Http\Controllers\PartnerInvestorController::class, 'assignStock'])->name('partners.assign-stock');
+        Route::delete('/accounts/partners/unassign-stock/{deviceImei}', [\App\Http\Controllers\PartnerInvestorController::class, 'unassignStock'])->name('partners.unassign-stock');
+        Route::get('/accounts/partners/{partner}/pdf', [\App\Http\Controllers\PartnerInvestorController::class, 'printPdf'])->name('partners.pdf');
+
         // Store & Thermal Printing Settings
         Route::get('/settings', [SettingController::class, 'index'])->name('settings.index');
         Route::post('/api/settings', [SettingController::class, 'store']);

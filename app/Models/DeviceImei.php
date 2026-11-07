@@ -8,11 +8,16 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class DeviceImei extends Model
 {
-    protected $fillable = ['product_id', 'imei', 'condition', 'status', 'cost_price', 'storage_capacity', 'color', 'selling_price'];
+    protected $fillable = ['product_id', 'imei', 'condition', 'status', 'cost_price', 'storage_capacity', 'color', 'selling_price', 'partner_investor_id'];
 
     public function product(): BelongsTo
     {
         return $this->belongsTo(Product::class);
+    }
+
+    public function partnerInvestor(): BelongsTo
+    {
+        return $this->belongsTo(PartnerInvestor::class);
     }
 
     public function saleItems(): HasMany

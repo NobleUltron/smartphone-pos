@@ -11,7 +11,7 @@ import PageHeader from '@/Components/SaaS/PageHeader';
 import DataTable from '@/Components/SaaS/DataTable';
 import LabelCard from '@/Components/SaaS/LabelCard';
 
-export default function Inventory({ auth, products, allProducts = [], categories = [], brands = [], filters = {}, summary }) {
+export default function Inventory({ auth, products, allProducts = [], categories = [], brands = [], filters = {}, summary, partners = [] }) {
     // Add Category Modal State
     const [showAddCategoryModal, setShowAddCategoryModal] = useState(false);
     const [newCategory, setNewCategory] = useState('');
@@ -34,6 +34,7 @@ export default function Inventory({ auth, products, allProducts = [], categories
     const [storageCapacity, setStorageCapacity] = useState('');
     const [stockColor, setStockColor] = useState('');
     const [sellingPrice, setSellingPrice] = useState('');
+    const [partnerInvestorId, setPartnerInvestorId] = useState('');
     const [loading, setLoading] = useState(false);
 
     // Edit Stock Modal State
@@ -173,7 +174,8 @@ export default function Inventory({ auth, products, allProducts = [], categories
                 cost_price: costPrice,
                 storage_capacity: storageCapacity,
                 color: stockColor,
-                selling_price: sellingPrice
+                selling_price: sellingPrice,
+                partner_investor_id: partnerInvestorId || null
             });
             toast.success("Stock added successfully!");
             setShowAddModal(false);
@@ -183,6 +185,7 @@ export default function Inventory({ auth, products, allProducts = [], categories
             setStorageCapacity('');
             setStockColor('');
             setSellingPrice('');
+            setPartnerInvestorId('');
             router.reload();
         } catch (error) {
             toast.error(error.response?.data?.message || "Error adding stock");
@@ -885,6 +888,16 @@ export default function Inventory({ auth, products, allProducts = [], categories
                                             <input type="number" className="saas-input" value={sellingPrice} onChange={e => setSellingPrice(e.target.value)} />
                                         </div>
                                     </div>
+
+                                    <div>
+                                        <label className="saas-label">Funded By (Capital Source)</label>
+                                        <select className="saas-input pl-4" value={partnerInvestorId} onChange={e => setPartnerInvestorId(e.target.value)}>
+                                            <option value="">Shop Own Capital (Default)</option>
+                                            {partners.map(p => (
+                                                <option key={p.id} value={p.id}>{p.name} ({p.profit_share_percentage}% profit pool)</option>
+                                            ))}
+                                        </select>
+                                    </div>
                                 </>
                             )}
                         </div>
@@ -966,7 +979,7 @@ export default function Inventory({ auth, products, allProducts = [], categories
                         ) : (
                             <div className="overflow-y-auto p-0 flex-auto min-h-0">
                                 <DataTable 
-                                    headers={['IMEI', 'Storage', 'Color', 'Condition', 'Status', 'Selling Price', { label: 'Actions', className: '!text-center' }]}
+                                    headers={['IMEI', 'Storage', 'Color', 'Condition', 'Status', 'Funded By', 'Selling Price', { label: 'Actions', className: '!text-center' }]}
                                     isEmpty={imeisList.length === 0}
                                     emptyState={<div className="p-8 text-center text-slate-500">No stock available for this model.</div>}
                                 >
@@ -980,6 +993,15 @@ export default function Inventory({ auth, products, allProducts = [], categories
                                                 <Badge variant={item.status === 'In Stock' ? 'success' : (item.status === 'Defective' ? 'danger' : (item.status === 'In Transit' ? 'info' : 'neutral'))}>
                                                     {item.status === 'Defective' ? '🛠️ Defective' : item.status}
                                                 </Badge>
+                                            </td>
+                                            <td>
+                                                {item.partner_investor ? (
+                                                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-purple-50 text-purple-700 border border-purple-200">
+                                                        {item.partner_investor.name}
+                                                    </span>
+                                                ) : (
+                                                    <span className="text-slate-400 text-xs font-medium">Shop</span>
+                                                )}
                                             </td>
                                             <td className="font-semibold">{Number(item.selling_price).toLocaleString()} UGX</td>
                                             <td className="text-center">
@@ -1067,6 +1089,20 @@ export default function Inventory({ auth, products, allProducts = [], categories
                                     <label className="saas-label">Selling Price (UGX)</label>
                                     <input type="number" className="saas-input" value={editingStock.selling_price} onChange={e => setEditingStock({...editingStock, selling_price: e.target.value})} />
                                 </div>
+                            </div>
+
+                            <div>
+                                <label className="saas-label">Funded By (Capital Source)</label>
+                                <select 
+                                    className="saas-input pl-4" 
+                                    value={editingStock.partner_investor_id || ''} 
+                                    onChange={e => setEditingStock({...editingStock, partner_investor_id: e.target.value || null})}
+                                >
+                                    <option value="">Shop Own Capital</option>
+                                    {partners.map(p => (
+                                        <option key={p.id} value={p.id}>{p.name} ({p.profit_share_percentage}% profit pool)</option>
+                                    ))}
+                                </select>
                             </div>
                         </div>
 

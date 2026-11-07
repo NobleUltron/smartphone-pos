@@ -167,7 +167,8 @@ class ProductController extends Controller
                 'low_stock_count' => $lowStockCount,
                 'out_of_stock_count' => $outOfStockCount,
                 'inventory_value' => $totalInventoryValue,
-            ]
+            ],
+            'partners' => \App\Models\PartnerInvestor::where('is_active', true)->select('id', 'name', 'profit_share_percentage')->get(),
         ]);
     }
 
@@ -305,6 +306,7 @@ class ProductController extends Controller
             'storage_capacity' => 'required|string|max:50',
             'color' => 'required|string|max:50',
             'selling_price' => 'required|numeric|min:0',
+            'partner_investor_id' => 'nullable|exists:partner_investors,id',
         ]);
 
         $device = DeviceImei::create([
@@ -315,6 +317,7 @@ class ProductController extends Controller
             'storage_capacity' => $validated['storage_capacity'],
             'color' => $validated['color'],
             'selling_price' => $validated['selling_price'],
+            'partner_investor_id' => $validated['partner_investor_id'] ?? null,
             'status' => 'In Stock',
         ]);
 
@@ -323,7 +326,7 @@ class ProductController extends Controller
 
     public function viewStock(Product $product)
     {
-        $imeis = $product->deviceImeis()->orderBy('created_at', 'desc')->get();
+        $imeis = $product->deviceImeis()->with('partnerInvestor')->orderBy('created_at', 'desc')->get();
         return response()->json(['imeis' => $imeis]);
     }
     public function updateStock(Request $request, DeviceImei $deviceImei)
@@ -335,12 +338,13 @@ class ProductController extends Controller
             'storage_capacity' => 'required|string|max:50',
             'color' => 'required|string|max:50',
             'selling_price' => 'required|numeric|min:0',
+            'partner_investor_id' => 'nullable|exists:partner_investors,id',
             'status' => 'required|string'
         ]);
 
         $deviceImei->update($validated);
 
-        return response()->json(['success' => true, 'device' => $deviceImei]);
+        return response()->json(['success' => true, 'device' => $deviceImei->load('partnerInvestor')]);
     }
 
     public function destroyStock(DeviceImei $deviceImei)

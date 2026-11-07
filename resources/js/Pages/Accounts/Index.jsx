@@ -29,6 +29,7 @@ import {
     RefreshCw,
     ShieldCheck,
     Package,
+    Users,
     X
 } from 'lucide-react';
 import dayjs from 'dayjs';
@@ -211,6 +212,19 @@ export default function AccountsIndex({ accounts, metrics, transactions, filters
                         >
                             <Plus size={16} /> Add Payment Account
                         </button>
+                    </div>
+
+                    {/* Navigation Tabs */}
+                    <div className="flex items-center gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+                        <span className="px-4 py-2 rounded-xl text-xs font-bold bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 border border-indigo-200/80 dark:border-indigo-800 flex items-center gap-2">
+                            <Wallet size={16} /> Business Wallets & Accounts
+                        </span>
+                        <Link
+                            href={route('partners.index')}
+                            className="px-4 py-2 rounded-xl text-xs font-bold text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition-all flex items-center gap-2"
+                        >
+                            <Users size={16} /> Partner & Family Capital
+                        </Link>
                     </div>
                 </div>
 
