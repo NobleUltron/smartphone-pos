@@ -40,6 +40,8 @@ export default function PartnersIndex({ partners, metrics, paymentAccounts, unas
     const [showAssignModal, setShowAssignModal] = useState(false);
     const [showStatementModal, setShowStatementModal] = useState(false);
     const [statementTab, setStatementTab] = useState('instock'); // 'instock' | 'sold' | 'ledger'
+    const [partnerToDelete, setPartnerToDelete] = useState(null);
+    const [isDeletingPartner, setIsDeletingPartner] = useState(false);
 
     // Form: Create Partner
     const createForm = useForm({
@@ -127,26 +129,23 @@ export default function PartnersIndex({ partners, metrics, paymentAccounts, unas
     };
 
     const handleDeletePartner = (partner) => {
-        const hasHistory = Number(partner.total_deposits || 0) > 0 || Number(partner.sold_count || 0) > 0;
-        const hasStock = Number(partner.in_stock_count || 0) > 0;
+        setPartnerToDelete(partner);
+    };
 
-        let confirmMessage = `Delete partner profile "${partner.name}"?`;
-        if (hasStock && hasHistory) {
-            confirmMessage = `WARNING: "${partner.name}" has UGX ${Number(partner.total_deposits || 0).toLocaleString()} in deposits and ${partner.in_stock_count} phone(s) currently in stock.\n\nDeleting will move those ${partner.in_stock_count} phone(s) back to regular shop stock AND permanently remove this partner's ledger history.\n\nAre you sure?`;
-        } else if (hasStock) {
-            confirmMessage = `"${partner.name}" currently has ${partner.in_stock_count} phone(s) linked in stock.\n\nClick OK to unlink those ${partner.in_stock_count} phone(s) back to your own shop stock and delete this profile.`;
-        } else if (hasHistory) {
-            confirmMessage = `WARNING: "${partner.name}" has recorded financial history (UGX ${Number(partner.total_deposits || 0).toLocaleString()} deposits).\n\nDelete this partner profile permanently?`;
-        }
-
-        if (!confirm(confirmMessage)) return;
-
+    const confirmDeletePartner = () => {
+        if (!partnerToDelete) return;
+        const hasStock = Number(partnerToDelete.in_stock_count || 0) > 0;
         const destroyUrl = hasStock
-            ? route('partners.destroy', { partner: partner.id, unlink_stock: 1 })
-            : route('partners.destroy', partner.id);
+            ? route('partners.destroy', { partner: partnerToDelete.id, unlink_stock: 1 })
+            : route('partners.destroy', partnerToDelete.id);
 
+        setIsDeletingPartner(true);
         router.delete(destroyUrl, {
             preserveScroll: true,
+            onFinish: () => {
+                setIsDeletingPartner(false);
+                setPartnerToDelete(null);
+            },
         });
     };
 
@@ -1081,6 +1080,96 @@ export default function PartnersIndex({ partners, metrics, paymentAccounts, unas
                                 className="px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-all"
                             >
                                 Close
+                            </button>
+                        </div>
+                    </div>
+                )}
+            </Modal>
+
+            {/* MODAL 6: Delete Partner Profile Confirmation */}
+            <Modal show={!!partnerToDelete} onClose={() => !isDeletingPartner && setPartnerToDelete(null)} maxWidth="md">
+                {partnerToDelete && (
+                    <div className="p-6 space-y-4">
+                        <div className="flex items-center justify-between pb-3 border-b border-slate-200 dark:border-slate-800">
+                            <div className="flex items-center gap-2.5">
+                                <div className="p-2 bg-rose-50 dark:bg-rose-950/60 rounded-xl text-rose-600 dark:text-rose-400">
+                                    <Trash2 size={18} />
+                                </div>
+                                <div>
+                                    <h3 className="text-base font-bold text-slate-900 dark:text-white">Delete Partner Profile</h3>
+                                    <p className="text-xs text-slate-500 dark:text-slate-400">{partnerToDelete.name}</p>
+                                </div>
+                            </div>
+                            <button
+                                type="button"
+                                disabled={isDeletingPartner}
+                                onClick={() => setPartnerToDelete(null)}
+                                className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 disabled:opacity-40"
+                            >
+                                <X size={18} />
+                            </button>
+                        </div>
+
+                        {(Number(partnerToDelete.total_deposits || 0) > 0 || Number(partnerToDelete.sold_count || 0) > 0 || Number(partnerToDelete.total_portfolio_value || 0) > 0) && (
+                            <div className="p-3.5 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800/70 space-y-2">
+                                <div className="flex items-center gap-2 text-xs font-bold text-rose-800 dark:text-rose-200">
+                                    <AlertCircle size={16} className="text-rose-600 dark:text-rose-400 shrink-0" />
+                                    <span>Active Financial History Detected</span>
+                                </div>
+                                <ul className="text-xs text-rose-700 dark:text-rose-300 space-y-1 pl-6 list-disc">
+                                    {Number(partnerToDelete.total_deposits || 0) > 0 && (
+                                        <li>
+                                            Recorded Capital Deposits: <strong>UGX {Number(partnerToDelete.total_deposits).toLocaleString()}</strong>
+                                        </li>
+                                    )}
+                                    {Number(partnerToDelete.total_portfolio_value || 0) > 0 && (
+                                        <li>
+                                            Current Unsettled Balance Owed: <strong>UGX {Number(partnerToDelete.total_portfolio_value).toLocaleString()}</strong>
+                                        </li>
+                                    )}
+                                    {Number(partnerToDelete.sold_count || 0) > 0 && (
+                                        <li>
+                                            Linked Sold Phones: <strong>{partnerToDelete.sold_count}</strong>
+                                        </li>
+                                    )}
+                                </ul>
+                                <p className="text-[11px] text-rose-700/90 dark:text-rose-300/90 pt-1">
+                                    Deleting this profile permanently erases its ledger history and removes it from <strong>Partner &amp; Family Owed</strong>. Shop wallet balances will not be deducted automatically — record a <strong>Payout</strong> first if you have returned their money.
+                                </p>
+                            </div>
+                        )}
+
+                        {Number(partnerToDelete.in_stock_count || 0) > 0 && (
+                            <div className="p-3.5 rounded-xl bg-indigo-50 dark:bg-indigo-950/40 border border-indigo-200 dark:border-indigo-800/70 text-xs text-indigo-800 dark:text-indigo-200">
+                                <strong>{partnerToDelete.in_stock_count} in-stock phone(s)</strong> currently linked to this partner will be safely unlinked back to your own shop stock (they will not be deleted).
+                            </div>
+                        )}
+
+                        {Number(partnerToDelete.total_deposits || 0) === 0 && Number(partnerToDelete.sold_count || 0) === 0 && Number(partnerToDelete.in_stock_count || 0) === 0 && (
+                            <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
+                                Are you sure you want to permanently remove <strong>{partnerToDelete.name}</strong>? This action cannot be undone.
+                            </p>
+                        )}
+
+                        <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-200 dark:border-slate-800">
+                            <button
+                                type="button"
+                                disabled={isDeletingPartner}
+                                onClick={() => setPartnerToDelete(null)}
+                                className="px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-all disabled:opacity-50"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                type="button"
+                                disabled={isDeletingPartner}
+                                onClick={confirmDeletePartner}
+                                className="px-5 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold transition-all shadow-md shadow-rose-500/20 disabled:opacity-50 flex items-center gap-1.5"
+                            >
+                                <Trash2 size={14} />
+                                {isDeletingPartner
+                                    ? 'Deleting...'
+                                    : (Number(partnerToDelete.in_stock_count || 0) > 0 ? 'Unlink Stock & Delete' : 'Delete Permanently')}
                             </button>
                         </div>
                     </div>
