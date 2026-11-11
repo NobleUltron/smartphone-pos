@@ -231,28 +231,104 @@ export default function AccountsIndex({ accounts, metrics, transactions, filters
                     </div>
                 </div>
 
-                {/* TIER 1: Strategic Macro Capital Overview (3 Cards) */}
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    {/* Card 1: Total Working Capital */}
-                    <div className="p-5 rounded-2xl bg-gradient-to-br from-indigo-900 via-indigo-800 to-purple-900 text-white shadow-lg shadow-indigo-900/20 relative overflow-hidden flex flex-col justify-between min-h-[140px]">
-                        <div className="absolute right-3 top-3 opacity-10">
-                            <Landmark size={90} />
-                        </div>
-                        <div>
-                            <div className="text-[11px] font-bold text-indigo-200 uppercase tracking-wider flex items-center gap-1.5">
-                                <TrendingUp size={14} /> Total Working Capital
+                {/* HERO BANNER: Combined Owner Net Worth & Equity Breakdown */}
+                <div className="p-6 rounded-2xl bg-gradient-to-br from-slate-900 via-indigo-950 to-purple-950 text-white shadow-xl shadow-indigo-950/20 border border-indigo-800/40 relative overflow-hidden">
+                    <div className="absolute -right-6 -top-6 opacity-10 pointer-events-none">
+                        <Landmark size={180} />
+                    </div>
+                    <div className="relative z-10 flex flex-col xl:flex-row xl:items-center xl:justify-between gap-6">
+                        <div className="space-y-1.5">
+                            <div className="flex items-center gap-2 flex-wrap">
+                                <span className="text-[11px] font-black text-indigo-300 uppercase tracking-widest flex items-center gap-1.5">
+                                    <ShieldCheck size={14} className="text-emerald-400" /> My Combined Net Worth
+                                </span>
+                                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-400/30">
+                                    Strictly Yours (Net of Partner Debt)
+                                </span>
                             </div>
-                            <div className="text-2xl font-black mt-2">
+                            <div className="text-3xl sm:text-4xl font-black tracking-tight text-white">
+                                UGX {Number(metrics.ownerNetWorth || 0).toLocaleString()}
+                            </div>
+                            <p className="text-[11px] text-indigo-200/80 font-medium">
+                                Business Wallets + Stock + Personal Reserve &minus; Partner Owed
+                            </p>
+                        </div>
+
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 flex-1 xl:max-w-3xl">
+                            <div className="p-3.5 rounded-xl bg-white/10 backdrop-blur-sm border border-white/10">
+                                <div className="text-[10px] font-bold text-indigo-200 uppercase tracking-wider">
+                                    My Business Cash
+                                </div>
+                                <div className="text-base sm:text-lg font-black text-white mt-1">
+                                    UGX {Number(metrics.ownerBusinessCash || 0).toLocaleString()}
+                                </div>
+                                <div className="text-[10px] text-indigo-300/90 mt-0.5">
+                                    Wallets &minus; Partner Cash
+                                </div>
+                            </div>
+
+                            <div className="p-3.5 rounded-xl bg-white/10 backdrop-blur-sm border border-white/10">
+                                <div className="text-[10px] font-bold text-indigo-200 uppercase tracking-wider">
+                                    My Money in Stock
+                                </div>
+                                <div className="text-base sm:text-lg font-black text-amber-300 mt-1">
+                                    UGX {Number(metrics.ownerStockCost || 0).toLocaleString()}
+                                </div>
+                                <div className="text-[10px] text-indigo-300/90 mt-0.5">
+                                    Stock &minus; Partner Stock
+                                </div>
+                            </div>
+
+                            <div className="p-3.5 rounded-xl bg-emerald-500/15 backdrop-blur-sm border border-emerald-400/25">
+                                <div className="text-[10px] font-bold text-emerald-200 uppercase tracking-wider">
+                                    My Business Equity
+                                </div>
+                                <div className="text-base sm:text-lg font-black text-emerald-300 mt-1">
+                                    UGX {Number(metrics.ownerBusinessEquity || 0).toLocaleString()}
+                                </div>
+                                <div className="text-[10px] text-emerald-200/80 mt-0.5">
+                                    Strictly yours in shop
+                                </div>
+                            </div>
+
+                            <div className="p-3.5 rounded-xl bg-purple-500/20 backdrop-blur-sm border border-purple-400/30">
+                                <div className="text-[10px] font-bold text-purple-200 uppercase tracking-wider">
+                                    My Personal Money
+                                </div>
+                                <div className="text-base sm:text-lg font-black text-purple-200 mt-1">
+                                    UGX {Number(metrics.personalReserveTotal || 0).toLocaleString()}
+                                </div>
+                                <div className="text-[10px] text-purple-200/80 mt-0.5">
+                                    Personal bank reserve
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                {/* TIER 1: Macro Capital Pools (3 Cards) */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    {/* Card 1: Gross Working Capital in Shop */}
+                    <div className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-indigo-200 dark:border-indigo-900/60 shadow-sm flex flex-col justify-between min-h-[140px] relative overflow-hidden">
+                        <div className="absolute top-0 right-0 w-2 h-full bg-indigo-600"></div>
+                        <div>
+                            <div className="flex items-center justify-between text-xs font-bold text-indigo-700 dark:text-indigo-300">
+                                <span className="uppercase tracking-wider">Gross Shop Working Capital</span>
+                                <div className="p-2 rounded-xl bg-indigo-100 dark:bg-indigo-950/70 text-indigo-700 dark:text-indigo-300">
+                                    <TrendingUp size={18} />
+                                </div>
+                            </div>
+                            <div className="text-2xl font-black text-slate-900 dark:text-white mt-2">
                                 UGX {Number(metrics.totalBusinessCapital || metrics.totalLiquidity || 0).toLocaleString()}
                             </div>
                         </div>
-                        <div className="mt-3 pt-2.5 border-t border-indigo-700/50 flex items-center justify-between text-[11px] text-indigo-200/90 font-medium">
-                            <span title="Liquid funds in cash, mobile money and bank accounts">
-                                <strong className="text-white">UGX {Number(metrics.totalLiquidity || 0).toLocaleString()}</strong> Liquid
+                        <div className="mt-3 pt-2.5 border-t border-indigo-100 dark:border-indigo-900/40 flex items-center justify-between text-[11px] text-slate-500 dark:text-slate-400 font-semibold">
+                            <span title="Total liquid cash across shop wallets (includes partner cash)">
+                                <strong className="text-slate-700 dark:text-slate-200">UGX {Number(metrics.totalLiquidity || 0).toLocaleString()}</strong> Liquid
                             </span>
                             <span>•</span>
-                            <span title="Active inventory valuation at purchase cost">
-                                <strong className="text-amber-300">UGX {Number(metrics.stockCost || 0).toLocaleString()}</strong> Stock
+                            <span title="Total active stock cost in shop (includes partner stock)">
+                                <strong className="text-indigo-600 dark:text-indigo-400">UGX {Number(metrics.stockCost || 0).toLocaleString()}</strong> Stock
                             </span>
                         </div>
                     </div>
@@ -272,32 +348,34 @@ export default function AccountsIndex({ accounts, metrics, transactions, filters
                             </div>
                         </div>
                         <div className="mt-3 pt-2.5 border-t border-purple-100 dark:border-purple-900/40 flex items-center justify-between text-[11px] text-purple-600 dark:text-purple-400 font-semibold">
-                            <span>Private owner bank (Equity Bank)</span>
+                            <span>Private owner bank ({metrics.personalAccountsCount || 0} account)</span>
                             <span className="text-[10px] uppercase font-black px-2 py-0.5 rounded bg-purple-100 dark:bg-purple-900/60 text-purple-800 dark:text-purple-300">
                                 Separate
                             </span>
                         </div>
                     </div>
 
-                    {/* Card 3: Total Partner Funds Managed */}
+                    {/* Card 3: Partner & Family Funds Owed */}
                     <div className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-emerald-200 dark:border-emerald-900/60 shadow-sm flex flex-col justify-between min-h-[140px] relative overflow-hidden">
                         <div className="absolute top-0 right-0 w-2 h-full bg-emerald-500"></div>
                         <div>
                             <div className="flex items-center justify-between text-xs font-bold text-emerald-700 dark:text-emerald-400">
-                                <span className="uppercase tracking-wider">Partner & Family Funds Managed</span>
+                                <span className="uppercase tracking-wider">Partner & Family Owed</span>
                                 <div className="p-2 rounded-xl bg-emerald-100 dark:bg-emerald-950/70 text-emerald-700 dark:text-emerald-300">
                                     <Users size={18} />
                                 </div>
                             </div>
                             <div className="text-2xl font-black text-slate-900 dark:text-white mt-2">
-                                UGX {Number(metrics.partnerFundsTotal || 0).toLocaleString()}
+                                UGX {Number(metrics.partnerPortfolioValue || 0).toLocaleString()}
                             </div>
                         </div>
                         <div className="mt-3 pt-2.5 border-t border-emerald-100 dark:border-emerald-900/40 flex items-center justify-between text-[11px] text-slate-500 dark:text-slate-400 font-semibold">
-                            <span>{metrics.partnersCount || 0} active partner pools</span>
+                            <span title="Partner cash held in shop wallets + partner stock on shelf">
+                                Cash: <strong className="text-slate-700 dark:text-slate-200">{Number(metrics.partnerCashAvailable || 0).toLocaleString()}</strong> • Stock: <strong className="text-slate-700 dark:text-slate-200">{Number(metrics.partnerStockCost || 0).toLocaleString()}</strong>
+                            </span>
                             <Link
                                 href={route('partners.index')}
-                                className="text-emerald-600 dark:text-emerald-400 hover:text-emerald-700 dark:hover:text-emerald-300 font-bold flex items-center gap-0.5"
+                                className="text-emerald-600 dark:text-emerald-400 hover:text-emerald-700 dark:hover:text-emerald-300 font-bold flex items-center gap-0.5 whitespace-nowrap ml-2"
                                 title="Go to Partner & Family Capital"
                             >
                                 Manage <ChevronRight size={13} />

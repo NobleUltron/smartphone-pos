@@ -61,6 +61,12 @@ class AccountController extends Controller
         $partnerPortfolioValue = (float) $partnerSummaries->sum('total_portfolio_value');
         $partnersCount = $partnerInvestors->count();
 
+        // Owner Equity & Combined Net Worth (Business Wallets + Stock + Personal Reserve - Partner Owed)
+        $ownerBusinessCash = $totalLiquidity - $partnerCashAvailable;
+        $ownerStockCost = $totalStockCost - $partnerStockCost;
+        $ownerBusinessEquity = $totalBusinessCapital - $partnerPortfolioValue;
+        $ownerNetWorth = $ownerBusinessEquity + $personalReserveTotal;
+
         $query = AccountTransaction::with(['account', 'user']);
 
         if ($request->filled('account_id') && $request->account_id !== 'all') {
@@ -117,6 +123,10 @@ class AccountController extends Controller
                 'partnerCashAvailable' => $partnerCashAvailable,
                 'partnerPortfolioValue' => $partnerPortfolioValue,
                 'partnersCount' => $partnersCount,
+                'ownerBusinessCash' => $ownerBusinessCash,
+                'ownerStockCost' => $ownerStockCost,
+                'ownerBusinessEquity' => $ownerBusinessEquity,
+                'ownerNetWorth' => $ownerNetWorth,
             ],
             'transactions' => $transactions,
             'filters' => $request->only(['account_id', 'type', 'category', 'search', 'date_from', 'date_to']),

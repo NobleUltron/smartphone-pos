@@ -26,7 +26,8 @@ import {
     Percent, 
     Tag, 
     X,
-    Eye
+    Eye,
+    Trash2
 } from 'lucide-react';
 import dayjs from 'dayjs';
 
@@ -120,6 +121,13 @@ export default function PartnersIndex({ partners, metrics, paymentAccounts, unas
     const handleUnassignDevice = (deviceId) => {
         if (!confirm('Unlink this phone from the partner capital pool?')) return;
         router.delete(route('partners.unassign-stock', deviceId), {
+            preserveScroll: true,
+        });
+    };
+
+    const handleDeletePartner = (partner) => {
+        if (!confirm(`Delete partner profile "${partner.name}"? Unlink any active in-stock phones first.`)) return;
+        router.delete(route('partners.destroy', partner.id), {
             preserveScroll: true,
         });
     };
@@ -418,13 +426,23 @@ export default function PartnersIndex({ partners, metrics, paymentAccounts, unas
                                             </a>
                                         </div>
 
-                                        <button
-                                            type="button"
-                                            onClick={() => openAssignFor(partner)}
-                                            className="w-full py-1.5 text-center text-[11px] font-semibold text-indigo-600 dark:text-indigo-400 hover:underline flex items-center justify-center gap-1"
-                                        >
-                                            <Tag size={12} /> Link Existing Stock from Shop
-                                        </button>
+                                        <div className="flex items-center justify-between pt-1">
+                                            <button
+                                                type="button"
+                                                onClick={() => openAssignFor(partner)}
+                                                className="py-1 text-[11px] font-semibold text-indigo-600 dark:text-indigo-400 hover:underline flex items-center gap-1"
+                                            >
+                                                <Tag size={12} /> Link Existing Stock from Shop
+                                            </button>
+                                            <button
+                                                type="button"
+                                                onClick={() => handleDeletePartner(partner)}
+                                                className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors"
+                                                title="Delete partner profile (unlink in-stock phones first)"
+                                            >
+                                                <Trash2 size={14} />
+                                            </button>
+                                        </div>
                                     </div>
                                 </div>
                             ))}
