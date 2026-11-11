@@ -137,17 +137,24 @@ class PartnerInvestorController extends Controller
         return redirect()->back()->with('success', 'Partner profile updated successfully.');
     }
 
-    public function destroy(PartnerInvestor $partner)
+    public function destroy(Request $request, PartnerInvestor $partner)
     {
         // Check if has active stock
         $activeStockCount = $partner->deviceImeis()->where('status', 'In Stock')->count();
-        if ($activeStockCount > 0) {
+        if ($activeStockCount > 0 && !$request->boolean('unlink_stock')) {
             return redirect()->back()->with('error', "Cannot delete {$partner->name} while they have {$activeStockCount} active phone(s) in stock. Unlink the phones first.");
         }
 
-        $partner->delete();
+        DB::transaction(function () use ($partner) {
+            $partner->deviceImeis()->update(['partner_investor_id' => null]);
+            $partner->delete();
+        });
 
-        return redirect()->back()->with('success', 'Partner record removed successfully.');
+        $msg = $activeStockCount > 0
+            ? "Removed {$partner->name} and unlinked {$activeStockCount} in-stock phone(s) back to shop stock."
+            : 'Partner record removed successfully.';
+
+        return redirect()->back()->with('success', $msg);
     }
 
     public function addCapital(Request $request, PartnerInvestor $partner)

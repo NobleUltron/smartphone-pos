@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Head, Link, router, useForm } from '@inertiajs/react';
+import { Head, Link, router, useForm, usePage } from '@inertiajs/react';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import Modal from '@/Components/Modal';
 import { 
@@ -32,6 +32,7 @@ import {
 import dayjs from 'dayjs';
 
 export default function PartnersIndex({ partners, metrics, paymentAccounts, unassignedDevices }) {
+    const { flash } = usePage().props;
     const [selectedPartner, setSelectedPartner] = useState(partners[0] || null);
     const [showCreateModal, setShowCreateModal] = useState(false);
     const [showDepositModal, setShowDepositModal] = useState(false);
@@ -126,8 +127,25 @@ export default function PartnersIndex({ partners, metrics, paymentAccounts, unas
     };
 
     const handleDeletePartner = (partner) => {
-        if (!confirm(`Delete partner profile "${partner.name}"? Unlink any active in-stock phones first.`)) return;
-        router.delete(route('partners.destroy', partner.id), {
+        const hasHistory = Number(partner.total_deposits || 0) > 0 || Number(partner.sold_count || 0) > 0;
+        const hasStock = Number(partner.in_stock_count || 0) > 0;
+
+        let confirmMessage = `Delete partner profile "${partner.name}"?`;
+        if (hasStock && hasHistory) {
+            confirmMessage = `WARNING: "${partner.name}" has UGX ${Number(partner.total_deposits || 0).toLocaleString()} in deposits and ${partner.in_stock_count} phone(s) currently in stock.\n\nDeleting will move those ${partner.in_stock_count} phone(s) back to regular shop stock AND permanently remove this partner's ledger history.\n\nAre you sure?`;
+        } else if (hasStock) {
+            confirmMessage = `"${partner.name}" currently has ${partner.in_stock_count} phone(s) linked in stock.\n\nClick OK to unlink those ${partner.in_stock_count} phone(s) back to your own shop stock and delete this profile.`;
+        } else if (hasHistory) {
+            confirmMessage = `WARNING: "${partner.name}" has recorded financial history (UGX ${Number(partner.total_deposits || 0).toLocaleString()} deposits).\n\nDelete this partner profile permanently?`;
+        }
+
+        if (!confirm(confirmMessage)) return;
+
+        const destroyUrl = hasStock
+            ? route('partners.destroy', { partner: partner.id, unlink_stock: 1 })
+            : route('partners.destroy', partner.id);
+
+        router.delete(destroyUrl, {
             preserveScroll: true,
         });
     };
@@ -172,7 +190,7 @@ export default function PartnersIndex({ partners, metrics, paymentAccounts, unas
     };
 
     // Live active partner object from props
-    const activePartner = partners.find(p => p.id === selectedPartner?.id) || selectedPartner || partners[0];
+    const activePartner = partners.find(p => p.id === selectedPartner?.id) || partners[0] || null;
 
     return (
         <AuthenticatedLayout>
@@ -221,6 +239,20 @@ export default function PartnersIndex({ partners, metrics, paymentAccounts, unas
                         </span>
                     </div>
                 </div>
+
+                {/* Flash Messages */}
+                {flash?.error && (
+                    <div className="p-4 rounded-2xl bg-rose-50 dark:bg-rose-950/50 border border-rose-200 dark:border-rose-800 text-rose-800 dark:text-rose-200 text-xs font-bold flex items-center gap-2.5 shadow-sm">
+                        <AlertCircle size={18} className="text-rose-600 dark:text-rose-400 shrink-0" />
+                        <span>{flash.error}</span>
+                    </div>
+                )}
+                {flash?.success && (
+                    <div className="p-4 rounded-2xl bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-200 text-xs font-bold flex items-center gap-2.5 shadow-sm">
+                        <CheckCircle2 size={18} className="text-emerald-600 dark:text-emerald-400 shrink-0" />
+                        <span>{flash.success}</span>
+                    </div>
+                )}
 
                 {/* 4 Overview KPI Cards */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
