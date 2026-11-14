@@ -6,7 +6,10 @@ use App\Models\Product;
 use App\Models\Category;
 use App\Models\Brand;
 use App\Models\DeviceImei;
+use App\Models\PaymentAccount;
+use App\Services\TreasuryService;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
 
 class ProductController extends Controller
@@ -169,6 +172,7 @@ class ProductController extends Controller
                 'inventory_value' => $totalInventoryValue,
             ],
             'partners' => \App\Models\PartnerInvestor::where('is_active', true)->select('id', 'name', 'profit_share_percentage')->get(),
+            'paymentAccounts' => PaymentAccount::where('is_active', true)->orderBy('id')->get(['id', 'name', 'type', 'current_balance']),
         ]);
     }
 
@@ -307,19 +311,56 @@ class ProductController extends Controller
             'color' => 'required|string|max:50',
             'selling_price' => 'required|numeric|min:0',
             'partner_investor_id' => 'nullable|exists:partner_investors,id',
+            'refurbishment_cost' => 'nullable|numeric|min:0',
+            'refurbishment_notes' => 'nullable|string|max:500',
+            'refurbishment_account_id' => 'nullable|exists:payment_accounts,id',
         ]);
 
-        $device = DeviceImei::create([
-            'product_id' => $product->id,
-            'imei' => $validated['imei'],
-            'condition' => $validated['condition'],
-            'cost_price' => $validated['cost_price'],
-            'storage_capacity' => $validated['storage_capacity'],
-            'color' => $validated['color'],
-            'selling_price' => $validated['selling_price'],
-            'partner_investor_id' => $validated['partner_investor_id'] ?? null,
-            'status' => 'In Stock',
-        ]);
+        $initialCost = (float) $validated['cost_price'];
+        $refurbCost = (float) ($validated['refurbishment_cost'] ?? 0);
+        $totalCost = $initialCost + $refurbCost;
+        $noteText = trim((string) ($validated['refurbishment_notes'] ?? ''));
+        $formattedNotes = null;
+        if ($refurbCost > 0) {
+            $label = $noteText !== '' ? $noteText : 'Initial refurbishment/repair on intake';
+            $formattedNotes = '[' . now()->format('Y-m-d H:i') . '] ' . $label . ' (+' . number_format($refurbCost) . ' UGX)';
+        } elseif ($noteText !== '') {
+            $formattedNotes = '[' . now()->format('Y-m-d H:i') . '] ' . $noteText;
+        }
+
+        try {
+            $device = DB::transaction(function () use ($product, $validated, $initialCost, $refurbCost, $totalCost, $formattedNotes, $noteText) {
+                $device = DeviceImei::create([
+                    'product_id' => $product->id,
+                    'imei' => $validated['imei'],
+                    'condition' => $validated['condition'],
+                    'cost_price' => $totalCost,
+                    'initial_cost_price' => $initialCost,
+                    'refurbishment_cost' => $refurbCost,
+                    'refurbishment_notes' => $formattedNotes,
+                    'storage_capacity' => $validated['storage_capacity'],
+                    'color' => $validated['color'],
+                    'selling_price' => $validated['selling_price'],
+                    'partner_investor_id' => $validated['partner_investor_id'] ?? null,
+                    'status' => 'In Stock',
+                ]);
+
+                if ($refurbCost > 0 && !empty($validated['refurbishment_account_id'])) {
+                    $desc = "Initial Refurbishment/Repair on {$product->model_name} (IMEI: {$device->imei})"
+                        . ($noteText !== '' ? ": {$noteText}" : '');
+                    $this->recordRefurbishmentOutflow(
+                        (int) $validated['refurbishment_account_id'],
+                        $refurbCost,
+                        $device,
+                        $desc
+                    );
+                }
+
+                return $device;
+            });
+        } catch (\InvalidArgumentException $e) {
+            return response()->json(['message' => $e->getMessage()], 422);
+        }
 
         return response()->json(['success' => true, 'device' => $device]);
     }
@@ -342,9 +383,112 @@ class ProductController extends Controller
             'status' => 'required|string'
         ]);
 
+        $newTotalCost = (float) $validated['cost_price'];
+        $existingRefurb = (float) ($deviceImei->refurbishment_cost ?? 0);
+        if ($newTotalCost >= $existingRefurb) {
+            $validated['initial_cost_price'] = $newTotalCost - $existingRefurb;
+        } else {
+            $validated['initial_cost_price'] = 0;
+            $validated['refurbishment_cost'] = $newTotalCost;
+        }
+
         $deviceImei->update($validated);
 
         return response()->json(['success' => true, 'device' => $deviceImei->load('partnerInvestor')]);
+    }
+
+    public function addRefurbishmentCost(Request $request, DeviceImei $deviceImei)
+    {
+        $validated = $request->validate([
+            'amount' => 'required|numeric|min:0.01',
+            'description' => 'required|string|max:500',
+            'payment_account_id' => 'nullable|exists:payment_accounts,id',
+            'new_selling_price' => 'nullable|numeric|min:0',
+            'new_condition' => 'nullable|string|max:100',
+            'new_status' => 'nullable|in:In Stock,Defective,In Transit,Reserved,With Dealer',
+        ]);
+
+        try {
+            $updated = DB::transaction(function () use ($deviceImei, $validated) {
+                $device = DeviceImei::with('product')->lockForUpdate()->findOrFail($deviceImei->id);
+
+                if ($device->status === 'Sold') {
+                    throw new \InvalidArgumentException('Cannot add repair cost to a device that has already been sold.');
+                }
+
+                $addedCost = (float) $validated['amount'];
+                $baseInitialCost = $device->initial_cost_price !== null
+                    ? (float) $device->initial_cost_price
+                    : (float) $device->cost_price;
+                $newRefurbCost = (float) ($device->refurbishment_cost ?? 0) + $addedCost;
+                $newTotalCost = (float) $device->cost_price + $addedCost;
+
+                $noteEntry = '[' . now()->format('Y-m-d H:i') . '] '
+                    . trim($validated['description'])
+                    . ' (+' . number_format($addedCost) . ' UGX)';
+                $combinedNotes = $device->refurbishment_notes
+                    ? ($device->refurbishment_notes . "\n" . $noteEntry)
+                    : $noteEntry;
+
+                $device->initial_cost_price = $baseInitialCost;
+                $device->refurbishment_cost = $newRefurbCost;
+                $device->cost_price = $newTotalCost;
+                $device->refurbishment_notes = $combinedNotes;
+
+                if (array_key_exists('new_selling_price', $validated) && $validated['new_selling_price'] !== null) {
+                    $device->selling_price = $validated['new_selling_price'];
+                }
+                if (!empty($validated['new_condition'])) {
+                    $device->condition = $validated['new_condition'];
+                }
+                if (!empty($validated['new_status'])) {
+                    $device->status = $validated['new_status'];
+                }
+
+                $device->save();
+
+                if (!empty($validated['payment_account_id'])) {
+                    $productName = $device->product ? $device->product->model_name : 'Device';
+                    $desc = "Repair/Refurb on {$productName} (IMEI: {$device->imei}): " . trim($validated['description']);
+                    $this->recordRefurbishmentOutflow(
+                        (int) $validated['payment_account_id'],
+                        $addedCost,
+                        $device,
+                        $desc
+                    );
+                }
+
+                return $device;
+            });
+        } catch (\InvalidArgumentException $e) {
+            return response()->json(['message' => $e->getMessage()], 422);
+        }
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Refurbishment cost capitalized into device cost basis.',
+            'device' => $updated->load('partnerInvestor'),
+        ]);
+    }
+
+    private function recordRefurbishmentOutflow(int $paymentAccountId, float $amount, DeviceImei $device, string $description): void
+    {
+        $account = PaymentAccount::lockForUpdate()->findOrFail($paymentAccountId);
+        if ((float) $account->current_balance < $amount) {
+            throw new \InvalidArgumentException(
+                "Insufficient balance in {$account->name} (Available: UGX " . number_format((float) $account->current_balance) . ")."
+            );
+        }
+
+        TreasuryService::recordOutflow(
+            $account,
+            $amount,
+            'Inventory Refurbishment',
+            $device,
+            $description,
+            null,
+            auth()->id()
+        );
     }
 
     public function destroyStock(DeviceImei $deviceImei)

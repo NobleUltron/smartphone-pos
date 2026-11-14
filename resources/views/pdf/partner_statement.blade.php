@@ -244,7 +244,14 @@
             @forelse ($summary['in_stock_devices'] as $index => $item)
                 <tr>
                     <td>{{ $index + 1 }}</td>
-                    <td><strong>{{ $item['model_name'] }}</strong> ({{ $item['storage_capacity'] ?? '-' }}, {{ $item['color'] ?? '-' }})</td>
+                    <td>
+                        <strong>{{ $item['model_name'] }}</strong> ({{ $item['storage_capacity'] ?? '-' }}, {{ $item['color'] ?? '-' }})
+                        @if (!empty($item['refurbishment_cost']) && $item['refurbishment_cost'] > 0)
+                            <div style="font-size: 9px; color: #64748b; margin-top: 2px;">
+                                Buy: {{ number_format($item['initial_cost_price'] ?? $item['cost_price']) }} + Repair: {{ number_format($item['refurbishment_cost']) }}
+                            </div>
+                        @endif
+                    </td>
                     <td>{{ $item['imei'] }}</td>
                     <td class="text-right">{{ number_format($item['cost_price']) }}</td>
                     <td class="text-center"><span class="badge badge-instock">In Stock</span></td>
@@ -281,7 +288,14 @@
             @forelse ($summary['sold_devices'] as $index => $item)
                 <tr>
                     <td>{{ $index + 1 }}</td>
-                    <td><strong>{{ $item['model_name'] }}</strong></td>
+                    <td>
+                        <strong>{{ $item['model_name'] }}</strong>
+                        @if (!empty($item['refurbishment_cost']) && $item['refurbishment_cost'] > 0)
+                            <div style="font-size: 9px; color: #64748b; margin-top: 2px;">
+                                Buy: {{ number_format($item['initial_cost_price'] ?? $item['cost_price']) }} + Repair: {{ number_format($item['refurbishment_cost']) }}
+                            </div>
+                        @endif
+                    </td>
                     <td>{{ $item['imei'] }}</td>
                     <td class="text-right">{{ number_format($item['cost_price']) }}</td>
                     <td class="text-right">{{ number_format($item['sold_price']) }}</td>

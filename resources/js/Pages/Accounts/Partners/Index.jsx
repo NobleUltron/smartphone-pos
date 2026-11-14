@@ -27,9 +27,12 @@ import {
     Tag, 
     X,
     Eye,
-    Trash2
+    Trash2,
+    Wrench
 } from 'lucide-react';
 import dayjs from 'dayjs';
+import axios from 'axios';
+import toast from 'react-hot-toast';
 
 export default function PartnersIndex({ partners, metrics, paymentAccounts, unassignedDevices }) {
     const { flash } = usePage().props;
@@ -42,6 +45,17 @@ export default function PartnersIndex({ partners, metrics, paymentAccounts, unas
     const [statementTab, setStatementTab] = useState('instock'); // 'instock' | 'sold' | 'ledger'
     const [partnerToDelete, setPartnerToDelete] = useState(null);
     const [isDeletingPartner, setIsDeletingPartner] = useState(false);
+    const [refurbDevice, setRefurbDevice] = useState(null);
+    const [refurbSaving, setRefurbSaving] = useState(false);
+    const [refurbError, setRefurbError] = useState('');
+    const [refurbData, setRefurbData] = useState({
+        amount: '',
+        description: '',
+        payment_account_id: '',
+        new_selling_price: '',
+        new_condition: '',
+        new_status: '',
+    });
 
     // Form: Create Partner
     const createForm = useForm({
@@ -186,6 +200,55 @@ export default function PartnersIndex({ partners, metrics, paymentAccounts, unas
         setSelectedPartner(partner);
         setStatementTab('instock');
         setShowStatementModal(true);
+    };
+
+    const openRefurbForDevice = (device) => {
+        setRefurbDevice(device);
+        setRefurbError('');
+        setRefurbData({
+            amount: '',
+            description: '',
+            payment_account_id: paymentAccounts[0]?.id || '',
+            new_selling_price: device.selling_price ?? '',
+            new_condition: device.condition || 'Refurbished',
+            new_status: 'In Stock',
+        });
+    };
+
+    const handlePartnerRefurbSubmit = async (e) => {
+        e.preventDefault();
+        if (!refurbDevice) return;
+        const parsedAmount = parseFloat(refurbData.amount);
+        if (!parsedAmount || parsedAmount <= 0) {
+            setRefurbError('Please enter a valid repair cost greater than 0.');
+            return;
+        }
+        if (!refurbData.description?.trim()) {
+            setRefurbError('Please describe the repair or parts used.');
+            return;
+        }
+
+        setRefurbSaving(true);
+        setRefurbError('');
+        try {
+            const res = await axios.post(`/api/inventory/stock/${refurbDevice.id}/refurbish`, {
+                amount: parsedAmount,
+                description: refurbData.description.trim(),
+                payment_account_id: refurbData.payment_account_id || null,
+                new_selling_price: refurbData.new_selling_price !== '' ? parseFloat(refurbData.new_selling_price) : null,
+                new_condition: refurbData.new_condition || null,
+                new_status: refurbData.new_status || null,
+            });
+            toast.success(res.data?.message || 'Repair cost capitalized into partner stock!');
+            setRefurbDevice(null);
+            router.reload({ preserveScroll: true });
+        } catch (err) {
+            const msg = err.response?.data?.message || 'Failed to record repair cost.';
+            setRefurbError(msg);
+            toast.error(msg);
+        } finally {
+            setRefurbSaving(false);
+        }
     };
 
     // Live active partner object from props
@@ -922,7 +985,7 @@ export default function PartnersIndex({ partners, metrics, paymentAccounts, unas
             </Modal>
 
             {/* MODAL 5: Partner Full Statement & Stock Inspection Drawer */}
-            <Modal show={showStatementModal} onClose={() => setShowStatementModal(false)} maxWidth="2xl">
+            <Modal show={showStatementModal && !refurbDevice} onClose={() => setShowStatementModal(false)} maxWidth="2xl">
                 {activePartner && (
                     <div className="p-6 space-y-5">
                         <div className="flex items-start justify-between pb-3 border-b border-slate-200 dark:border-slate-800">
@@ -1010,8 +1073,13 @@ export default function PartnersIndex({ partners, metrics, paymentAccounts, unas
                                                     <div className="text-[11px] text-slate-400 font-mono mt-0.5">
                                                         IMEI: {device.imei} • {device.storage_capacity || '-'} • {device.color || '-'}
                                                     </div>
+                                                    {Number(device.refurbishment_cost || 0) > 0 && (
+                                                        <div className="text-[10px] text-amber-600 dark:text-amber-400 font-semibold mt-0.5" title={device.refurbishment_notes || ''}>
+                                                            Buy: UGX {Number(device.initial_cost_price ?? device.cost_price).toLocaleString()} + 🛠️ Repair: UGX {Number(device.refurbishment_cost).toLocaleString()}
+                                                        </div>
+                                                    )}
                                                 </div>
-                                                <div className="text-right flex items-center gap-3">
+                                                <div className="text-right flex items-center gap-2.5">
                                                     <div>
                                                         <div className="font-black text-slate-900 dark:text-white">
                                                             UGX {Number(device.cost_price).toLocaleString()}
@@ -1020,6 +1088,14 @@ export default function PartnersIndex({ partners, metrics, paymentAccounts, unas
                                                             Selling: UGX {Number(device.selling_price).toLocaleString()}
                                                         </div>
                                                     </div>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => openRefurbForDevice(device)}
+                                                        className="px-2 py-1 rounded-lg bg-amber-50 dark:bg-amber-950/50 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800/70 hover:bg-amber-100 dark:hover:bg-amber-900/50 text-[10px] font-bold flex items-center gap-1 transition-colors"
+                                                        title="Add capitalized repair / refurbishment cost"
+                                                    >
+                                                        <Wrench size={11} /> + Repair Cost
+                                                    </button>
                                                     <button
                                                         type="button"
                                                         onClick={() => handleUnassignDevice(device.id)}
@@ -1057,6 +1133,11 @@ export default function PartnersIndex({ partners, metrics, paymentAccounts, unas
                                                     <div className="text-[11px] text-slate-400 font-mono mt-0.5">
                                                         IMEI: {device.imei} • Sold: {device.sold_at || '-'}
                                                     </div>
+                                                    {Number(device.refurbishment_cost || 0) > 0 && (
+                                                        <div className="text-[10px] text-amber-600 dark:text-amber-400 font-semibold mt-0.5" title={device.refurbishment_notes || ''}>
+                                                            Buy: UGX {Number(device.initial_cost_price ?? device.cost_price).toLocaleString()} + 🛠️ Repair: UGX {Number(device.refurbishment_cost).toLocaleString()}
+                                                        </div>
+                                                    )}
                                                 </div>
                                                 <div className="text-right">
                                                     <div className="font-black text-emerald-600 dark:text-emerald-400">
@@ -1173,6 +1254,176 @@ export default function PartnersIndex({ partners, metrics, paymentAccounts, unas
                             </button>
                         </div>
                     </div>
+                )}
+            </Modal>
+
+            {/* MODAL 7: Add Refurbishment / Repair Cost for Partner Phone */}
+            <Modal show={!!refurbDevice} onClose={() => !refurbSaving && setRefurbDevice(null)} maxWidth="lg">
+                {refurbDevice && (
+                    <form onSubmit={handlePartnerRefurbSubmit} className="p-6 space-y-4">
+                        <div className="flex items-center justify-between pb-3 border-b border-slate-200 dark:border-slate-800">
+                            <div className="flex items-center gap-2.5">
+                                <div className="p-2 bg-amber-50 dark:bg-amber-950/60 rounded-xl text-amber-600 dark:text-amber-400">
+                                    <Wrench size={18} />
+                                </div>
+                                <div>
+                                    <h3 className="text-base font-bold text-slate-900 dark:text-white">Add Repair / Refurbishment Cost</h3>
+                                    <p className="text-xs text-slate-500 dark:text-slate-400 font-mono">
+                                        {refurbDevice.model_name} • IMEI: {refurbDevice.imei}
+                                    </p>
+                                </div>
+                            </div>
+                            <button
+                                type="button"
+                                disabled={refurbSaving}
+                                onClick={() => setRefurbDevice(null)}
+                                className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+                            >
+                                <X size={18} />
+                            </button>
+                        </div>
+
+                        <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700 grid grid-cols-3 gap-3 text-center text-xs">
+                            <div>
+                                <div className="text-[10px] font-bold text-slate-400 uppercase">Initial Buy</div>
+                                <div className="font-bold text-slate-900 dark:text-white mt-0.5">
+                                    UGX {Number(refurbDevice.initial_cost_price ?? refurbDevice.cost_price).toLocaleString()}
+                                </div>
+                            </div>
+                            <div>
+                                <div className="text-[10px] font-bold text-amber-600 dark:text-amber-400 uppercase">Prior Repairs</div>
+                                <div className="font-bold text-amber-600 dark:text-amber-400 mt-0.5">
+                                    +UGX {Number(refurbDevice.refurbishment_cost || 0).toLocaleString()}
+                                </div>
+                            </div>
+                            <div>
+                                <div className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 uppercase">Current Basis</div>
+                                <div className="font-black text-indigo-600 dark:text-indigo-400 mt-0.5">
+                                    UGX {Number(refurbDevice.cost_price).toLocaleString()}
+                                </div>
+                            </div>
+                        </div>
+
+                        {Number(refurbData.amount || 0) > 0 && (
+                            <div className="px-3.5 py-2 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800/70 flex items-center justify-between text-xs font-bold text-emerald-800 dark:text-emerald-200">
+                                <span>New Capitalized Cost Basis:</span>
+                                <span className="text-sm font-black">
+                                    UGX {(Number(refurbDevice.cost_price || 0) + Number(refurbData.amount || 0)).toLocaleString()}
+                                </span>
+                            </div>
+                        )}
+
+                        {refurbDevice.refurbishment_notes && (
+                            <div>
+                                <label className="block text-[11px] font-bold text-slate-500 dark:text-slate-400 mb-1">Prior Repair Notes</label>
+                                <div className="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 text-[11px] font-mono text-slate-600 dark:text-slate-300 whitespace-pre-wrap max-h-24 overflow-y-auto">
+                                    {refurbDevice.refurbishment_notes}
+                                </div>
+                            </div>
+                        )}
+
+                        {refurbError && (
+                            <div className="p-3 rounded-xl bg-rose-50 dark:bg-rose-950/50 border border-rose-200 dark:border-rose-800 text-rose-700 dark:text-rose-200 text-xs font-semibold">
+                                {refurbError}
+                            </div>
+                        )}
+
+                        <div className="space-y-3">
+                            <div>
+                                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                                    Repair / Parts Cost Added (UGX) *
+                                </label>
+                                <input
+                                    type="number"
+                                    min="1"
+                                    required
+                                    className="w-full px-3.5 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm text-slate-900 dark:text-white"
+                                    placeholder="e.g. 85000"
+                                    value={refurbData.amount}
+                                    onChange={e => setRefurbData({ ...refurbData, amount: e.target.value })}
+                                />
+                            </div>
+
+                            <div>
+                                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                                    Paid From Shop Wallet (Optional Treasury Outflow)
+                                </label>
+                                <select
+                                    className="w-full px-3.5 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm text-slate-900 dark:text-white"
+                                    value={refurbData.payment_account_id}
+                                    onChange={e => setRefurbData({ ...refurbData, payment_account_id: e.target.value })}
+                                >
+                                    <option value="">Do not deduct from wallet (already paid / external)</option>
+                                    {paymentAccounts.map(acc => (
+                                        <option key={acc.id} value={acc.id}>
+                                            {acc.name} — Bal: UGX {Number(acc.current_balance).toLocaleString()}
+                                        </option>
+                                    ))}
+                                </select>
+                                <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">
+                                    Capitalized under Inventory Refurbishment so both partner stock value and shop profit splits reflect the higher cost.
+                                </p>
+                            </div>
+
+                            <div>
+                                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                                    Repair Description / Parts Used *
+                                </label>
+                                <input
+                                    type="text"
+                                    required
+                                    className="w-full px-3.5 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm text-slate-900 dark:text-white"
+                                    placeholder="e.g. Replaced OLED Screen & Battery"
+                                    value={refurbData.description}
+                                    onChange={e => setRefurbData({ ...refurbData, description: e.target.value })}
+                                />
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-3">
+                                <div>
+                                    <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">Update Selling Price</label>
+                                    <input
+                                        type="number"
+                                        min="0"
+                                        className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm text-slate-900 dark:text-white"
+                                        value={refurbData.new_selling_price}
+                                        onChange={e => setRefurbData({ ...refurbData, new_selling_price: e.target.value })}
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">Condition</label>
+                                    <select
+                                        className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm text-slate-900 dark:text-white"
+                                        value={refurbData.new_condition}
+                                        onChange={e => setRefurbData({ ...refurbData, new_condition: e.target.value })}
+                                    >
+                                        <option>Brand New</option>
+                                        <option>Refurbished</option>
+                                        <option>Used Grade A</option>
+                                        <option>Used Grade B</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-200 dark:border-slate-800">
+                            <button
+                                type="button"
+                                disabled={refurbSaving}
+                                onClick={() => setRefurbDevice(null)}
+                                className="px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-all"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                type="submit"
+                                disabled={refurbSaving}
+                                className="px-5 py-2.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold transition-all shadow-md shadow-amber-500/20 disabled:opacity-50"
+                            >
+                                {refurbSaving ? 'Saving...' : 'Capitalize Repair Cost'}
+                            </button>
+                        </div>
+                    </form>
                 )}
             </Modal>
 

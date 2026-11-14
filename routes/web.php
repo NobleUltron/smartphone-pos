@@ -368,6 +368,7 @@ Route::middleware('auth')->group(function () {
         Route::post('/api/inventory/stock', [ProductController::class, 'addStock']);
         Route::get('/api/inventory/{product}/stock', [ProductController::class, 'viewStock']);
         Route::put('/api/inventory/stock/{deviceImei}', [ProductController::class, 'updateStock']);
+        Route::post('/api/inventory/stock/{deviceImei}/refurbish', [ProductController::class, 'addRefurbishmentCost'])->name('inventory.stock.refurbish');
         Route::delete('/api/inventory/stock/{deviceImei}', [ProductController::class, 'destroyStock']);
 
         // Brands and Categories

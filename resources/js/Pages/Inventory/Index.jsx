@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import toast from 'react-hot-toast';
 import { Head, Link, router } from '@inertiajs/react';
 import axios from 'axios';
-import { Search, Plus, Pencil, Trash2, Smartphone, Printer, Package, Layers, AlertTriangle, DollarSign, Scan, FileSpreadsheet, X } from 'lucide-react';
+import { Search, Plus, Pencil, Trash2, Smartphone, Printer, Package, Layers, AlertTriangle, DollarSign, Scan, FileSpreadsheet, X, Wrench } from 'lucide-react';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import Card from '@/Components/SaaS/Card';
 import Badge from '@/Components/SaaS/Badge';
@@ -11,7 +11,7 @@ import PageHeader from '@/Components/SaaS/PageHeader';
 import DataTable from '@/Components/SaaS/DataTable';
 import LabelCard from '@/Components/SaaS/LabelCard';
 
-export default function Inventory({ auth, products, allProducts = [], categories = [], brands = [], filters = {}, summary, partners = [] }) {
+export default function Inventory({ auth, products, allProducts = [], categories = [], brands = [], filters = {}, summary, partners = [], paymentAccounts = [] }) {
     // Add Category Modal State
     const [showAddCategoryModal, setShowAddCategoryModal] = useState(false);
     const [newCategory, setNewCategory] = useState('');
@@ -35,11 +35,25 @@ export default function Inventory({ auth, products, allProducts = [], categories
     const [stockColor, setStockColor] = useState('');
     const [sellingPrice, setSellingPrice] = useState('');
     const [partnerInvestorId, setPartnerInvestorId] = useState('');
+    const [refurbCost, setRefurbCost] = useState('');
+    const [refurbNotes, setRefurbNotes] = useState('');
+    const [refurbAccountId, setRefurbAccountId] = useState('');
     const [loading, setLoading] = useState(false);
 
     // Edit Stock Modal State
     const [showEditStockModal, setShowEditStockModal] = useState(false);
     const [editingStock, setEditingStock] = useState(null);
+
+    // Add Refurbishment / Repair Cost Modal State
+    const [refurbDevice, setRefurbDevice] = useState(null);
+    const [refurbForm, setRefurbForm] = useState({
+        amount: '',
+        description: '',
+        payment_account_id: '',
+        new_selling_price: '',
+        new_condition: '',
+        new_status: '',
+    });
 
     // Search and Filter State
     const [searchQuery, setSearchQuery] = useState(filters.search || '');
@@ -175,7 +189,10 @@ export default function Inventory({ auth, products, allProducts = [], categories
                 storage_capacity: storageCapacity,
                 color: stockColor,
                 selling_price: sellingPrice,
-                partner_investor_id: partnerInvestorId || null
+                partner_investor_id: partnerInvestorId || null,
+                refurbishment_cost: refurbCost ? parseFloat(refurbCost) : 0,
+                refurbishment_notes: refurbNotes || null,
+                refurbishment_account_id: refurbAccountId || null
             });
             toast.success("Stock added successfully!");
             setShowAddModal(false);
@@ -186,9 +203,55 @@ export default function Inventory({ auth, products, allProducts = [], categories
             setStockColor('');
             setSellingPrice('');
             setPartnerInvestorId('');
+            setRefurbCost('');
+            setRefurbNotes('');
+            setRefurbAccountId('');
             router.reload();
         } catch (error) {
             toast.error(error.response?.data?.message || "Error adding stock");
+        }
+        setLoading(false);
+    };
+
+    const openRefurbModal = (item) => {
+        setRefurbDevice(item);
+        setRefurbForm({
+            amount: '',
+            description: '',
+            payment_account_id: paymentAccounts[0]?.id || '',
+            new_selling_price: item.selling_price ?? '',
+            new_condition: item.condition || 'Refurbished',
+            new_status: item.status === 'Defective' ? 'In Stock' : item.status,
+        });
+    };
+
+    const handleRefurbSubmit = async () => {
+        if (!refurbDevice) return;
+        const parsedAmount = parseFloat(refurbForm.amount);
+        if (!parsedAmount || parsedAmount <= 0) {
+            return toast.error("Please enter a repair cost greater than 0");
+        }
+        if (!refurbForm.description?.trim()) {
+            return toast.error("Please describe the repair / parts (e.g. Replaced OLED screen)");
+        }
+
+        setLoading(true);
+        try {
+            const payload = {
+                amount: parsedAmount,
+                description: refurbForm.description.trim(),
+                payment_account_id: refurbForm.payment_account_id || null,
+                new_selling_price: refurbForm.new_selling_price !== '' ? parseFloat(refurbForm.new_selling_price) : null,
+                new_condition: refurbForm.new_condition || null,
+                new_status: refurbForm.new_status || null,
+            };
+            const res = await axios.post(`/api/inventory/stock/${refurbDevice.id}/refurbish`, payload);
+            toast.success(res.data?.message || "Repair cost added to device cost basis!");
+            setImeisList(imeisList.map(i => i.id === refurbDevice.id ? res.data.device : i));
+            setRefurbDevice(null);
+            router.reload({ only: ['summary', 'products', 'paymentAccounts'], preserveScroll: true });
+        } catch (error) {
+            toast.error(error.response?.data?.message || "Error recording refurbishment cost");
         }
         setLoading(false);
     };
@@ -880,7 +943,7 @@ export default function Inventory({ auth, products, allProducts = [], categories
 
                                     <div className="grid grid-cols-2 gap-4">
                                         <div>
-                                            <label className="saas-label">Cost Price (UGX)</label>
+                                            <label className="saas-label">Initial Buy Cost (UGX)</label>
                                             <input type="number" className="saas-input" value={costPrice} onChange={e => setCostPrice(e.target.value)} />
                                         </div>
                                         <div>
@@ -898,6 +961,60 @@ export default function Inventory({ auth, products, allProducts = [], categories
                                             ))}
                                         </select>
                                     </div>
+
+                                    <div className="p-3.5 rounded-xl bg-amber-50/70 border border-amber-200/80 space-y-3">
+                                        <div className="flex items-center justify-between">
+                                            <span className="text-xs font-bold text-amber-900 flex items-center gap-1.5">
+                                                <Wrench size={14} className="text-amber-600" />
+                                                Initial Repair / Refurbishment <span className="font-normal text-amber-700">(Optional)</span>
+                                            </span>
+                                            {Number(refurbCost || 0) > 0 && (
+                                                <span className="text-[11px] font-bold text-amber-800 bg-amber-100 px-2 py-0.5 rounded-full">
+                                                    Total Cost: {(Number(costPrice || 0) + Number(refurbCost || 0)).toLocaleString()} UGX
+                                                </span>
+                                            )}
+                                        </div>
+                                        <div className="grid grid-cols-2 gap-3">
+                                            <div>
+                                                <label className="block text-[11px] font-semibold text-amber-900 mb-1">Repair Cost (UGX)</label>
+                                                <input
+                                                    type="number"
+                                                    min="0"
+                                                    className="saas-input bg-white"
+                                                    placeholder="0"
+                                                    value={refurbCost}
+                                                    onChange={e => setRefurbCost(e.target.value)}
+                                                />
+                                            </div>
+                                            <div>
+                                                <label className="block text-[11px] font-semibold text-amber-900 mb-1">Repair Notes</label>
+                                                <input
+                                                    type="text"
+                                                    className="saas-input bg-white"
+                                                    placeholder="e.g. New screen / battery"
+                                                    value={refurbNotes}
+                                                    onChange={e => setRefurbNotes(e.target.value)}
+                                                />
+                                            </div>
+                                        </div>
+                                        {Number(refurbCost || 0) > 0 && (
+                                            <div>
+                                                <label className="block text-[11px] font-semibold text-amber-900 mb-1">Pay Repair From Wallet</label>
+                                                <select
+                                                    className="saas-input pl-4 bg-white"
+                                                    value={refurbAccountId}
+                                                    onChange={e => setRefurbAccountId(e.target.value)}
+                                                >
+                                                    <option value="">Do not deduct from wallet (external / already paid)</option>
+                                                    {paymentAccounts.map(acc => (
+                                                        <option key={acc.id} value={acc.id}>
+                                                            {acc.name} (Bal: {Number(acc.current_balance).toLocaleString()} UGX)
+                                                        </option>
+                                                    ))}
+                                                </select>
+                                            </div>
+                                        )}
+                                    </div>
                                 </>
                             )}
                         </div>
@@ -913,7 +1030,7 @@ export default function Inventory({ auth, products, allProducts = [], categories
             {/* View Stock Modal */}
             {showViewModal && (
                 <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-                    <Card className="w-full max-w-5xl animate-slide-up flex flex-col max-h-[90vh]" noPadding>
+                    <Card className="w-full max-w-6xl animate-slide-up flex flex-col max-h-[90vh]" noPadding>
                         <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-white rounded-t-2xl shrink-0">
                             <h3 className="text-lg font-bold text-slate-900">
                                 Stock for {viewProduct?.brand?.name} {viewProduct?.model_name}
@@ -979,7 +1096,7 @@ export default function Inventory({ auth, products, allProducts = [], categories
                         ) : (
                             <div className="overflow-y-auto p-0 flex-auto min-h-0">
                                 <DataTable 
-                                    headers={['IMEI', 'Storage', 'Color', 'Condition', 'Status', 'Funded By', 'Selling Price', { label: 'Actions', className: '!text-center' }]}
+                                    headers={['IMEI', 'Storage', 'Color', 'Condition', 'Status', 'Funded By', 'Cost Basis', 'Selling Price', { label: 'Actions', className: '!text-center' }]}
                                     isEmpty={imeisList.length === 0}
                                     emptyState={<div className="p-8 text-center text-slate-500">No stock available for this model.</div>}
                                 >
@@ -1003,9 +1120,26 @@ export default function Inventory({ auth, products, allProducts = [], categories
                                                     <span className="text-slate-400 text-xs font-medium">Shop</span>
                                                 )}
                                             </td>
+                                            <td>
+                                                <div className="font-semibold text-slate-800">{Number(item.cost_price).toLocaleString()} UGX</div>
+                                                {Number(item.refurbishment_cost || 0) > 0 && (
+                                                    <div className="text-[11px] text-amber-700 font-medium mt-0.5" title={item.refurbishment_notes || ''}>
+                                                        Buy {Number(item.initial_cost_price ?? item.cost_price).toLocaleString()} + 🛠️ {Number(item.refurbishment_cost).toLocaleString()}
+                                                    </div>
+                                                )}
+                                            </td>
                                             <td className="font-semibold">{Number(item.selling_price).toLocaleString()} UGX</td>
                                             <td className="text-center">
                                                 <div className="flex justify-center gap-1">
+                                                    {item.status !== 'Sold' && (
+                                                        <button
+                                                            className="p-2 text-slate-400 hover:text-amber-600 hover:bg-amber-50 rounded-lg transition-colors"
+                                                            title="Add Repair / Refurbishment Cost"
+                                                            onClick={() => openRefurbModal(item)}
+                                                        >
+                                                            <Wrench size={16} />
+                                                        </button>
+                                                    )}
                                                     <button className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors" title="Print Label" onClick={() => {
                                                         const brandName = viewProduct.brand ? viewProduct.brand.name + ' ' : '';
                                                         setPreviewLabelData({
@@ -1145,6 +1279,163 @@ export default function Inventory({ auth, products, allProducts = [], categories
                             </a>
                         </div>
                     </div>
+                </div>
+            )}
+
+            {/* Add Refurbishment / Repair Cost Modal */}
+            {refurbDevice && (
+                <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-[60] flex items-center justify-center p-4 overflow-y-auto">
+                    <Card className="w-full max-w-lg animate-slide-up">
+                        <div className="flex items-center justify-between mb-4">
+                            <div className="flex items-center gap-2.5">
+                                <div className="p-2 rounded-xl bg-amber-100 text-amber-700">
+                                    <Wrench size={18} />
+                                </div>
+                                <div>
+                                    <h3 className="text-lg font-bold text-slate-900">Add Repair / Refurbishment Cost</h3>
+                                    <p className="text-xs text-slate-500 font-mono">
+                                        {viewProduct?.brand?.name} {viewProduct?.model_name} • IMEI: {refurbDevice.imei}
+                                    </p>
+                                </div>
+                            </div>
+                            <button
+                                className="text-slate-400 hover:text-slate-600 p-1 rounded-lg"
+                                onClick={() => setRefurbDevice(null)}
+                            >
+                                <X size={18} />
+                            </button>
+                        </div>
+
+                        <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200 grid grid-cols-3 gap-3 text-center mb-4">
+                            <div>
+                                <div className="text-[10px] font-bold text-slate-400 uppercase">Initial Buy</div>
+                                <div className="text-xs font-bold text-slate-800 mt-0.5">
+                                    {Number(refurbDevice.initial_cost_price ?? refurbDevice.cost_price).toLocaleString()} UGX
+                                </div>
+                            </div>
+                            <div>
+                                <div className="text-[10px] font-bold text-amber-600 uppercase">Prior Repairs</div>
+                                <div className="text-xs font-bold text-amber-700 mt-0.5">
+                                    +{Number(refurbDevice.refurbishment_cost || 0).toLocaleString()} UGX
+                                </div>
+                            </div>
+                            <div>
+                                <div className="text-[10px] font-bold text-indigo-600 uppercase">Current Basis</div>
+                                <div className="text-xs font-extrabold text-indigo-700 mt-0.5">
+                                    {Number(refurbDevice.cost_price).toLocaleString()} UGX
+                                </div>
+                            </div>
+                        </div>
+
+                        {Number(refurbForm.amount || 0) > 0 && (
+                            <div className="mb-4 px-3.5 py-2 rounded-xl bg-emerald-50 border border-emerald-200 flex items-center justify-between text-xs font-bold text-emerald-800">
+                                <span>New Capitalized Cost Basis:</span>
+                                <span className="text-sm font-black">
+                                    UGX {(Number(refurbDevice.cost_price || 0) + Number(refurbForm.amount || 0)).toLocaleString()}
+                                </span>
+                            </div>
+                        )}
+
+                        {refurbDevice.refurbishment_notes && (
+                            <div className="mb-4">
+                                <label className="saas-label">Previous Repair Log</label>
+                                <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-200 text-[11px] font-mono text-slate-600 whitespace-pre-wrap max-h-24 overflow-y-auto">
+                                    {refurbDevice.refurbishment_notes}
+                                </div>
+                            </div>
+                        )}
+
+                        <div className="space-y-4">
+                            <div>
+                                <label className="saas-label">Repair / Parts Cost Added (UGX) *</label>
+                                <input
+                                    type="number"
+                                    min="1"
+                                    className="saas-input"
+                                    placeholder="e.g. 85000"
+                                    value={refurbForm.amount}
+                                    onChange={e => setRefurbForm({ ...refurbForm, amount: e.target.value })}
+                                />
+                            </div>
+
+                            <div>
+                                <label className="saas-label">Paid From Shop Wallet (Optional Treasury Outflow)</label>
+                                <select
+                                    className="saas-input pl-4"
+                                    value={refurbForm.payment_account_id}
+                                    onChange={e => setRefurbForm({ ...refurbForm, payment_account_id: e.target.value })}
+                                >
+                                    <option value="">Do not deduct from wallet (already paid / external)</option>
+                                    {paymentAccounts.map(acc => (
+                                        <option key={acc.id} value={acc.id}>
+                                            {acc.name} — Bal: UGX {Number(acc.current_balance).toLocaleString()}
+                                        </option>
+                                    ))}
+                                </select>
+                                <p className="text-[11px] text-slate-500 mt-1">
+                                    Capitalized under <strong>Inventory Refurbishment</strong> (moves value from cash to stock cost basis without altering Net Worth).
+                                </p>
+                            </div>
+
+                            <div>
+                                <label className="saas-label">Repair Description / Parts Used *</label>
+                                <input
+                                    type="text"
+                                    className="saas-input"
+                                    placeholder="e.g. Replaced OLED Screen + Face ID flex"
+                                    value={refurbForm.description}
+                                    onChange={e => setRefurbForm({ ...refurbForm, description: e.target.value })}
+                                />
+                            </div>
+
+                            <div className="grid grid-cols-3 gap-3">
+                                <div>
+                                    <label className="saas-label">Selling Price</label>
+                                    <input
+                                        type="number"
+                                        min="0"
+                                        className="saas-input"
+                                        value={refurbForm.new_selling_price}
+                                        onChange={e => setRefurbForm({ ...refurbForm, new_selling_price: e.target.value })}
+                                    />
+                                </div>
+                                <div>
+                                    <label className="saas-label">Condition</label>
+                                    <select
+                                        className="saas-input pl-3"
+                                        value={refurbForm.new_condition}
+                                        onChange={e => setRefurbForm({ ...refurbForm, new_condition: e.target.value })}
+                                    >
+                                        <option>Brand New</option>
+                                        <option>Refurbished</option>
+                                        <option>Used Grade A</option>
+                                        <option>Used Grade B</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label className="saas-label">Status</label>
+                                    <select
+                                        className="saas-input pl-3"
+                                        value={refurbForm.new_status}
+                                        onChange={e => setRefurbForm({ ...refurbForm, new_status: e.target.value })}
+                                    >
+                                        <option value="In Stock">In Stock</option>
+                                        <option value="Defective">Defective</option>
+                                        <option value="In Transit">In Transit</option>
+                                        <option value="Reserved">Reserved</option>
+                                        <option value="With Dealer">With Dealer</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="flex justify-end gap-3 mt-6 pt-5 border-t border-slate-100">
+                            <Button variant="secondary" onClick={() => setRefurbDevice(null)}>Cancel</Button>
+                            <Button variant="primary" onClick={handleRefurbSubmit} isLoading={loading}>
+                                Capitalize Repair Cost
+                            </Button>
+                        </div>
+                    </Card>
                 </div>
             )}
 

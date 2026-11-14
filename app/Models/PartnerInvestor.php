@@ -83,6 +83,9 @@ class PartnerInvestor extends Model
                 'color' => $device->color,
                 'condition' => $device->condition,
                 'cost_price' => $unitCost,
+                'initial_cost_price' => (float) ($device->initial_cost_price ?? $unitCost),
+                'refurbishment_cost' => (float) ($device->refurbishment_cost ?? 0),
+                'refurbishment_notes' => $device->refurbishment_notes,
                 'sold_price' => $soldPrice,
                 'gross_profit' => $grossProfit,
                 'partner_profit' => $partnerProfit,
@@ -131,6 +134,7 @@ class PartnerInvestor extends Model
             'cash_balance_available' => $cashBalanceAvailable,
             'total_portfolio_value' => $totalPortfolioValue,
             'in_stock_devices' => $inStockDevices->map(function ($device) {
+                $totalCost = (float) $device->cost_price;
                 return [
                     'id' => $device->id,
                     'imei' => $device->imei,
@@ -138,7 +142,10 @@ class PartnerInvestor extends Model
                     'storage_capacity' => $device->storage_capacity,
                     'color' => $device->color,
                     'condition' => $device->condition,
-                    'cost_price' => (float) $device->cost_price,
+                    'cost_price' => $totalCost,
+                    'initial_cost_price' => (float) ($device->initial_cost_price ?? $totalCost),
+                    'refurbishment_cost' => (float) ($device->refurbishment_cost ?? 0),
+                    'refurbishment_notes' => $device->refurbishment_notes,
                     'selling_price' => (float) $device->selling_price,
                     'added_at' => $device->created_at ? $device->created_at->format('Y-m-d') : null,
                 ];
