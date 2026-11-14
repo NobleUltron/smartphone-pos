@@ -24,12 +24,12 @@ class UserController extends Controller
         $query = User::query();
 
         if ($request->filled('search')) {
-            $searchTerm = $request->search;
+            $searchTerm = '%' . strtolower($request->search) . '%';
             $query->where(function($q) use ($searchTerm) {
-                $q->where('name', 'like', "%{$searchTerm}%")
-                  ->orWhere('email', 'like', "%{$searchTerm}%")
-                  ->orWhere('role', 'like', "%{$searchTerm}%")
-                  ->orWhere('phone', 'like', "%{$searchTerm}%");
+                $q->whereRaw('LOWER(name) LIKE ?', [$searchTerm])
+                  ->orWhereRaw('LOWER(email) LIKE ?', [$searchTerm])
+                  ->orWhereRaw('LOWER(role) LIKE ?', [$searchTerm])
+                  ->orWhereRaw('LOWER(phone) LIKE ?', [$searchTerm]);
             });
         }
 
@@ -99,6 +99,7 @@ class UserController extends Controller
 
     public function update(Request $request, User $user)
     {
+        $this->authorizeAdmin();
         $validated = $request->validate([
             'name' => 'required|string|max:255',
             'email' => 'required|string|email|max:255|unique:users,email,'.$user->id,
@@ -141,8 +142,19 @@ class UserController extends Controller
 
     public function destroy(User $user)
     {
+        $this->authorizeAdmin();
         if ($user->id === auth()->id()) {
             return response()->json(['error' => 'You cannot delete yourself.'], 403);
+        }
+
+        $hasHistory = \App\Models\Sale::where('user_id', $user->id)->exists()
+            || \App\Models\CashDrawer::where('user_id', $user->id)->exists()
+            || \App\Models\Repair::where('user_id', $user->id)->exists();
+
+        if ($hasHistory) {
+            return response()->json([
+                'error' => 'Cannot delete staff member with recorded sales, repairs, or cash drawer shifts. Suspend the account instead.'
+            ], 422);
         }
 
         $user->delete();

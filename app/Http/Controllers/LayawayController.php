@@ -81,7 +81,7 @@ class LayawayController extends Controller
                 $request->payment_method,
                 floatval($request->amount_paid),
                 'Layaway Installment',
-                $sale,
+                $payment,
                 "Layaway Installment for Sale #{$sale->id}",
                 null,
                 auth()->id()

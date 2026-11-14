@@ -58,7 +58,7 @@ export default function LayawaysIndex({ auth, layaways, summary }) {
                 <PageHeader 
                     title="Layaways & Installments"
                     breadcrumbs={[
-                        { label: 'Dashboard', href: '/dashboard' },
+                        { label: 'Home', href: '/' },
                         { label: 'Sales Receipts', href: route('receipts.index') },
                         { label: 'Layaways' }
                     ]}

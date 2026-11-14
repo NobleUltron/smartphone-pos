@@ -286,6 +286,7 @@ export default function Inventory({ auth, products, allProducts = [], categories
             toast.success("Stock updated successfully!");
             setShowEditStockModal(false);
             setImeisList(imeisList.map(i => i.id === editingStock.id ? res.data.device : i));
+            router.reload({ only: ['products', 'summary'] });
         } catch (error) {
             toast.error(error.response?.data?.message || "Error updating stock");
         }
@@ -303,6 +304,7 @@ export default function Inventory({ auth, products, allProducts = [], categories
                     await axios.delete(`/api/inventory/stock/${id}`);
                     setImeisList(imeisList.filter(i => i.id !== id));
                     toast.success("Stock item deleted successfully!");
+                    router.reload({ only: ['products', 'summary'] });
                 } catch (error) {
                     toast.error(error.response?.data?.error || "Error deleting stock. It may be linked to a sale.");
                 }
@@ -367,7 +369,7 @@ export default function Inventory({ auth, products, allProducts = [], categories
                         <Button variant="glass" className="text-xs" onClick={() => router.visit(route('inventory.audits.index'))} icon={Scan}>Stock Audit</Button>
                         <Button variant="glass" className="text-xs" onClick={() => {
                             setIsEditingProduct(false);
-                            setNewProduct({ id: null, category_id: '', brand_id: '', model_name: '' });
+                            setNewProduct({ id: null, category_id: '', brand_id: '', model_name: '', type: 'serialized' });
                             setShowAddProductModal(true);
                         }} icon={Plus}>Product Model</Button>
                         <Button variant="glass" className="text-xs" onClick={() => setShowAddBrandModal(true)} icon={Plus}>Brand</Button>
@@ -584,8 +586,9 @@ export default function Inventory({ auth, products, allProducts = [], categories
                                 {allProducts
                                     ?.filter(p => p.category_id == selectedCategory)
                                     .map(p => p.brand)
+                                    .filter(Boolean)
                                     .filter((v, i, a) => a.findIndex(t => (t.id === v.id)) === i)
-                                    .sort((a, b) => a.name.localeCompare(b.name))
+                                    .sort((a, b) => (a.name || '').localeCompare(b.name || ''))
                                     .map(b => (
                                         <option key={b.id} value={b.id}>{b.name}</option>
                                     ))}
@@ -1201,7 +1204,7 @@ export default function Inventory({ auth, products, allProducts = [], categories
                                     <option>In Stock</option>
                                     <option>Sold</option>
                                     <option>Defective</option>
-                                    <option>Layaway</option>
+                                    <option>Reserved</option>
                                 </select>
                             </div>
                             <div className="grid grid-cols-2 gap-4">

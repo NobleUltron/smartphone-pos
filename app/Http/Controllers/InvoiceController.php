@@ -23,14 +23,14 @@ class InvoiceController extends Controller
         $query = Invoice::with(['customer', 'user', 'payments'])->latest();
 
         if ($request->filled('search')) {
-            $search = $request->input('search');
+            $search = '%' . strtolower($request->input('search')) . '%';
             $query->where(function ($q) use ($search) {
-                $q->where('invoice_number', 'ilike', "%{$search}%")
-                    ->orWhere('po_number', 'ilike', "%{$search}%")
+                $q->whereRaw('LOWER(invoice_number) LIKE ?', [$search])
+                    ->orWhereRaw('LOWER(po_number) LIKE ?', [$search])
                     ->orWhereHas('customer', function ($cq) use ($search) {
-                        $cq->where('name', 'ilike', "%{$search}%")
-                            ->orWhere('company_name', 'ilike', "%{$search}%")
-                            ->orWhere('phone', 'ilike', "%{$search}%");
+                        $cq->whereRaw('LOWER(name) LIKE ?', [$search])
+                            ->orWhereRaw('LOWER(company_name) LIKE ?', [$search])
+                            ->orWhereRaw('LOWER(phone) LIKE ?', [$search]);
                     });
             });
         }
@@ -75,7 +75,10 @@ class InvoiceController extends Controller
     public function create()
     {
         $customers = Customer::orderBy('name')->get();
-        $products = Product::with('brand')->orderBy('model_name')->get();
+        $products = Product::with('brand')
+            ->withCount(['deviceImeis as in_stock_imeis_count' => fn($q) => $q->where('status', 'In Stock')])
+            ->orderBy('model_name')
+            ->get();
         $paymentAccounts = PaymentAccount::where('is_active', true)->orderBy('name')->get();
 
         $defaultTerms = Setting::get('invoice_terms', "1. Payment is strictly due according to agreed credit terms.\n2. Remit wire transfers to our official bank account stated on this invoice.\n3. Goods once received in good condition cannot be returned.\n4. For any billing queries, contact our finance department.");

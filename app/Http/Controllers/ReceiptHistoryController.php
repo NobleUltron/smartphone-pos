@@ -16,18 +16,19 @@ class ReceiptHistoryController extends Controller
 
         // Search Filter (Receipt #, Customer Name, Phone, Cashier)
         if ($request->filled('search')) {
-            $search = trim($request->input('search'));
-            $cleanId = preg_replace('/[^0-9]/', '', $search);
+            $rawSearch = trim($request->input('search'));
+            $search = '%' . strtolower($rawSearch) . '%';
+            $cleanId = preg_replace('/[^0-9]/', '', $rawSearch);
 
             $query->where(function ($q) use ($search, $cleanId) {
                 if (!empty($cleanId)) {
                     $q->orWhere('id', $cleanId);
                 }
                 $q->orWhereHas('customer', function ($cq) use ($search) {
-                    $cq->where('name', 'like', "%{$search}%")
-                       ->orWhere('phone', 'like', "%{$search}%");
+                    $cq->whereRaw('LOWER(name) LIKE ?', [$search])
+                       ->orWhereRaw('LOWER(phone) LIKE ?', [$search]);
                 })->orWhereHas('user', function ($uq) use ($search) {
-                    $uq->where('name', 'like', "%{$search}%");
+                    $uq->whereRaw('LOWER(name) LIKE ?', [$search]);
                 });
             });
         }
@@ -95,30 +96,37 @@ class ReceiptHistoryController extends Controller
     {
         $validated = $request->validate([
             'restock_action' => 'required|in:restock,defective',
+            'refund_method' => 'nullable|in:Cash,MTN MoMo,Airtel Money,Bank Transfer',
             'notes' => 'nullable|string',
         ]);
 
+        if ($sale->payment_status === 'Refunded') {
+            return redirect()->back()->with('error', "Receipt #{$sale->id} has already been refunded.");
+        }
+
         // 1. Calculate actual amount to refund BEFORE updating the status
         // (if layaway, only refund what was paid)
-        $refundAmount = $sale->payment_status === 'Partial' 
-            ? $sale->layawayPayments()->sum('amount_paid') 
-            : $sale->final_amount;
+        $refundAmount = $sale->payment_status === 'Partial'
+            ? (float) $sale->layawayPayments()->sum('amount_paid')
+            : (float) $sale->final_amount;
 
-        // Strict Drawer Validation
-        if ($refundAmount > 0) {
+        $defaultMethod = ($sale->payment_method && $sale->payment_method !== 'Layaway') ? $sale->payment_method : 'Cash';
+        $refundMethod = $validated['refund_method'] ?? $defaultMethod;
+
+        // Strict Drawer Validation only when refunding physical Cash from Till
+        $activeDrawer = null;
+        if ($refundAmount > 0 && $refundMethod === 'Cash') {
             $activeDrawer = \App\Models\CashDrawer::where('user_id', auth()->id())
                 ->where('status', 'open')
                 ->first();
 
             if (!$activeDrawer) {
                 throw \Illuminate\Validation\ValidationException::withMessages([
-                    'drawer_validation' => "You must have an open shift (active cash drawer) to process a refund."
+                    'drawer_validation' => "You must have an open shift (active cash drawer) to process a Cash refund."
                 ]);
             }
 
-            // Use the centralized model method to avoid duplicated formula drift
             $expectedCash = $activeDrawer->calculateExpectedCash();
-            
             if ($expectedCash < $refundAmount) {
                 throw \Illuminate\Validation\ValidationException::withMessages([
                     'drawer_validation' => "Strict Drawer Validation Failed: Your cash drawer does not have enough expected cash (" . number_format($expectedCash) . " UGX) to process a refund of " . number_format($refundAmount) . " UGX. Please request a 'Cash In' float addition from management first."
@@ -126,62 +134,106 @@ class ReceiptHistoryController extends Controller
             }
         }
 
-        // 2. Mark sale status as Refunded
-        $sale->update(['payment_status' => 'Refunded']);
+        \Illuminate\Support\Facades\DB::transaction(function () use ($sale, $validated, $refundAmount, $refundMethod, $activeDrawer) {
+            // 2. Mark sale status as Refunded
+            $sale->update(['payment_status' => 'Refunded']);
 
-        // 3. Log an Expense for the Refund to deduct it from the current active Cash Drawer
-        if ($refundAmount > 0 && isset($activeDrawer)) {
-            $isCurrentShift = $sale->cash_drawer_id === $activeDrawer->id;
-            $refundCategory = $isCurrentShift ? 'Refund' : 'Refund (Past Shift)';
+            // 3. Log Expense & Treasury outflow on the chosen refund channel
+            if ($refundAmount > 0) {
+                $refundAccount = $refundMethod === 'Cash'
+                    ? \App\Services\TreasuryService::getTillAccount()
+                    : \App\Models\PaymentAccount::getForMethod($refundMethod);
 
-            \App\Models\Expense::create([
-                'cash_drawer_id' => $activeDrawer->id,
-                'user_id' => auth()->id(),
-                'category' => $refundCategory,
-                'amount' => $refundAmount,
-                'expense_date' => now(),
-                'description' => "Receipt Refund for Sale #{$sale->id}" . ($validated['notes'] ? " - " . $validated['notes'] : ''),
-                'recorded_by' => auth()->id(),
-            ]);
+                $isCurrentShift = $activeDrawer && $sale->cash_drawer_id === $activeDrawer->id;
+                $refundCategory = $refundMethod === 'Cash'
+                    ? ($isCurrentShift ? 'Refund' : 'Refund (Past Shift)')
+                    : 'Refund';
 
-            $tillAccount = \App\Services\TreasuryService::getTillAccount();
-            \App\Services\TreasuryService::recordOutflow(
-                $tillAccount,
-                floatval($refundAmount),
-                'Refund',
-                $sale,
-                "POS Refund for Sale #{$sale->id}" . (!empty($validated['notes']) ? " - {$validated['notes']}" : ''),
-                'REF-' . $sale->id,
-                auth()->id()
-            );
-        }
-
-        // 4. Update device inventory statuses for items in this sale
-        $items = $sale->saleItems()->with(['deviceImei', 'product'])->get();
-        $targetStatus = $validated['restock_action'] === 'restock' ? 'In Stock' : 'Defective';
-
-        foreach ($items as $item) {
-            if ($item->deviceImei) {
-                $item->deviceImei->update(['status' => $targetStatus]);
-
-                // Create a WarrantyClaim log for auditing
-                \App\Models\WarrantyClaim::create([
-                    'sale_item_id' => $item->id,
-                    'device_imei_id' => $item->device_imei_id,
-                    'customer_id' => $sale->customer_id,
-                    'claim_type' => 'Refund',
-                    'issue_description' => $validated['notes'] ?? 'Direct Receipt Refund processed by cashier/manager.',
-                    'status' => 'Completed',
-                    'resolution_notes' => "Direct Store Refund. Device IMEI marked {$targetStatus}.",
-                    'resolved_at' => now(),
+                \App\Models\Expense::create([
+                    'cash_drawer_id' => $activeDrawer?->id,
+                    'payment_account_id' => $refundAccount?->id,
+                    'user_id' => auth()->id(),
+                    'category' => $refundCategory,
+                    'amount' => $refundAmount,
+                    'expense_date' => now(),
+                    'description' => "Receipt Refund ({$refundMethod}) for Sale #{$sale->id}" . (!empty($validated['notes']) ? " - " . $validated['notes'] : ''),
+                    'recorded_by' => auth()->id(),
                 ]);
-            } else if ($item->product_id && $item->product->type === 'bulk') {
-                if ($targetStatus === 'In Stock') {
-                    $item->product->increment('quantity', $item->quantity ?? 1);
+
+                \App\Services\TreasuryService::recordOutflow(
+                    $refundAccount,
+                    floatval($refundAmount),
+                    'Refund',
+                    $sale,
+                    "POS Refund ({$refundMethod}) for Sale #{$sale->id}" . (!empty($validated['notes']) ? " - {$validated['notes']}" : ''),
+                    'REF-' . $sale->id,
+                    auth()->id()
+                );
+            }
+
+            // 4. Update device inventory statuses & revert inward dealer consignments
+            $items = $sale->saleItems()->with(['deviceImei', 'product'])->get();
+            $targetStatus = $validated['restock_action'] === 'restock' ? 'In Stock' : 'Defective';
+
+            foreach ($items as $item) {
+                if ($item->deviceImei) {
+                    $item->deviceImei->update(['status' => $targetStatus]);
+
+                    // Revert linked inward dealer consignment item if present
+                    $dealerItem = \App\Models\DealerItem::where('direction', 'inward')
+                        ->where('device_imei_id', $item->device_imei_id)
+                        ->where('sale_id', $sale->id)
+                        ->first();
+                    if ($dealerItem) {
+                        $newQtySold = max(0, (int) $dealerItem->quantity_sold - 1);
+                        $dealerItem->update([
+                            'quantity_sold' => $newQtySold,
+                            'status' => $newQtySold === 0 ? 'Pending' : $dealerItem->status,
+                            'sold_at' => $newQtySold === 0 ? null : $dealerItem->sold_at,
+                            'sale_id' => $newQtySold === 0 ? null : $dealerItem->sale_id,
+                        ]);
+                    }
+
+                    // Create a WarrantyClaim log for auditing
+                    \App\Models\WarrantyClaim::create([
+                        'sale_item_id' => $item->id,
+                        'device_imei_id' => $item->device_imei_id,
+                        'customer_id' => $sale->customer_id,
+                        'claim_type' => 'Refund',
+                        'issue_description' => $validated['notes'] ?? 'Direct Receipt Refund processed by cashier/manager.',
+                        'status' => 'Completed',
+                        'resolution_notes' => "Direct Store Refund. Device IMEI marked {$targetStatus}.",
+                        'resolved_at' => now(),
+                    ]);
+                } elseif ($item->product_id && $item->product && $item->product->type === 'bulk') {
+                    $qtyToRestore = (int) ($item->quantity ?? 1);
+                    if ($targetStatus === 'In Stock') {
+                        $item->product->increment('quantity', $qtyToRestore);
+                    }
+
+                    // Revert inward bulk dealer consignment item linked to this sale
+                    $dealerItems = \App\Models\DealerItem::where('direction', 'inward')
+                        ->where('product_id', $item->product_id)
+                        ->where('sale_id', $sale->id)
+                        ->where('quantity_sold', '>', 0)
+                        ->get();
+                    $remainingToRevert = $qtyToRestore;
+                    foreach ($dealerItems as $dealerItem) {
+                        if ($remainingToRevert <= 0) break;
+                        $revert = min($remainingToRevert, (int) $dealerItem->quantity_sold);
+                        $newQtySold = max(0, (int) $dealerItem->quantity_sold - $revert);
+                        $dealerItem->update([
+                            'quantity_sold' => $newQtySold,
+                            'status' => $newQtySold < (int) $dealerItem->quantity ? 'Pending' : $dealerItem->status,
+                            'sold_at' => $newQtySold === 0 ? null : $dealerItem->sold_at,
+                            'sale_id' => $newQtySold === 0 ? null : $dealerItem->sale_id,
+                        ]);
+                        $remainingToRevert -= $revert;
+                    }
                 }
             }
-        }
+        });
 
-        return redirect()->back()->with('message', "Receipt #{$sale->id} has been refunded successfully.");
+        return redirect()->back()->with('success', "Receipt #{$sale->id} has been refunded successfully.");
     }
 }

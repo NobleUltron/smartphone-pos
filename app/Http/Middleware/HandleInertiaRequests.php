@@ -51,10 +51,11 @@ class HandleInertiaRequests extends Middleware
             $totalLowStock = Cache::remember('global_low_stock_count', 90, function () {
                 return \App\Models\Product::where(function ($query) {
                     $query->where('type', 'bulk')
-                          ->where('quantity', '<=', 5);
+                          ->where('quantity', '>', 0)
+                          ->where('quantity', '<', 5);
                 })->orWhere(function ($query) {
                     $query->where('type', 'serialized')
-                          ->whereRaw("(SELECT COUNT(*) FROM device_imeis WHERE device_imeis.product_id = products.id AND device_imeis.status = 'In Stock') <= 5");
+                          ->whereRaw("(SELECT COUNT(*) FROM device_imeis WHERE device_imeis.product_id = products.id AND device_imeis.status = 'In Stock') BETWEEN 1 AND 4");
                 })->count();
             });
 
@@ -62,10 +63,24 @@ class HandleInertiaRequests extends Middleware
                 $notifications[] = [
                     'id' => 'low-stock',
                     'title' => 'Low Stock Alert',
-                    'description' => $totalLowStock . ' product(s) are running critically low or out of stock.',
+                    'description' => $totalLowStock . ' product(s) are running critically low on stock.',
                     'type' => 'warning',
                     'url' => route('inventory.index'),
                     'time' => 'Action Required'
+                ];
+            }
+
+            $openWarrantyCount = Cache::remember('global_open_warranties_count', 90, function () {
+                return \App\Models\WarrantyClaim::whereNotIn('status', ['Completed', 'Resolved', 'Rejected'])->count();
+            });
+            if ($openWarrantyCount > 0) {
+                $notifications[] = [
+                    'id' => 'open-warranties',
+                    'title' => 'Open Warranty Claims',
+                    'description' => $openWarrantyCount . ' warranty claim(s) require attention.',
+                    'type' => 'warning',
+                    'url' => route('warranties.index'),
+                    'time' => 'Pending Review'
                 ];
             }
         }

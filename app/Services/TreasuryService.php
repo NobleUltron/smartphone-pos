@@ -148,6 +148,13 @@ class TreasuryService
                 ->where('reference_id', $payment->id)
                 ->exists();
 
+            // Check legacy live layaway inflows that referenced Sale::class directly
+            $legacySaleRefExists = !$exists && AccountTransaction::where('reference_type', \App\Models\Sale::class)
+                ->where('reference_id', $payment->sale_id)
+                ->whereIn('category', ['Layaway Deposit', 'Layaway Installment', 'Layaway Payment'])
+                ->where('amount', $payment->amount_paid)
+                ->exists();
+
             // Also check if this payment belongs to a repair already recorded under Repair::class
             $alreadyCoveredByRepair = false;
             if ($payment->sale && $payment->sale->repair_id) {
@@ -156,7 +163,7 @@ class TreasuryService
                     ->exists();
             }
 
-            if (!$exists && !$alreadyCoveredByRepair) {
+            if (!$exists && !$legacySaleRefExists && !$alreadyCoveredByRepair) {
                 $account = PaymentAccount::getForMethod($payment->payment_method) ?? $cashAccount;
 
                 AccountTransaction::create([
@@ -201,9 +208,10 @@ class TreasuryService
             if (!$exists && !$alreadyCoveredByTransfer) {
                 $isInflow = $expense->category === 'Cash In';
                 $trxDate = $expense->created_at ?? ($expense->expense_date ? \Carbon\Carbon::parse($expense->expense_date)->setTimeFrom(now()) : now());
+                $targetAccountId = $expense->payment_account_id ?? $cashAccount->id;
 
                 AccountTransaction::create([
-                    'payment_account_id' => $cashAccount->id,
+                    'payment_account_id' => $targetAccountId,
                     'type' => $isInflow ? 'inflow' : 'outflow',
                     'amount' => $expense->amount,
                     'balance_after' => 0,
@@ -249,6 +257,36 @@ class TreasuryService
                     'user_id' => $repair->user_id,
                     'transaction_date' => $repair->created_at ?? now(),
                 ]);
+            }
+        }
+
+        // 4b. Backfill Invoice Payments
+        $invoicePayments = \App\Models\InvoicePayment::with('invoice')->where('amount', '>', 0)->get();
+        foreach ($invoicePayments as $invPayment) {
+            $exists = AccountTransaction::where('reference_type', \App\Models\InvoicePayment::class)
+                ->where('reference_id', $invPayment->id)
+                ->exists();
+
+            if (!$exists) {
+                $account = $invPayment->payment_account_id
+                    ? PaymentAccount::find($invPayment->payment_account_id)
+                    : (PaymentAccount::getForMethod($invPayment->payment_method) ?? $cashAccount);
+
+                if ($account) {
+                    AccountTransaction::create([
+                        'payment_account_id' => $account->id,
+                        'type' => 'inflow',
+                        'amount' => $invPayment->amount,
+                        'balance_after' => 0,
+                        'category' => 'Invoice Payment',
+                        'reference_type' => \App\Models\InvoicePayment::class,
+                        'reference_id' => $invPayment->id,
+                        'transaction_reference' => 'INV-PAY-' . $invPayment->id,
+                        'description' => "Invoice Payment for " . ($invPayment->invoice?->invoice_number ?? "Invoice #{$invPayment->invoice_id}"),
+                        'user_id' => $invPayment->user_id,
+                        'transaction_date' => $invPayment->payment_date ?? $invPayment->created_at ?? now(),
+                    ]);
+                }
             }
         }
 

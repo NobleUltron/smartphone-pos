@@ -31,7 +31,8 @@ class ReportController extends Controller
             default => Carbon::today(),
         };
 
-        $directSalesRevenue = Sale::whereIn('payment_status', ['Paid', 'Refunded'])
+        $directSalesRevenue = Sale::whereNull('repair_id')
+            ->whereIn('payment_status', ['Paid', 'Refunded'])
             ->where('payment_method', '!=', 'Layaway')
             ->where('sale_date', '>=', $startDate)
             ->sum('final_amount');
@@ -39,18 +40,28 @@ class ReportController extends Controller
         $layawayRevenue = \App\Models\LayawayPayment::where('payment_date', '>=', $startDate)
             ->sum('amount_paid');
 
+        $invoiceRevenue = \App\Models\InvoicePayment::where('payment_date', '>=', $startDate)
+            ->sum('amount');
+
         $refunds = \App\Models\Expense::whereIn('category', ['Refund', 'Refund (Past Shift)'])
             ->where('expense_date', '>=', $startDate)
             ->sum('amount');
 
-        $totalRevenue = $directSalesRevenue + $layawayRevenue - $refunds;
+        $totalRevenue = $directSalesRevenue + $layawayRevenue + $invoiceRevenue - $refunds;
 
-        $salesVolume = Sale::where('payment_status', '!=', 'Refunded')
+        // Include trade_in_value (non-cash barter tender) and B2B invoices in gross sales volume
+        $posSalesVolume = (float) Sale::where('payment_status', '!=', 'Refunded')
             ->where('sale_date', '>=', $startDate)
-            ->sum('final_amount');
+            ->sum(DB::raw('final_amount + COALESCE(trade_in_value, 0)'));
+
+        $invoiceSalesVolume = (float) \App\Models\Invoice::where('status', '!=', 'Cancelled')
+            ->where('invoice_date', '>=', $startDate)
+            ->sum('total_amount');
+
+        $salesVolume = $posSalesVolume + $invoiceSalesVolume;
         
         // Calculate COGS and Gross Profit
-        // For serialized items (device_imeis) and bulk products
+        // For serialized items (device_imeis), bulk products, repair parts, and B2B invoice items
         $serializedCogs = DB::table('sale_items')
             ->join('sales', 'sale_items.sale_id', '=', 'sales.id')
             ->join('device_imeis', 'sale_items.device_imei_id', '=', 'device_imeis.id')
@@ -66,7 +77,20 @@ class ReportController extends Controller
             ->where('sales.sale_date', '>=', $startDate)
             ->sum(DB::raw('products.cost_price * sale_items.quantity'));
 
-        $cogs = $serializedCogs + $bulkCogs;
+        $repairPartsCogs = DB::table('repair_parts')
+            ->join('repairs', 'repair_parts.repair_id', '=', 'repairs.id')
+            ->whereNotIn('repairs.status', ['Cancelled'])
+            ->where('repairs.created_at', '>=', $startDate)
+            ->sum(DB::raw('repair_parts.cost * repair_parts.quantity'));
+
+        $invoiceCogs = DB::table('invoice_items')
+            ->join('invoices', 'invoice_items.invoice_id', '=', 'invoices.id')
+            ->join('products', 'invoice_items.product_id', '=', 'products.id')
+            ->where('invoices.status', '!=', 'Cancelled')
+            ->where('invoices.invoice_date', '>=', $startDate)
+            ->sum(DB::raw('products.cost_price * invoice_items.quantity'));
+
+        $cogs = $serializedCogs + $bulkCogs + $repairPartsCogs + $invoiceCogs;
         $grossProfit = $salesVolume - $cogs;
         
         $repairsCompleted = Repair::whereIn('status', ['Completed', 'Delivered'])
@@ -207,11 +231,18 @@ class ReportController extends Controller
 
         // Consignments Breakdown in Period
         $inwardReceivedCount = \App\Models\DealerItem::where('direction', 'inward')->where('created_at', '>=', $startDate)->count();
-        $inwardSoldCount = \App\Models\DealerItem::where('direction', 'inward')->where('status', 'Sold')->where('sold_at', '>=', $startDate)->count();
-        $inwardSettledAmount = (float) \App\Models\DealerItem::where('direction', 'inward')->where('settlement_status', 'Settled')->where('settled_at', '>=', $startDate)->sum('settlement_amount');
-        $unsettledOwedAmount = (float) \App\Models\DealerItem::where('direction', 'inward')->where('status', 'Sold')->where('settlement_status', '!=', 'Settled')->sum(DB::raw('COALESCE(wholesale_cost, dealer_price, 0)'));
-        $consignmentGrossRevenue = (float) \App\Models\DealerItem::where('direction', 'inward')->where('status', 'Sold')->where('sold_at', '>=', $startDate)->sum('retail_price');
-        $consignmentWholesaleCost = (float) \App\Models\DealerItem::where('direction', 'inward')->where('status', 'Sold')->where('sold_at', '>=', $startDate)->sum(DB::raw('COALESCE(wholesale_cost, dealer_price, 0)'));
+        $inwardSoldCount = (int) \App\Models\DealerItem::where('direction', 'inward')->where('quantity_sold', '>', 0)->where('sold_at', '>=', $startDate)->sum('quantity_sold');
+        $inwardSettledAmount = (float) \App\Models\DealerItem::where('direction', 'inward')->where('settlement_amount', '>', 0)->where('settled_at', '>=', $startDate)->sum('settlement_amount');
+        $unsettledOwedAmount = (float) \App\Models\DealerItem::where('direction', 'inward')
+            ->where('quantity_sold', '>', 0)
+            ->get()
+            ->sum(function ($item) {
+                $unitCost = (float) ($item->wholesale_cost ?: $item->dealer_price ?: 0);
+                return max(0, ($unitCost * (int) $item->quantity_sold) - (float) ($item->settlement_amount ?? 0));
+            });
+        $soldInwardPeriod = \App\Models\DealerItem::where('direction', 'inward')->where('quantity_sold', '>', 0)->where('sold_at', '>=', $startDate)->get();
+        $consignmentGrossRevenue = (float) $soldInwardPeriod->sum(fn($i) => (float) ($i->retail_price ?? 0) * (int) $i->quantity_sold);
+        $consignmentWholesaleCost = (float) $soldInwardPeriod->sum(fn($i) => (float) ($i->wholesale_cost ?: $i->dealer_price ?: 0) * (int) $i->quantity_sold);
         $consignmentNetProfit = max(0, $consignmentGrossRevenue - $consignmentWholesaleCost);
         $outwardIssuedCount = \App\Models\DealerItem::where('direction', '!=', 'inward')->where('created_at', '>=', $startDate)->count();
         $outwardSoldCount = \App\Models\DealerItem::where('direction', '!=', 'inward')->where('status', 'Sold')->where('sold_at', '>=', $startDate)->count();

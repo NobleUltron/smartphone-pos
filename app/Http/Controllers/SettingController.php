@@ -170,7 +170,7 @@ class SettingController extends Controller
             $validated
         );
 
-        return redirect()->back()->with('message', 'Store settings and permissions updated successfully.');
+        return redirect()->back()->with('success', 'Store settings and permissions updated successfully.');
     }
 
     public function store(Request $request)

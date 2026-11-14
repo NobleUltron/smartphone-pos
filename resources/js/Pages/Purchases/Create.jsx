@@ -8,9 +8,9 @@ import SearchableSelect from '@/Components/SaaS/SearchableSelect';
 import { Package, Plus, Trash2, Save, X, Search, AlertTriangle } from 'lucide-react';
 import toast from 'react-hot-toast';
 
-export default function PurchasesCreate({ auth, suppliers, products, paymentAccounts = [] }) {
+export default function PurchasesCreate({ auth, suppliers, products, paymentAccounts = [], selected_supplier_id = '' }) {
     const { data, setData, post, processing, errors } = useForm({
-        supplier_id: '',
+        supplier_id: selected_supplier_id ? String(selected_supplier_id) : '',
         reference_no: '',
         total_amount: '',
         paid_amount: '',
@@ -123,7 +123,6 @@ export default function PurchasesCreate({ auth, suppliers, products, paymentAcco
         post('/api/purchases', {
             onSuccess: () => {
                 toast.success('Purchase logged successfully');
-                window.location.href = `/suppliers/${data.supplier_id}`;
             },
             onError: (errs) => {
                 if (errs?.items) {

@@ -10,7 +10,23 @@ import Button from '@/Components/SaaS/Button';
 import Badge from '@/Components/SaaS/Badge';
 import Modal from '@/Components/Modal';
 
-export default function CustomersIndex({ auth, customers = {}, summary }) {
+export default function CustomersIndex({ auth, customers = {}, summary, filters = {} }) {
+    const [search, setSearch] = useState(filters?.search || '');
+    const [isInitialRender, setIsInitialRender] = useState(true);
+
+    useEffect(() => {
+        if (isInitialRender) {
+            setIsInitialRender(false);
+            return;
+        }
+        const timer = setTimeout(() => {
+            router.get(route('customers.index'), search ? { search } : {}, {
+                preserveState: true,
+                replace: true,
+            });
+        }, 300);
+        return () => clearTimeout(timer);
+    }, [search]);
     const [showEditModal, setShowEditModal] = useState(false);
     const [showHistoryModal, setShowHistoryModal] = useState(false);
     const [isEditing, setIsEditing] = useState(false);
@@ -208,6 +224,18 @@ export default function CustomersIndex({ auth, customers = {}, summary }) {
                 )}
 
                 <Card className="animate-slide-up relative overflow-hidden" style={{ animationDelay: '0.3s' }}>
+                    <div className="p-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between gap-4">
+                        <div className="relative flex-1 max-w-md">
+                            <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                            <input
+                                type="text"
+                                className="saas-input pl-10 text-sm"
+                                placeholder="Search customers by name, phone, email, or company..."
+                                value={search}
+                                onChange={(e) => setSearch(e.target.value)}
+                            />
+                        </div>
+                    </div>
                     <div className="overflow-x-auto">
                         <table className="w-full text-left border-collapse">
                             <thead>
@@ -556,7 +584,9 @@ export default function CustomersIndex({ auth, customers = {}, summary }) {
                                                 <div>
                                                     <div className="font-bold text-slate-900 dark:text-white flex items-center gap-3 text-base">
                                                         Receipt {sale.receipt_number}
-                                                        <Badge variant="success">Completed</Badge>
+                                                        <Badge variant={sale.payment_status === 'Paid' ? 'success' : sale.payment_status === 'Refunded' ? 'danger' : 'warning'}>
+                                                            {sale.payment_status || 'Completed'}
+                                                        </Badge>
                                                     </div>
                                                     <div className="text-sm font-medium text-slate-500 dark:text-slate-400 mt-1.5 flex items-center gap-2">
                                                         <span className="flex items-center gap-1"><History size={14} className="text-slate-400" /> {sale.sale_date}</span>

@@ -112,7 +112,7 @@ export default function Index({ auth, activeDrawer, accounts = [] }) {
                 <PageHeader 
                     title="Shift Management" 
                     breadcrumbs={[
-                        { label: 'Dashboard', href: '/dashboard' },
+                        { label: 'Home', href: '/' },
                         { label: 'Shift Management' }
                     ]}
                     actions={

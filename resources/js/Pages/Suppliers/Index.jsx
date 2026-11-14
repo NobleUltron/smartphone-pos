@@ -146,6 +146,7 @@ export default function SuppliersIndex({ auth, suppliers, filters = {}, summary 
                     </div>
 
                     {suppliers.data.length > 0 ? (
+                        <>
                         <div className="overflow-x-auto">
                             <table className="w-full text-left text-sm">
                                 <thead className="bg-slate-50 dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400 uppercase text-xs tracking-wider">
@@ -214,6 +215,25 @@ export default function SuppliersIndex({ auth, suppliers, filters = {}, summary 
                                 </tbody>
                             </table>
                         </div>
+                        {suppliers.links && suppliers.links.length > 3 && (
+                            <div className="px-6 py-4 border-t border-slate-100 dark:border-slate-800 flex flex-wrap items-center justify-between gap-2">
+                                <span className="text-xs text-slate-500 dark:text-slate-400">
+                                    Showing {suppliers.from || 0} to {suppliers.to || 0} of {suppliers.total || 0}
+                                </span>
+                                <div className="flex flex-wrap gap-1">
+                                    {suppliers.links.map((link, idx) => (
+                                        <Link
+                                            key={idx}
+                                            href={link.url || '#'}
+                                            preserveScroll
+                                            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors ${link.active ? 'bg-indigo-600 text-white' : link.url ? 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700' : 'opacity-40 pointer-events-none text-slate-400'}`}
+                                            dangerouslySetInnerHTML={{ __html: link.label }}
+                                        />
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+                        </>
                     ) : (
                         <div className="p-12 text-center text-slate-500">
                             <Building2 size={48} className="mx-auto text-slate-300 mb-4" />

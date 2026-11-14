@@ -47,10 +47,10 @@ export default function Dashboard({
         const { cx, cy, innerRadius, outerRadius, startAngle, endAngle, fill, payload, value } = props;
         return (
             <g>
-                <text x={cx} y={cy - 8} textAnchor="middle" fill="#1E293B" className="font-bold text-sm">
+                <text x={cx} y={cy - 8} textAnchor="middle" fill="currentColor" className="font-bold text-sm text-slate-800 dark:text-slate-100">
                     {payload.name}
                 </text>
-                <text x={cx} y={cy + 12} textAnchor="middle" fill="#64748B" className="text-xs font-medium">
+                <text x={cx} y={cy + 12} textAnchor="middle" fill="currentColor" className="text-xs font-medium text-slate-500 dark:text-slate-400">
                     {value} Units
                 </text>
                 <Sector
@@ -670,7 +670,7 @@ export default function Dashboard({
             {isMinimized ? (
                 <button 
                     onClick={() => setIsMinimized(false)}
-                    className="fixed bottom-4 right-4 w-14 h-14 bg-gradient-to-r from-indigo-600 to-violet-600 rounded-full shadow-2xl shadow-indigo-500/30 flex items-center justify-center text-white hover:scale-110 transition-transform z-50 group"
+                    className="fixed bottom-20 lg:bottom-4 right-4 w-14 h-14 bg-gradient-to-r from-indigo-600 to-violet-600 rounded-full shadow-2xl shadow-indigo-500/30 flex items-center justify-center text-white hover:scale-110 transition-transform z-50 group"
                     title="Open SmartPOS AI"
                 >
                     <Sparkles size={24} className="text-amber-300 group-hover:rotate-12 transition-transform" />

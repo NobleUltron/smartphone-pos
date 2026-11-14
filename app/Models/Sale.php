@@ -15,6 +15,7 @@ class Sale extends Model
         'discount', 
         'trade_in_value', 
         'trade_in_device', 
+        'trade_in_imei_id',
         'final_amount', 
         'payment_method', 
         'payment_status', 

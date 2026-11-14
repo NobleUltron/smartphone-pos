@@ -54,10 +54,13 @@ class PartnerInvestor extends Model
         $inStockCost = (float) $inStockDevices->sum('cost_price');
         $inStockCount = $inStockDevices->count();
 
-        // 4. Sold Inventory funded by this partner
+        // 4. Sold Inventory funded by this partner (only recognize realized profit on Paid, non-refunded sales)
         $soldDevices = $this->deviceImeis()
             ->with(['product.brand', 'saleItems.sale'])
             ->where('status', 'Sold')
+            ->whereHas('saleItems.sale', function ($q) {
+                $q->where('payment_status', 'Paid');
+            })
             ->get();
 
         $soldCount = $soldDevices->count();
@@ -68,7 +71,10 @@ class PartnerInvestor extends Model
         $soldItemsDetails = [];
 
         foreach ($soldDevices as $device) {
-            $saleItem = $device->saleItems->first();
+            $saleItem = $device->saleItems
+                ->filter(fn($si) => $si->sale && $si->sale->payment_status === 'Paid')
+                ->sortByDesc('id')
+                ->first();
             $soldPrice = $saleItem ? (float) $saleItem->price : (float) $device->selling_price;
             $unitCost = (float) $device->cost_price;
             $grossProfit = max(0, $soldPrice - $unitCost);

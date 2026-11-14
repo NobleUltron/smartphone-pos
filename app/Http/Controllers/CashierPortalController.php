@@ -20,6 +20,7 @@ class CashierPortalController extends Controller
         $todaySalesCount = (clone $todayQuery)->count();
         
         $todayDirectSales = (clone $todayQuery)
+            ->whereNull('repair_id')
             ->whereIn('payment_status', ['Paid', 'Refunded'])
             ->where('payment_method', '!=', 'Layaway')
             ->sum('final_amount');
@@ -33,19 +34,19 @@ class CashierPortalController extends Controller
         
         $todayRefundsTotal = \App\Models\Expense::where('user_id', $user->id)
             ->whereDate('expense_date', Carbon::today())
-            ->where('category', 'Refund')
+            ->whereIn('category', ['Refund', 'Refund (Past Shift)'])
             ->sum('amount');
             
         $todaySalesTotal = $todayDirectSales + $todayLayawayPaymentsTotal - $todayRefundsTotal;
         
-        $cashCollected = (clone $todayQuery)->whereIn('payment_status', ['Paid', 'Refunded'])->where('payment_method', 'Cash')->sum('final_amount') 
+        $cashCollected = (clone $todayQuery)->whereNull('repair_id')->whereIn('payment_status', ['Paid', 'Refunded'])->where('payment_method', 'Cash')->sum('final_amount') 
                        + (clone $todayLayawayPayments)->where('payment_method', 'Cash')->sum('amount_paid')
                        - $todayRefundsTotal;
                        
-        $momoCollected = (clone $todayQuery)->whereIn('payment_status', ['Paid', 'Refunded'])->whereIn('payment_method', ['MTN MoMo', 'Airtel Money'])->sum('final_amount')
+        $momoCollected = (clone $todayQuery)->whereNull('repair_id')->whereIn('payment_status', ['Paid', 'Refunded'])->whereIn('payment_method', ['MTN MoMo', 'Airtel Money'])->sum('final_amount')
                        + (clone $todayLayawayPayments)->whereIn('payment_method', ['MTN MoMo', 'Airtel Money'])->sum('amount_paid');
                        
-        $otherCollected = (clone $todayQuery)->whereIn('payment_status', ['Paid', 'Refunded'])->whereNotIn('payment_method', ['Cash', 'MTN MoMo', 'Airtel Money', 'Layaway'])->sum('final_amount')
+        $otherCollected = (clone $todayQuery)->whereNull('repair_id')->whereIn('payment_status', ['Paid', 'Refunded'])->whereNotIn('payment_method', ['Cash', 'MTN MoMo', 'Airtel Money', 'Layaway'])->sum('final_amount')
                         + (clone $todayLayawayPayments)->whereNotIn('payment_method', ['Cash', 'MTN MoMo', 'Airtel Money'])->sum('amount_paid');
 
         $activeRepairsCount = \App\Models\Repair::whereIn('status', ['Pending', 'In Progress'])

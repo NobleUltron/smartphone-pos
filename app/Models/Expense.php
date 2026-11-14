@@ -11,6 +11,7 @@ class Expense extends Model
 
     protected $fillable = [
         'cash_drawer_id',
+        'payment_account_id',
         'user_id',
         'recorded_by',
         'amount',
@@ -22,6 +23,11 @@ class Expense extends Model
     protected $casts = [
         'expense_date' => 'date',
     ];
+
+    public function paymentAccount()
+    {
+        return $this->belongsTo(PaymentAccount::class);
+    }
 
     public function user()
     {

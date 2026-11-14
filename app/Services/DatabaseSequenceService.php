@@ -26,12 +26,22 @@ class DatabaseSequenceService
         'purchases',
         'purchase_items',
         'suppliers',
-        'supplier_payments',
         'repairs',
         'repair_parts',
-        'trade_ins',
-        'warranties',
         'warranty_claims',
+        'payment_accounts',
+        'account_transactions',
+        'account_transfers',
+        'stock_audits',
+        'stock_audit_items',
+        'quotations',
+        'quotation_items',
+        'invoices',
+        'invoice_items',
+        'invoice_payments',
+        'partner_investors',
+        'partner_transactions',
+        'activity_logs',
         'settings',
     ];
 
@@ -50,8 +60,8 @@ class DatabaseSequenceService
             try {
                 $maxId = DB::table($table)->max('id');
                 $nextId = ($maxId !== null && $maxId > 0) ? ($maxId + 1) : 1;
-                
-                DB::statement("SELECT setval(pg_get_serial_sequence('$table', 'id'), $nextId, false) FROM \"$table\"");
+
+                DB::statement("SELECT setval(pg_get_serial_sequence('{$table}', 'id'), {$nextId}, false)");
                 $results[] = "Successfully synced sequence for table '$table' (Next ID: $nextId)";
             } catch (\Throwable $e) {
                 $results[] = "Skipped '$table': " . $e->getMessage();
@@ -73,8 +83,8 @@ class DatabaseSequenceService
         try {
             $maxId = DB::table($table)->max('id');
             $nextId = ($maxId !== null && $maxId > 0) ? ($maxId + 1) : 1;
-            
-            DB::statement("SELECT setval(pg_get_serial_sequence('$table', 'id'), $nextId, false) FROM \"$table\"");
+
+            DB::statement("SELECT setval(pg_get_serial_sequence('{$table}', 'id'), {$nextId}, false)");
         } catch (\Throwable $e) {
             // Silently ignore if table does not use a sequence
         }

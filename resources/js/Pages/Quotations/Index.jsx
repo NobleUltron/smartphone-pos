@@ -287,6 +287,24 @@ export default function QuotationsIndex({ quotations, filters, metrics }) {
                             </tbody>
                         </table>
                     </div>
+                    {quotations.links && quotations.links.length > 3 && (
+                        <div className="px-6 py-4 border-t border-slate-100 dark:border-slate-800 flex flex-wrap items-center justify-between gap-2">
+                            <span className="text-xs text-slate-500 dark:text-slate-400">
+                                Showing {quotations.from || 0} to {quotations.to || 0} of {quotations.total || 0}
+                            </span>
+                            <div className="flex flex-wrap gap-1">
+                                {quotations.links.map((link, idx) => (
+                                    <Link
+                                        key={idx}
+                                        href={link.url || '#'}
+                                        preserveScroll
+                                        className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors ${link.active ? 'bg-indigo-600 text-white' : link.url ? 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700' : 'opacity-40 pointer-events-none text-slate-400'}`}
+                                        dangerouslySetInnerHTML={{ __html: link.label }}
+                                    />
+                                ))}
+                            </div>
+                        </div>
+                    )}
                 </div>
             </div>
 

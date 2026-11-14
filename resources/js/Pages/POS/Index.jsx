@@ -20,6 +20,7 @@ export default function POSIndex({ auth, customers = [], hasActiveDrawer }) {
     const [imei, setImei] = useState('');
     const [cart, setCart] = useState([]);
     const [paymentMethod, setPaymentMethod] = useState('Cash');
+    const [depositPaymentMethod, setDepositPaymentMethod] = useState('Cash');
     const [amountPaid, setAmountPaid] = useState('');
     const [tenderedAmount, setTenderedAmount] = useState('');
     const [discount, setDiscount] = useState(0);
@@ -90,7 +91,8 @@ export default function POSIndex({ auth, customers = [], hasActiveDrawer }) {
                     imei: item.sku || `BULK-${item.id}`,
                     name: `${item.brand?.name || ''} ${item.model_name}${item.storage_capacity ? ' - ' + item.storage_capacity : ''}`.trim(),
                     price: item.selling_price,
-                    quantity: 1
+                    quantity: 1,
+                    max_quantity: item.quantity
                 }]);
             }
         }
@@ -118,7 +120,16 @@ export default function POSIndex({ auth, customers = [], hasActiveDrawer }) {
     const handleUpdateQuantity = (imei, newQuantity) => {
         const qty = parseInt(newQuantity);
         if (isNaN(qty) || qty < 1) return;
-        setCart(cart.map(c => c.imei === imei && c.type === 'bulk' ? { ...c, quantity: qty } : c));
+        setCart(cart.map(c => {
+            if (c.imei === imei && c.type === 'bulk') {
+                const clamped = c.max_quantity ? Math.min(qty, c.max_quantity) : qty;
+                if (c.max_quantity && qty > c.max_quantity) {
+                    toast.error(`Only ${c.max_quantity} unit(s) available in stock`);
+                }
+                return { ...c, quantity: clamped };
+            }
+            return c;
+        }));
     };
 
     const handleUpdatePrice = (imei, newPrice) => {
@@ -148,7 +159,8 @@ export default function POSIndex({ auth, customers = [], hasActiveDrawer }) {
 
     const total = cart.reduce((sum, item) => sum + (parseFloat(item.price) * (item.quantity || 1)), 0);
     const tradeInDiscount = tradeIn ? tradeIn.value : 0;
-    const finalAmount = total - discount - tradeInDiscount;
+    const numericDiscount = isDiscountLocked ? 0 : (Number(discount) || 0);
+    const finalAmount = total - numericDiscount - tradeInDiscount;
 
     const handleCheckout = async () => {
         if (cart.length === 0) return toast.error("Cart is empty");
@@ -169,15 +181,18 @@ export default function POSIndex({ auth, customers = [], hasActiveDrawer }) {
                 customer_name: customerId ? '' : customerName,
                 customer_phone: customerId ? '' : customerPhone,
                 payment_method: paymentMethod,
+                deposit_payment_method: paymentMethod === 'Layaway' ? depositPaymentMethod : null,
                 amount_paid: amountPaid || 0,
                 tendered_amount: tenderedAmount || null,
-                discount: discount,
+                discount: numericDiscount,
                 trade_in: tradeIn
             });
             setCart([]);
             setDiscount(0);
             setTradeIn(null);
             setAmountPaid('');
+            setTenderedAmount('');
+            setDepositPaymentMethod('Cash');
             setCustomerId('');
             setCustomerName('');
             setCustomerPhone('');
@@ -187,7 +202,7 @@ export default function POSIndex({ auth, customers = [], hasActiveDrawer }) {
             }
         } catch (error) {
             if (receiptWindow) receiptWindow.close();
-            const errorMsg = error.response?.data?.message || "Checkout failed";
+            const errorMsg = error.response?.data?.error || error.response?.data?.message || "Checkout failed";
             toast.error(errorMsg);
         }
     };
@@ -509,7 +524,20 @@ export default function POSIndex({ auth, customers = [], hasActiveDrawer }) {
                             )}
 
                             {paymentMethod === 'Layaway' && (
-                                <div className="animate-fade-in border-t border-slate-100 pt-4 mt-4">
+                                <div className="animate-fade-in border-t border-slate-100 pt-4 mt-4 space-y-3">
+                                    <div>
+                                        <label className="saas-label text-indigo-600">Deposit Payment Method</label>
+                                        <select
+                                            className="saas-input pl-4"
+                                            value={depositPaymentMethod}
+                                            onChange={(e) => setDepositPaymentMethod(e.target.value)}
+                                        >
+                                            <option>Cash</option>
+                                            <option>MTN MoMo</option>
+                                            <option>Airtel Money</option>
+                                            <option>Bank Transfer</option>
+                                        </select>
+                                    </div>
                                     <label className="saas-label text-indigo-600">Initial Deposit (Amount Paid)</label>
                                     <div className="relative">
                                         <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 font-semibold text-sm">

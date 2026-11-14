@@ -560,7 +560,7 @@ export default function SuppliersShow({ auth, supplier, paymentAccounts = [] }) 
                             </div>
 
                             <div className="flex justify-end gap-3 pt-4 border-t border-slate-100">
-                                <Button variant="danger" type="button" onClick={() => setPaymentModalPurchase(null)}>
+                                <Button variant="secondary" type="button" onClick={() => setPaymentModalPurchase(null)}>
                                     Cancel
                                 </Button>
                                 <Button variant="primary" type="submit" isLoading={paymentForm.processing} className="bg-emerald-600 hover:bg-emerald-700">

@@ -21,13 +21,13 @@ class QuotationController extends Controller
         $query = Quotation::with(['customer', 'user', 'invoice'])->latest();
 
         if ($request->filled('search')) {
-            $search = $request->input('search');
+            $search = '%' . strtolower($request->input('search')) . '%';
             $query->where(function ($q) use ($search) {
-                $q->where('quotation_number', 'ilike', "%{$search}%")
+                $q->whereRaw('LOWER(quotation_number) LIKE ?', [$search])
                     ->orWhereHas('customer', function ($cq) use ($search) {
-                        $cq->where('name', 'ilike', "%{$search}%")
-                            ->orWhere('company_name', 'ilike', "%{$search}%")
-                            ->orWhere('phone', 'ilike', "%{$search}%");
+                        $cq->whereRaw('LOWER(name) LIKE ?', [$search])
+                            ->orWhereRaw('LOWER(company_name) LIKE ?', [$search])
+                            ->orWhereRaw('LOWER(phone) LIKE ?', [$search]);
                     });
             });
         }
@@ -57,6 +57,7 @@ class QuotationController extends Controller
     {
         $customers = Customer::orderBy('name')->get();
         $products = Product::with('brand')
+            ->withCount(['deviceImeis as in_stock_imeis_count' => fn($q) => $q->where('status', 'In Stock')])
             ->orderBy('model_name')
             ->get();
 
@@ -172,7 +173,10 @@ class QuotationController extends Controller
 
         $quotation->load(['customer', 'items']);
         $customers = Customer::orderBy('name')->get();
-        $products = Product::with('brand')->orderBy('model_name')->get();
+        $products = Product::with('brand')
+            ->withCount(['deviceImeis as in_stock_imeis_count' => fn($q) => $q->where('status', 'In Stock')])
+            ->orderBy('model_name')
+            ->get();
 
         return Inertia::render('Quotations/Edit', [
             'quotation' => $quotation,

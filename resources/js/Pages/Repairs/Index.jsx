@@ -185,13 +185,15 @@ Thank you.`;
                     icon={Wrench}
                     actions={
                         <div className="flex items-center gap-3">
-                            <a 
-                                href="/api/export/repairs"
-                                className="saas-btn saas-btn-success"
-                                title="Export Repair Tickets as Excel Spreadsheet"
-                            >
-                                <FileSpreadsheet size={16} /> Export Excel
-                            </a>
+                            {['admin', 'manager'].includes((auth?.user?.role || '').toLowerCase()) && (
+                                <a 
+                                    href="/api/export/repairs"
+                                    className="saas-btn saas-btn-success"
+                                    title="Export Repair Tickets as Excel Spreadsheet"
+                                >
+                                    <FileSpreadsheet size={16} /> Export Excel
+                                </a>
+                            )}
                             <Button onClick={() => setIsCreateModalOpen(true)} icon={Plus}>
                                 New Repair Ticket
                             </Button>
@@ -452,10 +454,10 @@ Thank you.`;
                                             {getStatusBadge(repair.status)}
                                         </div>
                                         <div className="text-xs text-slate-600 space-y-0.5">
-                                            <p className="font-semibold text-slate-900 text-sm">{repair.brand} {repair.model_name}</p>
+                                            <p className="font-semibold text-slate-900 text-sm">{repair.device_model}</p>
                                             <p className="text-slate-500">{displayCustomerName} • {displayCustomerPhone}</p>
-                                            {repair.problem_description && (
-                                                <p className="text-slate-500 italic text-[11px] truncate">"{repair.problem_description}"</p>
+                                            {repair.issue_description && (
+                                                <p className="text-slate-500 italic text-[11px] truncate">"{repair.issue_description}"</p>
                                             )}
                                         </div>
                                         <div className="flex items-center justify-between pt-2 border-t border-slate-100 text-xs">

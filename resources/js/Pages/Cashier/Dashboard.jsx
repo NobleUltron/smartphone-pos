@@ -212,14 +212,14 @@ export default function CashierDashboard({ auth, cashier, metrics = {}, recentSa
             {/* Today's Cashier Sales Table */}
             <div className="animate-slide-up" style={{ animationDelay: '0.6s' }}>
                 <Card noPadding className="overflow-hidden">
-                    <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-white">
-                        <h3 className="font-bold text-slate-900 flex items-center gap-2">
-                            <div className="bg-indigo-50 p-2 rounded-lg text-indigo-600">
+                    <div className="px-6 py-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between bg-white dark:bg-slate-900">
+                        <h3 className="font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                            <div className="bg-indigo-50 dark:bg-indigo-950/60 p-2 rounded-lg text-indigo-600 dark:text-indigo-400">
                                 <Clock size={20} />
                             </div>
                             Today's Completed Checkouts
                         </h3>
-                        <Link href="/receipts" className="text-sm font-bold text-indigo-600 hover:text-indigo-700 flex items-center gap-1">
+                        <Link href="/receipts" className="text-sm font-bold text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 flex items-center gap-1">
                             View All <ArrowRight size={16} />
                         </Link>
                     </div>
@@ -627,87 +627,87 @@ export default function CashierDashboard({ auth, cashier, metrics = {}, recentSa
                         `}
                     </style>
                     <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm animate-fade-in ui-modal-print">
-                        <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden flex flex-col max-h-[90vh]">
-                            <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
-                                <h3 className="font-bold text-slate-900 flex items-center gap-2">
+                        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden flex flex-col max-h-[90vh]">
+                            <div className="px-6 py-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
+                                <h3 className="font-bold text-slate-900 dark:text-white flex items-center gap-2">
                                     <Printer size={20} className="text-slate-400" /> Shift Till Summary Report
                                 </h3>
-                                <button onClick={() => setShowShiftReportModal(false)} className="text-slate-400 hover:text-slate-600 transition-colors">
+                                <button onClick={() => setShowShiftReportModal(false)} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors">
                                     &times;
                                 </button>
                             </div>
-                            <div className="p-8 overflow-y-auto bg-slate-50">
-                                <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm text-center mb-6">
-                                    <div className="w-16 h-16 bg-indigo-50 text-indigo-600 rounded-full flex items-center justify-center mx-auto mb-4">
+                            <div className="p-8 overflow-y-auto bg-slate-50 dark:bg-slate-950/60">
+                                <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-sm text-center mb-6">
+                                    <div className="w-16 h-16 bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 rounded-full flex items-center justify-center mx-auto mb-4">
                                         <Sparkles size={28} />
                                     </div>
-                                    <h4 className="text-xl font-black text-slate-900 mb-1">SmartPOS Kampala</h4>
-                                    <p className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-4">Cash Till Shift Report</p>
+                                    <h4 className="text-xl font-black text-slate-900 dark:text-white mb-1">SmartPOS Kampala</h4>
+                                    <p className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest mb-4">Cash Till Shift Report</p>
                                     <Badge variant="success" className="mx-auto">
                                         Active Shift • {new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                                     </Badge>
                                 </div>
 
-                                <div className="bg-white p-4 rounded-xl border border-slate-100 shadow-sm flex items-center justify-between mb-6">
+                                <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-100 dark:border-slate-800 shadow-sm flex items-center justify-between mb-6">
                                     <div className="flex items-center gap-4">
-                                        <div className="w-12 h-12 bg-slate-100 text-slate-500 rounded-full flex items-center justify-center">
+                                        <div className="w-12 h-12 bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 rounded-full flex items-center justify-center">
                                             <User size={20} />
                                         </div>
                                         <div>
-                                            <p className="text-xs text-slate-500 mb-0.5">Cashier on Duty</p>
-                                            <h6 className="font-bold text-slate-900">{cashier?.name}</h6>
+                                            <p className="text-xs text-slate-500 dark:text-slate-400 mb-0.5">Cashier on Duty</p>
+                                            <h6 className="font-bold text-slate-900 dark:text-white">{cashier?.name}</h6>
                                         </div>
                                     </div>
                                     <div className="text-right">
-                                        <p className="text-xs text-slate-500 mb-0.5">Checkouts</p>
-                                        <h6 className="font-bold text-slate-900 text-xl">{metrics?.today_sales_count || 0}</h6>
+                                        <p className="text-xs text-slate-500 dark:text-slate-400 mb-0.5">Checkouts</p>
+                                        <h6 className="font-bold text-slate-900 dark:text-white text-xl">{metrics?.today_sales_count || 0}</h6>
                                     </div>
                                 </div>
 
-                                <h6 className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-3 ml-2">Revenue Breakdown</h6>
+                                <h6 className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest mb-3 ml-2">Revenue Breakdown</h6>
                                 
-                                <div className="bg-white border border-slate-100 rounded-xl overflow-hidden shadow-sm mb-6">
-                                    <div className="flex justify-between items-center p-4 border-b border-slate-100">
+                                <div className="bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-xl overflow-hidden shadow-sm mb-6">
+                                    <div className="flex justify-between items-center p-4 border-b border-slate-100 dark:border-slate-800">
                                         <div className="flex items-center gap-3">
-                                            <div className="w-8 h-8 bg-emerald-50 text-emerald-600 rounded flex items-center justify-center">
+                                            <div className="w-8 h-8 bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 rounded flex items-center justify-center">
                                                 <DollarSign size={16} />
                                             </div>
-                                            <span className="font-semibold text-slate-700">Physical Cash</span>
+                                            <span className="font-semibold text-slate-700 dark:text-slate-300">Physical Cash</span>
                                         </div>
-                                        <span className="font-black text-slate-900">{Number(metrics?.cash_collected || 0).toLocaleString()} UGX</span>
+                                        <span className="font-black text-slate-900 dark:text-white">{Number(metrics?.cash_collected || 0).toLocaleString()} UGX</span>
                                     </div>
-                                    <div className="flex justify-between items-center p-4 border-b border-slate-100">
+                                    <div className="flex justify-between items-center p-4 border-b border-slate-100 dark:border-slate-800">
                                         <div className="flex items-center gap-3">
-                                            <div className="w-8 h-8 bg-amber-50 text-amber-600 rounded flex items-center justify-center">
+                                            <div className="w-8 h-8 bg-amber-50 dark:bg-amber-950/60 text-amber-600 dark:text-amber-400 rounded flex items-center justify-center">
                                                 <Smartphone size={16} />
                                             </div>
-                                            <span className="font-semibold text-slate-700">Mobile Money</span>
+                                            <span className="font-semibold text-slate-700 dark:text-slate-300">Mobile Money</span>
                                         </div>
-                                        <span className="font-black text-slate-900">{Number(metrics?.momo_collected || 0).toLocaleString()} UGX</span>
+                                        <span className="font-black text-slate-900 dark:text-white">{Number(metrics?.momo_collected || 0).toLocaleString()} UGX</span>
                                     </div>
-                                    <div className="flex justify-between items-center p-4 border-b border-slate-100">
+                                    <div className="flex justify-between items-center p-4 border-b border-slate-100 dark:border-slate-800">
                                         <div className="flex items-center gap-3">
-                                            <div className="w-8 h-8 bg-blue-50 text-blue-600 rounded flex items-center justify-center">
+                                            <div className="w-8 h-8 bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 rounded flex items-center justify-center">
                                                 <CreditCard size={16} />
                                             </div>
-                                            <span className="font-semibold text-slate-700">Bank / Card</span>
+                                            <span className="font-semibold text-slate-700 dark:text-slate-300">Bank / Card</span>
                                         </div>
-                                        <span className="font-black text-slate-900">{Number(metrics?.other_collected || 0).toLocaleString()} UGX</span>
+                                        <span className="font-black text-slate-900 dark:text-white">{Number(metrics?.other_collected || 0).toLocaleString()} UGX</span>
                                     </div>
-                                    <div className="flex justify-between items-center p-5 bg-indigo-50/50">
-                                        <span className="font-bold text-indigo-900">Gross Shift Sales</span>
-                                        <span className="font-black text-indigo-700 text-xl">{Number(metrics?.today_sales_total || 0).toLocaleString()} UGX</span>
+                                    <div className="flex justify-between items-center p-5 bg-indigo-50/50 dark:bg-indigo-950/30">
+                                        <span className="font-bold text-indigo-900 dark:text-indigo-200">Gross Shift Sales</span>
+                                        <span className="font-black text-indigo-700 dark:text-indigo-300 text-xl">{Number(metrics?.today_sales_total || 0).toLocaleString()} UGX</span>
                                     </div>
                                 </div>
 
-                                <div className="bg-amber-50 border-l-4 border-amber-400 p-4 rounded-r-xl flex gap-3">
+                                <div className="bg-amber-50 dark:bg-amber-950/40 border-l-4 border-amber-400 p-4 rounded-r-xl flex gap-3">
                                     <ShieldCheck size={24} className="text-amber-500 shrink-0" />
-                                    <p className="text-amber-900 text-sm mb-0">
+                                    <p className="text-amber-900 dark:text-amber-200 text-sm mb-0">
                                         Please reconcile your physical cash drawer with the <strong className="font-bold">Physical Cash</strong> total above before closing your shift.
                                     </p>
                                 </div>
                             </div>
-                            <div className="px-6 py-4 border-t border-slate-100 bg-white flex justify-end gap-3">
+                            <div className="px-6 py-4 border-t border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900 flex justify-end gap-3">
                                 <Button variant="secondary" onClick={() => setShowShiftReportModal(false)}>Close</Button>
                                 <Button variant="primary" onClick={() => window.print()} icon={Printer}>
                                     Print Report

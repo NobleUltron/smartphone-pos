@@ -27,6 +27,7 @@ class CashDrawerController extends Controller
             $activeDrawer->calculated_expected = $activeDrawer->calculateExpectedCash();
 
             $cashSales = Sale::where('cash_drawer_id', $activeDrawer->id)
+                ->whereNull('repair_id')
                 ->where('payment_method', 'Cash')
                 ->whereIn('payment_status', ['Paid', 'Refunded'])
                 ->sum('final_amount');
@@ -36,19 +37,31 @@ class CashDrawerController extends Controller
                 ->sum('amount_paid');
 
             $momoSales = Sale::where('cash_drawer_id', $activeDrawer->id)
+                ->whereNull('repair_id')
                 ->whereIn('payment_method', ['MTN MoMo', 'MoMo'])
                 ->whereIn('payment_status', ['Paid'])
-                ->sum('final_amount');
+                ->sum('final_amount')
+                + \App\Models\LayawayPayment::where('cash_drawer_id', $activeDrawer->id)
+                ->whereIn('payment_method', ['MTN MoMo', 'MoMo'])
+                ->sum('amount_paid');
 
             $airtelSales = Sale::where('cash_drawer_id', $activeDrawer->id)
+                ->whereNull('repair_id')
                 ->where('payment_method', 'Airtel Money')
                 ->whereIn('payment_status', ['Paid'])
-                ->sum('final_amount');
+                ->sum('final_amount')
+                + \App\Models\LayawayPayment::where('cash_drawer_id', $activeDrawer->id)
+                ->where('payment_method', 'Airtel Money')
+                ->sum('amount_paid');
 
             $bankSales = Sale::where('cash_drawer_id', $activeDrawer->id)
+                ->whereNull('repair_id')
                 ->whereIn('payment_method', ['Bank Transfer', 'Card'])
                 ->whereIn('payment_status', ['Paid'])
-                ->sum('final_amount');
+                ->sum('final_amount')
+                + \App\Models\LayawayPayment::where('cash_drawer_id', $activeDrawer->id)
+                ->whereIn('payment_method', ['Bank Transfer', 'Card'])
+                ->sum('amount_paid');
 
             $totalSalesCount = Sale::where('cash_drawer_id', $activeDrawer->id)->count();
 

@@ -16,14 +16,14 @@ class WarrantyController extends Controller
     {
         $query = WarrantyClaim::with(['deviceImei.product.brand', 'saleItem.sale', 'customer']);
 
-        if ($request->has('search')) {
-            $searchTerm = $request->search;
+        if ($request->filled('search')) {
+            $searchTerm = '%' . strtolower(trim($request->search)) . '%';
             $query->where(function($q) use ($searchTerm) {
-                $q->where('claim_type', 'like', "%{$searchTerm}%")
-                  ->orWhere('status', 'like', "%{$searchTerm}%")
+                $q->whereRaw('LOWER(claim_type) LIKE ?', [$searchTerm])
+                  ->orWhereRaw('LOWER(status) LIKE ?', [$searchTerm])
                   ->orWhereHas('customer', function($cq) use ($searchTerm) {
-                      $cq->where('name', 'like', "%{$searchTerm}%")
-                         ->orWhere('phone', 'like', "%{$searchTerm}%");
+                      $cq->whereRaw('LOWER(name) LIKE ?', [$searchTerm])
+                         ->orWhereRaw('LOWER(phone) LIKE ?', [$searchTerm]);
                   });
             });
         }
@@ -34,8 +34,8 @@ class WarrantyController extends Controller
             ->where('status', 'In Stock')
             ->get();
 
-        $activeClaims = WarrantyClaim::whereIn('status', ['Pending', 'Approved'])->count();
-        $resolvedClaims = WarrantyClaim::whereIn('status', ['Resolved', 'Rejected'])->count();
+        $activeClaims = WarrantyClaim::whereIn('status', ['Pending', 'Approved', 'In Repair'])->count();
+        $resolvedClaims = WarrantyClaim::whereIn('status', ['Completed', 'Resolved', 'Rejected'])->count();
         $totalClaims = WarrantyClaim::count();
 
         return Inertia::render('Warranties/Index', [
@@ -198,10 +198,9 @@ class WarrantyController extends Controller
             $status = 'Completed';
             $resolvedAt = now();
 
-            // Update parent Sale record to Refunded
-            $saleItem = SaleItem::find($validated['sale_item_id']);
-            if ($saleItem && $saleItem->sale) {
-                $saleItem->sale->update(['payment_status' => 'Refunded']);
+            $saleItem = SaleItem::with('sale')->find($validated['sale_item_id']);
+            if ($saleItem && $saleItem->sale && $saleItem->sale->payment_status !== 'Refunded') {
+                $this->processWarrantyRefund($saleItem, $validated['payment_method'] ?? null, "Warranty Refund for IMEI {$oldDevice->imei}");
             }
         }
 
@@ -216,7 +215,7 @@ class WarrantyController extends Controller
             'resolved_at' => $resolvedAt,
         ]);
 
-        return redirect()->back()->with('message', 'Warranty claim submitted successfully.');
+        return redirect()->back()->with('success', 'Warranty claim submitted successfully.');
     }
 
     public function update(Request $request, WarrantyClaim $claim)
@@ -243,9 +242,8 @@ class WarrantyController extends Controller
             $oldDevice->update(['status' => 'Defective']);
             $notes .= " [Device Marked Defective]";
 
-            // If marked defective as part of refund, set sale status to Refunded
-            if ($claim->saleItem && $claim->saleItem->sale) {
-                $claim->saleItem->sale->update(['payment_status' => 'Refunded']);
+            if ($claim->saleItem && $claim->saleItem->sale && $claim->saleItem->sale->payment_status !== 'Refunded') {
+                $this->processWarrantyRefund($claim->saleItem, $validated['payment_method'] ?? null, "Warranty Claim #{$claim->id} Refund for IMEI {$oldDevice->imei}");
             }
         } elseif ($deviceAction === 'issue_replacement' && !empty($validated['replacement_imei_id'])) {
             $newDevice = DeviceImei::with('product.brand')->find($validated['replacement_imei_id']);
@@ -279,7 +277,69 @@ class WarrantyController extends Controller
 
         $claim->update($updateData);
 
-        return redirect()->back()->with('message', 'Claim status updated successfully.');
+        return redirect()->back()->with('success', 'Claim status updated successfully.');
+    }
+
+    private function processWarrantyRefund(SaleItem $saleItem, ?string $paymentMethod, string $description): void
+    {
+        $sale = $saleItem->sale;
+        if (!$sale) return;
+
+        $refundAmount = (float) ($saleItem->price * ($saleItem->quantity ?? 1));
+        if ($sale->payment_status === 'Partial') {
+            $refundAmount = min($refundAmount, (float) $sale->layawayPayments()->sum('amount_paid'));
+        }
+
+        $method = $paymentMethod ?: (($sale->payment_method && $sale->payment_method !== 'Layaway') ? $sale->payment_method : 'Cash');
+        $sale->update(['payment_status' => 'Refunded']);
+
+        // Revert inward dealer consignment if linked
+        if ($saleItem->device_imei_id) {
+            $dealerItem = \App\Models\DealerItem::where('direction', 'inward')
+                ->where('device_imei_id', $saleItem->device_imei_id)
+                ->where('sale_id', $sale->id)
+                ->first();
+            if ($dealerItem) {
+                $newQtySold = max(0, (int) $dealerItem->quantity_sold - 1);
+                $dealerItem->update([
+                    'quantity_sold' => $newQtySold,
+                    'status' => $newQtySold === 0 ? 'Pending' : $dealerItem->status,
+                    'sold_at' => $newQtySold === 0 ? null : $dealerItem->sold_at,
+                    'sale_id' => $newQtySold === 0 ? null : $dealerItem->sale_id,
+                ]);
+            }
+        }
+
+        if ($refundAmount > 0) {
+            $account = $method === 'Cash'
+                ? \App\Services\TreasuryService::getTillAccount()
+                : \App\Models\PaymentAccount::getForMethod($method);
+
+            $activeDrawer = $method === 'Cash'
+                ? \App\Models\CashDrawer::where('user_id', auth()->id())->where('status', 'open')->first()
+                : null;
+
+            \App\Models\Expense::create([
+                'cash_drawer_id' => $activeDrawer?->id,
+                'payment_account_id' => $account?->id,
+                'user_id' => auth()->id(),
+                'category' => 'Refund',
+                'amount' => $refundAmount,
+                'expense_date' => now(),
+                'description' => $description . " (Sale #{$sale->id} via {$method})",
+                'recorded_by' => auth()->id(),
+            ]);
+
+            \App\Services\TreasuryService::recordOutflow(
+                $account,
+                $refundAmount,
+                'Refund',
+                $sale,
+                $description . " (Sale #{$sale->id} via {$method})",
+                'WAR-REF-' . $sale->id,
+                auth()->id()
+            );
+        }
     }
 
     private function handlePriceDifference($saleItem, $newDevice, $customer_id, $paymentMethod)

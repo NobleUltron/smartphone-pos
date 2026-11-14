@@ -19,6 +19,7 @@ export default function ReceiptsIndex({ auth, sales, summary, filters, settings 
 
     const refundForm = useForm({
         restock_action: 'restock',
+        refund_method: 'Cash',
         notes: ''
     });
 
@@ -26,6 +27,7 @@ export default function ReceiptsIndex({ auth, sales, summary, filters, settings 
         setSelectedRefundSale(sale);
         refundForm.setData({
             restock_action: 'restock',
+            refund_method: sale.payment_method && sale.payment_method !== 'Layaway' ? sale.payment_method : 'Cash',
             notes: ''
         });
         setShowRefundModal(true);
@@ -80,13 +82,15 @@ export default function ReceiptsIndex({ auth, sales, summary, filters, settings 
                 title="Issued Receipts"
                 breadcrumbs={[{ label: 'Home', href: '/' }, { label: 'Issued Receipts' }]}
                 actions={
-                    <a 
-                        href="/api/export/sales"
-                        className="saas-btn saas-btn-success"
-                        title="Export Sales Records as Excel Spreadsheet"
-                    >
-                        <FileSpreadsheet size={16} /> Export Sales (Excel)
-                    </a>
+                    ['admin', 'manager'].includes((auth?.user?.role || '').toLowerCase()) ? (
+                        <a 
+                            href="/api/export/sales"
+                            className="saas-btn saas-btn-success"
+                            title="Export Sales Records as Excel Spreadsheet"
+                        >
+                            <FileSpreadsheet size={16} /> Export Sales (Excel)
+                        </a>
+                    ) : null
                 }
             />
 
@@ -657,11 +661,24 @@ export default function ReceiptsIndex({ auth, sales, summary, filters, settings 
                                     </div>
                                 )}
                                 <div className="bg-amber-50 text-amber-800 p-4 rounded-xl text-sm mb-6 border border-amber-100">
-                                    <strong>Refund Amount:</strong> {Number(selectedRefundSale.final_amount).toLocaleString()} UGX<br/><br/>
+                                    <strong>Refund Amount:</strong> {(selectedRefundSale.payment_method === 'Layaway' ? Number(selectedRefundSale.amount_paid || 0) : Number(selectedRefundSale.final_amount)).toLocaleString()} UGX<br/><br/>
                                     This will mark receipt <strong>#{selectedRefundSale.id}</strong> as Refunded and adjust Net Revenue metrics accordingly.
                                 </div>
 
                                 <div className="space-y-4">
+                                    <div>
+                                        <label className="saas-label">Refund Method</label>
+                                        <select
+                                            className="saas-input"
+                                            value={refundForm.data.refund_method}
+                                            onChange={(e) => refundForm.setData('refund_method', e.target.value)}
+                                        >
+                                            <option value="Cash">Cash (Active Shift Drawer)</option>
+                                            <option value="MTN MoMo">MTN MoMo</option>
+                                            <option value="Airtel Money">Airtel Money</option>
+                                            <option value="Bank Transfer">Bank Transfer</option>
+                                        </select>
+                                    </div>
                                     <div>
                                         <label className="saas-label">Inventory Action for Returned Items</label>
                                         <select 
@@ -687,7 +704,7 @@ export default function ReceiptsIndex({ auth, sales, summary, filters, settings 
                                 </div>
                             </div>
                             <div className="px-6 py-4 border-t border-slate-100 bg-slate-50 flex gap-3 justify-end">
-                                <Button variant="danger" type="button" onClick={() => setShowRefundModal(false)}>Cancel</Button>
+                                <Button variant="secondary" type="button" onClick={() => setShowRefundModal(false)}>Cancel</Button>
                                 <Button variant="danger" type="submit" isLoading={refundForm.processing}>
                                     Confirm Refund
                                 </Button>

@@ -138,10 +138,15 @@ Thank you.`;
 
         setData(data => ({
             ...data,
+            status: repair.status,
+            issue_description: repair.issue_description || '',
+            technician_notes: repair.technician_notes || '',
+            expected_completion_date: repair.expected_completion_date ? new Date(repair.expected_completion_date).toISOString().slice(0, 16) : '',
             estimated_cost: repair.estimated_cost,
             deposit: actualDeposit,
+            technician_id: repair.technician_id || '',
         }));
-    }, [repair.estimated_cost, repair.deposit, repair.sale]);
+    }, [repair.id, repair.estimated_cost, repair.deposit, repair.sale]);
 
     const handleAddPart = () => {
         if (!selectedProduct) return;
@@ -301,9 +306,9 @@ Thank you.`;
                                         <Hash size={13} className="text-slate-400" /> {repair.imei_serial}
                                     </div>
                                 )}
-                                {repair.passcode && (
+                                {(repair.device_passcode || repair.passcode) && (
                                     <div className="text-slate-700 dark:text-slate-300 flex items-center gap-2 pt-2 border-t border-slate-100 dark:border-slate-800 text-xs">
-                                        <Lock size={13} className="text-slate-400" /> Passcode: <span className="font-mono bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded text-slate-900 dark:text-white">{repair.passcode}</span>
+                                        <Lock size={13} className="text-slate-400" /> Passcode: <span className="font-mono bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded text-slate-900 dark:text-white">{repair.device_passcode || repair.passcode}</span>
                                     </div>
                                 )}
                             </div>

@@ -17,7 +17,7 @@ export default function History({ auth, drawers }) {
                 <PageHeader 
                     title="Shift Audit History" 
                     breadcrumbs={[
-                        { label: 'Dashboard', href: '/dashboard' },
+                        { label: 'Home', href: '/' },
                         { label: 'Shift Management', href: route('cash-drawer.index') },
                         { label: 'Shift History' }
                     ]}

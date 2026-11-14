@@ -534,6 +534,7 @@ export default function Receipt({ sale, settings }) {
             {/* ========================================================= */}
             <div 
                 ref={a4Ref}
+                data-receipt-light-mode="true"
                 className={`a4-invoice-container bg-white w-full max-w-[840px] mx-auto shadow-2xl rounded-2xl p-6 sm:p-8 text-slate-900 border border-slate-200 print:shadow-none print:rounded-none print:border-none print:p-0 print:m-0 print:max-w-none print:w-full ${
                     format === 'a4' ? 'block' : 'hidden print:hidden'
                 }`}

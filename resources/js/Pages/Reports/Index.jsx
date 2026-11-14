@@ -35,10 +35,10 @@ export default function ReportsIndex({
         const { cx, cy, innerRadius, outerRadius, startAngle, endAngle, fill, payload, value } = props;
         return (
             <g>
-                <text x={cx} y={cy - 8} textAnchor="middle" fill="#1E293B" className="font-bold text-sm">
+                <text x={cx} y={cy - 8} textAnchor="middle" fill="currentColor" className="font-bold text-sm text-slate-800 dark:text-slate-100">
                     {payload.name}
                 </text>
-                <text x={cx} y={cy + 12} textAnchor="middle" fill="#64748B" className="text-xs font-medium">
+                <text x={cx} y={cy + 12} textAnchor="middle" fill="currentColor" className="text-xs font-medium text-slate-500 dark:text-slate-400">
                     {value} Units
                 </text>
                 <Sector

@@ -238,7 +238,7 @@ export default function Index({ audits = {}, metrics = {} }) {
                     </div>
 
                     <div className="mt-8 flex justify-end gap-3 pt-4 border-t border-slate-100">
-                        <Button variant="danger" onClick={() => setShowNewModal(false)}>Cancel</Button>
+                        <Button variant="secondary" onClick={() => setShowNewModal(false)}>Cancel</Button>
                         <Button variant="primary" type="submit" disabled={processing}>
                             Launch Scanner Workspace
                         </Button>

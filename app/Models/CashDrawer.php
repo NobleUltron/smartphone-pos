@@ -43,6 +43,7 @@ class CashDrawer extends Model
     public function calculateExpectedCash()
     {
         $cashSales = Sale::where('cash_drawer_id', $this->id)
+            ->whereNull('repair_id')
             ->where('payment_method', 'Cash')
             ->whereIn('payment_status', ['Paid', 'Refunded'])
             ->sum('final_amount');
@@ -52,8 +53,8 @@ class CashDrawer extends Model
             ->sum('amount_paid');
             
         $cashIns = $this->expenses()->where('category', 'Cash In')->sum('amount');
-        $operatingExpenses = $this->expenses()->whereNotIn('category', ['Refund', 'Cash In'])->sum('amount');
-        $refunds = $this->expenses()->where('category', 'Refund')->sum('amount');
+        $operatingExpenses = $this->expenses()->whereNotIn('category', ['Refund', 'Refund (Past Shift)', 'Cash In'])->sum('amount');
+        $refunds = $this->expenses()->whereIn('category', ['Refund', 'Refund (Past Shift)'])->sum('amount');
         
         $grossCashSales = $cashSales + $layawayCash;
         $netCashSales = $grossCashSales - $refunds;

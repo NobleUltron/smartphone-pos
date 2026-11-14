@@ -420,12 +420,14 @@ class DealerController extends Controller
             return response()->json([]);
         }
 
+        $searchTerm = '%' . strtolower($query) . '%';
+
         $serialized = DeviceImei::with(['product.brand'])
             ->where('status', 'In Stock')
-            ->where(function($q) use ($query) {
-                $q->where('imei', 'LIKE', "%{$query}%")
-                  ->orWhereHas('product', function($q2) use ($query) {
-                      $q2->where('model_name', 'LIKE', "%{$query}%");
+            ->where(function($q) use ($searchTerm) {
+                $q->whereRaw('LOWER(imei) LIKE ?', [$searchTerm])
+                  ->orWhereHas('product', function($q2) use ($searchTerm) {
+                      $q2->whereRaw('LOWER(model_name) LIKE ?', [$searchTerm]);
                   });
             })
             ->take(10)
@@ -438,9 +440,9 @@ class DealerController extends Controller
         $bulk = \App\Models\Product::with(['category', 'brand'])
             ->where('type', 'bulk')
             ->where('quantity', '>', 0)
-            ->where(function($q) use ($query) {
-                $q->where('model_name', 'LIKE', "%{$query}%")
-                  ->orWhere('sku', 'LIKE', "%{$query}%");
+            ->where(function($q) use ($searchTerm) {
+                $q->whereRaw('LOWER(model_name) LIKE ?', [$searchTerm])
+                  ->orWhereRaw('LOWER(sku) LIKE ?', [$searchTerm]);
             })
             ->take(10)
             ->get()
@@ -675,7 +677,6 @@ class DealerController extends Controller
                                 'color' => $itemData['color'] ?? null,
                             ]);
                         }
-                        $product->increment('quantity', 1);
                     } else {
                         $product->increment('quantity', $itemData['quantity']);
                     }
@@ -776,19 +777,33 @@ class DealerController extends Controller
 
                 $existing = DeviceImei::where('imei', $validated['imei_number'])->first();
                 if ($existing) {
-                    return redirect()->back()->with('error', 'Device IMEI ' . $validated['imei_number'] . ' already exists in system.');
+                    if ($existing->status === 'In Stock') {
+                        return redirect()->back()->with('error', 'Device IMEI ' . $validated['imei_number'] . ' is already In Stock.');
+                    }
+                    $existing->update([
+                        'product_id' => $product->id,
+                        'cost_price' => $validated['wholesale_cost'],
+                        'initial_cost_price' => $validated['wholesale_cost'],
+                        'refurbishment_cost' => 0,
+                        'selling_price' => $validated['retail_price'],
+                        'status' => 'In Stock',
+                        'condition' => $validated['condition'] ?? 'Brand New',
+                        'storage_capacity' => $validated['storage_capacity'] ?? $existing->storage_capacity,
+                        'color' => $validated['color'] ?? $existing->color,
+                    ]);
+                    $deviceImei = $existing;
+                } else {
+                    $deviceImei = DeviceImei::create([
+                        'product_id' => $product->id,
+                        'imei' => $validated['imei_number'],
+                        'cost_price' => $validated['wholesale_cost'],
+                        'selling_price' => $validated['retail_price'],
+                        'status' => 'In Stock',
+                        'condition' => $validated['condition'] ?? 'Brand New',
+                        'storage_capacity' => $validated['storage_capacity'] ?? null,
+                        'color' => $validated['color'] ?? null,
+                    ]);
                 }
-
-                $deviceImei = DeviceImei::create([
-                    'product_id' => $product->id,
-                    'imei' => $validated['imei_number'],
-                    'cost_price' => $validated['wholesale_cost'],
-                    'selling_price' => $validated['retail_price'],
-                    'status' => 'In Stock',
-                    'condition' => $validated['condition'] ?? 'Brand New',
-                    'storage_capacity' => $validated['storage_capacity'] ?? null,
-                    'color' => $validated['color'] ?? null,
-                ]);
             } else {
                 $product->increment('quantity', $validated['quantity']);
             }

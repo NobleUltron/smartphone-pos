@@ -61,6 +61,7 @@ Route::get('/', function (\Illuminate\Http\Request $request) {
 
 Route::get('/dashboard', function () {
     $todayDirectSales = Sale::whereDate('sale_date', Carbon::today())
+        ->whereNull('repair_id')
         ->whereIn('payment_status', ['Paid', 'Refunded'])
         ->where('payment_method', '!=', 'Layaway')
         ->sum('final_amount');
@@ -77,10 +78,10 @@ Route::get('/dashboard', function () {
     $scrappedCount = DeviceImei::where('status', 'Defective')->count();
     $lowStockCount = Cache::remember('global_low_stock_count', 90, function () {
         return Product::where(function ($query) {
-            $query->where('type', 'bulk')->where('quantity', '<=', 5);
+            $query->where('type', 'bulk')->where('quantity', '>', 0)->where('quantity', '<', 5);
         })->orWhere(function ($query) {
             $query->where('type', 'serialized')
-                  ->whereRaw("(SELECT COUNT(*) FROM device_imeis WHERE device_imeis.product_id = products.id AND device_imeis.status = 'In Stock') <= 5");
+                  ->whereRaw("(SELECT COUNT(*) FROM device_imeis WHERE device_imeis.product_id = products.id AND device_imeis.status = 'In Stock') BETWEEN 1 AND 4");
         })->count();
     });
 
@@ -91,6 +92,7 @@ Route::get('/dashboard', function () {
         return collect(range(6, 0))->map(function ($days) {
             $date = Carbon::today()->subDays($days);
             $directSales = Sale::whereDate('sale_date', $date)
+                ->whereNull('repair_id')
                 ->whereIn('payment_status', ['Paid', 'Refunded'])
                 ->where('payment_method', '!=', 'Layaway')
                 ->sum('final_amount');
@@ -122,14 +124,20 @@ Route::get('/dashboard', function () {
         ];
     });
 
-    $inventoryValue = DeviceImei::where('status', 'In Stock')->sum('selling_price');
+    $serializedInventoryCost = (float) DeviceImei::where('status', 'In Stock')->sum('cost_price');
+    $bulkInventoryCost = (float) Product::where('type', 'bulk')->where('quantity', '>', 0)
+        ->selectRaw('COALESCE(SUM(quantity * cost_price), 0) as total')
+        ->value('total');
+    $inventoryValue = $serializedInventoryCost + $bulkInventoryCost;
 
     $topBrands = Cache::remember('dashboard_top_brands', 180, function () {
         return \Illuminate\Support\Facades\DB::table('sale_items')
-            ->join('device_imeis', 'sale_items.device_imei_id', '=', 'device_imeis.id')
-            ->join('products', 'device_imeis.product_id', '=', 'products.id')
+            ->leftJoin('device_imeis', 'sale_items.device_imei_id', '=', 'device_imeis.id')
+            ->join('products', function ($join) {
+                $join->on('products.id', '=', \Illuminate\Support\Facades\DB::raw('COALESCE(sale_items.product_id, device_imeis.product_id)'));
+            })
             ->join('brands', 'products.brand_id', '=', 'brands.id')
-            ->select('brands.name', \Illuminate\Support\Facades\DB::raw('count(*) as value'))
+            ->select('brands.name', \Illuminate\Support\Facades\DB::raw('SUM(sale_items.quantity) as value'))
             ->groupBy('brands.name')
             ->orderByDesc('value')
             ->limit(5)

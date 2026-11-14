@@ -13,11 +13,14 @@ class RepairController extends Controller
     {
         $query = Repair::query();
 
-        if ($request->search) {
-            $query->where('customer_name', 'like', "%{$request->search}%")
-                  ->orWhere('customer_phone', 'like', "%{$request->search}%")
-                  ->orWhere('repair_code', 'like', "%{$request->search}%")
-                  ->orWhere('device_model', 'like', "%{$request->search}%");
+        if ($request->filled('search')) {
+            $term = '%' . strtolower(trim($request->search)) . '%';
+            $query->where(function ($q) use ($term) {
+                $q->whereRaw('LOWER(customer_name) LIKE ?', [$term])
+                  ->orWhereRaw('LOWER(customer_phone) LIKE ?', [$term])
+                  ->orWhereRaw('LOWER(repair_code) LIKE ?', [$term])
+                  ->orWhereRaw('LOWER(device_model) LIKE ?', [$term]);
+            });
         }
 
         if ($request->status && $request->status !== 'All') {
@@ -407,7 +410,14 @@ class RepairController extends Controller
     {
         $repair->load(['customer', 'user', 'parts.brand']);
         return Inertia::render('Repairs/PrintTicket', [
-            'repair' => $repair
+            'repair' => $repair,
+            'settings' => [
+                'shop_name' => \App\Models\Setting::get('shop_name', 'SmartPOS Kampala'),
+                'shop_address' => \App\Models\Setting::get('shop_address', '123 Kampala Road, Kampala'),
+                'shop_phone' => \App\Models\Setting::get('shop_phone', '+256 700 000 000'),
+                'currency_symbol' => \App\Models\Setting::get('currency_symbol', 'UGX'),
+                'store_logo' => \App\Models\Setting::getLogoUrl(),
+            ],
         ]);
     }
 
@@ -429,7 +439,7 @@ class RepairController extends Controller
                 'trade_in_value' => 0,
                 'final_amount' => $estCost,
                 'payment_method' => 'Layaway',
-                'payment_status' => $repair->status === 'Delivered' || ($totalPaid >= $estCost && $estCost > 0) ? 'Paid' : ($totalPaid > 0 ? 'Partial' : 'Pending'),
+                'payment_status' => $repair->status === 'Delivered' || ($totalPaid >= $estCost && $estCost > 0) ? 'Paid' : ($totalPaid > 0 ? 'Partial' : 'Unpaid'),
             ]);
 
             if ($totalPaid > 0) {
@@ -452,12 +462,15 @@ class RepairController extends Controller
             'payment_method' => 'required|in:Cash,Bank Transfer,MTN MoMo,Airtel Money',
         ]);
 
-        $activeDrawer = \App\Models\CashDrawer::where('user_id', auth()->id())
-            ->where('status', 'open')
-            ->first();
+        $activeDrawer = null;
+        if ($validated['payment_method'] === 'Cash') {
+            $activeDrawer = \App\Models\CashDrawer::where('user_id', auth()->id())
+                ->where('status', 'open')
+                ->first();
 
-        if (!$activeDrawer) {
-            return redirect()->back()->withErrors(['error' => 'You must have an open cash drawer to record a payment.']);
+            if (!$activeDrawer) {
+                return redirect()->back()->withErrors(['error' => 'You must have an open cash drawer to record a cash payment.']);
+            }
         }
 
         \DB::beginTransaction();
@@ -467,7 +480,7 @@ class RepairController extends Controller
             if (!$sale) {
                 $sale = \App\Models\Sale::create([
                     'user_id' => auth()->id(),
-                    'cash_drawer_id' => $activeDrawer->id,
+                    'cash_drawer_id' => $activeDrawer?->id,
                     'customer_id' => $repair->customer_id,
                     'repair_id' => $repair->id,
                     'total_amount' => $repair->estimated_cost,
@@ -479,7 +492,7 @@ class RepairController extends Controller
 
             \App\Models\LayawayPayment::create([
                 'sale_id' => $sale->id,
-                'cash_drawer_id' => $activeDrawer->id,
+                'cash_drawer_id' => $activeDrawer?->id,
                 'amount_paid' => $validated['amount_paid'],
                 'payment_method' => $validated['payment_method'],
                 'payment_date' => now(),

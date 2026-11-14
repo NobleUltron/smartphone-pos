@@ -193,7 +193,8 @@ class PurchaseController extends Controller
             }
         });
 
-        return redirect()->back();
+        return redirect()->route('suppliers.show', $validated['supplier_id'])
+            ->with('success', 'Purchase logged successfully.');
     }
 
     public function create(Request $request)
@@ -293,7 +294,7 @@ class PurchaseController extends Controller
                 $purchase->delete();
             });
 
-            return redirect()->back();
+            return redirect()->back()->with('success', 'Purchase deleted successfully.');
         } catch (\Exception $e) {
             return redirect()->back()->withErrors(['error' => $e->getMessage()]);
         }
@@ -328,7 +329,7 @@ class PurchaseController extends Controller
                 }
             });
 
-            return redirect()->back();
+            return redirect()->back()->with('success', 'Purchase marked as received.');
         } catch (\Exception $e) {
             return redirect()->back()->withErrors(['error' => $e->getMessage()]);
         }

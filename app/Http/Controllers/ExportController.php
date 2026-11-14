@@ -192,7 +192,7 @@ class ExportController extends Controller
         $this->styleHeaderRow($sheet, 'L');
 
         $rowNum = 2;
-        $repairs = Repair::with(['customer', 'user', 'sale.layawayPayments'])->orderBy('created_at', 'desc')->get();
+        $repairs = Repair::with(['customer', 'user', 'technician', 'sale.layawayPayments'])->orderBy('created_at', 'desc')->get();
         foreach ($repairs as $repair) {
             $totalPaid = $repair->sale ? $repair->sale->layawayPayments->sum('amount_paid') : $repair->deposit;
             $balance = max(0, $repair->estimated_cost - $totalPaid);
@@ -203,9 +203,9 @@ class ExportController extends Controller
                 $repair->customer_name,
                 $repair->customer_phone,
                 $repair->device_model,
-                (string)($repair->imei ?? 'N/A'),
-                $repair->problem_description,
-                $repair->user ? $repair->user->name : 'Unassigned',
+                (string)($repair->imei_serial ?? 'N/A'),
+                $repair->issue_description,
+                $repair->technician ? $repair->technician->name : ($repair->user ? $repair->user->name : 'Unassigned'),
                 $repair->status,
                 (float)$repair->estimated_cost,
                 (float)$totalPaid,

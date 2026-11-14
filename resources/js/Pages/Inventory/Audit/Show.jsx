@@ -376,7 +376,7 @@ export default function Show({ audit, unscannedDevices = [] }) {
                     </div>
 
                     <div className="flex justify-end gap-3 pt-4 border-t border-slate-100">
-                        <Button variant="danger" onClick={() => setShowCompleteModal(false)}>
+                        <Button variant="secondary" onClick={() => setShowCompleteModal(false)}>
                             Cancel
                         </Button>
                         <Button variant="primary" icon={CheckCircle} onClick={submitFinalizeAudit}>

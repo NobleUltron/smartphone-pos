@@ -549,7 +549,7 @@ export default function WarrantiesIndex({ auth, claims = {}, inStockDevices = []
                             </form>
                         </div>
                         <div className="px-6 py-4 border-t border-slate-100 bg-slate-50 flex gap-3 justify-end">
-                            <Button variant="danger" onClick={() => setShowClaimModal(false)}>Cancel</Button>
+                            <Button variant="secondary" onClick={() => setShowClaimModal(false)}>Cancel</Button>
                             <Button variant="primary" form="claimForm" type="submit" isLoading={claimForm.processing}>
                                 Submit Claim
                             </Button>
@@ -682,7 +682,7 @@ export default function WarrantiesIndex({ auth, claims = {}, inStockDevices = []
                             </form>
                         </div>
                         <div className="px-6 py-4 border-t border-slate-100 bg-slate-50 flex gap-3 justify-end">
-                            <Button variant="danger" onClick={() => setShowUpdateModal(false)}>Cancel</Button>
+                            <Button variant="secondary" onClick={() => setShowUpdateModal(false)}>Cancel</Button>
                             <Button variant="primary" form="updateForm" type="submit" isLoading={updateForm.processing}>
                                 Save Changes
                             </Button>

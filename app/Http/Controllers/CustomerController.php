@@ -8,16 +8,28 @@ use Inertia\Inertia;
 
 class CustomerController extends Controller
 {
-    public function index()
+    public function index(Request $request)
     {
-        $customers = Customer::withCount(['sales' => function ($query) {
+        $query = Customer::withCount(['sales' => function ($query) {
             $query->where('payment_status', '!=', 'Refunded');
         }])
         ->withSum(['sales' => function ($query) {
             $query->where('payment_status', '!=', 'Refunded');
-        }], 'final_amount')
-        ->orderBy('created_at', 'desc')
-        ->paginate(10);
+        }], 'final_amount');
+
+        if ($request->filled('search')) {
+            $term = '%' . strtolower(trim($request->search)) . '%';
+            $query->where(function ($q) use ($term) {
+                $q->whereRaw('LOWER(name) LIKE ?', [$term])
+                  ->orWhereRaw('LOWER(phone) LIKE ?', [$term])
+                  ->orWhereRaw('LOWER(COALESCE(company_name, \'\')) LIKE ?', [$term])
+                  ->orWhereRaw('LOWER(COALESCE(email, \'\')) LIKE ?', [$term]);
+            });
+        }
+
+        $customers = $query->orderBy('created_at', 'desc')
+            ->paginate(10)
+            ->withQueryString();
             
         $totalCustomers = Customer::count();
         $totalLtv = \App\Models\Sale::where('payment_status', '!=', 'Refunded')->sum('final_amount');
@@ -25,6 +37,7 @@ class CustomerController extends Controller
 
         return Inertia::render('Customers/Index', [
             'customers' => $customers,
+            'filters' => $request->only(['search']),
             'summary' => [
                 'total_customers' => $totalCustomers,
                 'total_ltv' => $totalLtv,
@@ -83,7 +96,7 @@ class CustomerController extends Controller
     public function history(Customer $customer)
     {
         $history = $customer->sales()
-            ->with(['saleItems.product.brand', 'user'])
+            ->with(['saleItems.product.brand', 'saleItems.deviceImei.product.brand', 'user'])
             ->orderBy('sale_date', 'desc')
             ->orderBy('created_at', 'desc')
             ->get()
@@ -100,9 +113,13 @@ class CustomerController extends Controller
                     'cashier' => $sale->user ? $sale->user->name : 'System',
                     'items' => $sale->saleItems->map(function ($item) {
                         $productName = 'Unknown Product';
-                        if ($item->product) {
-                            $brandName = $item->product->brand ? $item->product->brand->name : '';
-                            $productName = trim($brandName . ' ' . $item->product->model);
+                        $prod = $item->product ?? $item->deviceImei?->product;
+                        if ($prod) {
+                            $brandName = $prod->brand ? $prod->brand->name : '';
+                            $productName = trim($brandName . ' ' . $prod->model_name);
+                        }
+                        if ($item->deviceImei?->imei) {
+                            $productName .= ' (IMEI: ' . $item->deviceImei->imei . ')';
                         }
                         
                         return [
@@ -129,12 +146,12 @@ class CustomerController extends Controller
         $endDate = $request->query('end_date');
         $outputMode = $request->query('mode', 'download');
 
-        $query = $customer->sales()->with(['saleItems.product.brand', 'user']);
+        $query = $customer->sales()->with(['saleItems.product.brand', 'saleItems.deviceImei.product.brand', 'user']);
 
         if ($status === 'paid') {
             $query->where('payment_status', 'Paid');
         } elseif ($status === 'unpaid') {
-            $query->whereIn('payment_status', ['Pending', 'Partial', 'Layaway']);
+            $query->whereIn('payment_status', ['Unpaid', 'Partial']);
         }
 
         if ($startDate) {
@@ -149,7 +166,10 @@ class CustomerController extends Controller
 
         $totalSpent = $customer->sales()->where('payment_status', '!=', 'Refunded')->sum('final_amount');
         
-        $totalPaidDirect = $customer->sales()->where('payment_status', 'Paid')->sum('final_amount');
+        $totalPaidDirect = $customer->sales()
+            ->where('payment_status', 'Paid')
+            ->whereDoesntHave('layawayPayments')
+            ->sum('final_amount');
         $totalLayawayPaid = \App\Models\LayawayPayment::whereHas('sale', function ($q) use ($customer) {
             $q->where('customer_id', $customer->id);
         })->sum('amount_paid');
@@ -162,7 +182,7 @@ class CustomerController extends Controller
             'total_spent' => $totalSpent,
             'total_paid' => $totalPaid,
             'outstanding_balance' => $outstandingBalance,
-            'active_layaways_count' => $customer->sales()->whereIn('payment_status', ['Pending', 'Partial'])->count(),
+            'active_layaways_count' => $customer->sales()->whereIn('payment_status', ['Unpaid', 'Partial'])->count(),
         ];
 
         $settings = [

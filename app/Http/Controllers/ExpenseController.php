@@ -32,7 +32,8 @@ class ExpenseController extends Controller
 
         // Search by description
         if ($request->filled('search')) {
-            $query->where('description', 'like', '%' . $request->input('search') . '%');
+            $search = '%' . strtolower($request->input('search')) . '%';
+            $query->whereRaw('LOWER(description) LIKE ?', [$search]);
         }
 
         // Filter by category
@@ -64,15 +65,21 @@ class ExpenseController extends Controller
 
         $expenses = $query->paginate(15)->withQueryString();
 
-        // Summary aggregates based on current filter
+        // Summary aggregates based on current filter & role scope
         $summaryQuery = clone $query;
-        $todayTotal       = Expense::whereDate('expense_date', Carbon::today())->where('category', '!=', 'Cash In')->sum('amount');
+        $baseScope = Expense::query();
+        if (!$isAdminOrManager) {
+            $baseScope->where('user_id', $user->id);
+        }
+
+        $todayTotal       = (clone $baseScope)->whereDate('expense_date', Carbon::today())->where('category', '!=', 'Cash In')->sum('amount');
         $totalFiltered    = (clone $summaryQuery)->where('category', '!=', 'Cash In')->sum('amount');
         $totalCashIns     = (clone $summaryQuery)->where('category', 'Cash In')->sum('amount');
         $totalRefunds     = (clone $summaryQuery)->whereIn('category', ['Refund', 'Refund (Past Shift)'])->sum('amount');
         $totalOperating   = (clone $summaryQuery)->whereNotIn('category', ['Cash In', 'Refund', 'Refund (Past Shift)'])->sum('amount');
 
-        $topCategory = Expense::selectRaw('category, sum(amount) as total')
+        $topCategory = (clone $baseScope)->selectRaw('category, sum(amount) as total')
+            ->whereDate('expense_date', '>=', Carbon::now()->startOfMonth())
             ->groupBy('category')
             ->where('category', '!=', 'Cash In')
             ->orderByDesc('total')
@@ -172,13 +179,14 @@ class ExpenseController extends Controller
         }
 
         $expense = Expense::create([
-            'cash_drawer_id' => $isTill ? $activeDrawer?->id : null,
-            'user_id'        => $user->id,
-            'recorded_by'    => $user->id,
-            'amount'         => $request->amount,
-            'category'       => $request->category,
-            'description'    => $finalDescription,
-            'expense_date'   => Carbon::today(),
+            'cash_drawer_id'     => $isTill ? $activeDrawer?->id : null,
+            'payment_account_id' => $request->category === 'Cash In' ? $tillAccount?->id : ($selectedAccount?->id ?? $tillAccount?->id),
+            'user_id'            => $user->id,
+            'recorded_by'        => $user->id,
+            'amount'             => $request->amount,
+            'category'           => $request->category,
+            'description'        => $finalDescription,
+            'expense_date'       => Carbon::today(),
         ]);
 
         // Sync with Treasury Service
@@ -227,6 +235,11 @@ class ExpenseController extends Controller
             abort(403, 'Only managers can edit expenses.');
         }
 
+        $protectedCategories = ['Dealer Settlement', 'Supplier Payment', 'Refund', 'Refund (Past Shift)'];
+        if (in_array($expense->category, $protectedCategories)) {
+            return back()->with('error', "System-generated '{$expense->category}' entries must be managed from their source module (Dealers, Suppliers, or Receipts).");
+        }
+
         $request->validate([
             'amount'      => 'required|numeric|min:0.01',
             'category'    => 'required|string',
@@ -273,6 +286,11 @@ class ExpenseController extends Controller
     {
         $user = Auth::user();
         $isAdminOrManager = in_array(strtolower($user->role), ['admin', 'manager']);
+
+        $protectedCategories = ['Dealer Settlement', 'Supplier Payment', 'Refund', 'Refund (Past Shift)'];
+        if (in_array($expense->category, $protectedCategories)) {
+            return back()->with('error', "System-generated '{$expense->category}' entries cannot be deleted directly here. Reverse them in their source module.");
+        }
 
         // Cashiers can only delete their own same-day expenses that aren't system-generated
         if (!$isAdminOrManager) {

@@ -66,26 +66,27 @@ class POSController extends Controller
             });
 
         if ($query) {
-            $bulkProducts->where(function($q) use ($query) {
-                $q->where('model_name', 'like', "%{$query}%")
-                  ->orWhere('sku', 'like', "%{$query}%")
-                  ->orWhere('storage_capacity', 'like', "%{$query}%")
-                  ->orWhereHas('brand', function($q2) use ($query) {
-                      $q2->where('name', 'like', "%{$query}%");
+            $term = '%' . strtolower($query) . '%';
+            $bulkProducts->where(function($q) use ($term) {
+                $q->whereRaw('LOWER(model_name) LIKE ?', [$term])
+                  ->orWhereRaw('LOWER(sku) LIKE ?', [$term])
+                  ->orWhereRaw('LOWER(storage_capacity) LIKE ?', [$term])
+                  ->orWhereHas('brand', function($q2) use ($term) {
+                      $q2->whereRaw('LOWER(name) LIKE ?', [$term]);
                   });
             });
 
-            $serializedProducts->where(function($q) use ($query) {
-                $q->where('model_name', 'like', "%{$query}%")
-                  ->orWhereHas('brand', function($q2) use ($query) {
-                      $q2->where('name', 'like', "%{$query}%");
+            $serializedProducts->where(function($q) use ($term) {
+                $q->whereRaw('LOWER(model_name) LIKE ?', [$term])
+                  ->orWhereHas('brand', function($q2) use ($term) {
+                      $q2->whereRaw('LOWER(name) LIKE ?', [$term]);
                   })
-                  ->orWhereHas('deviceImeis', function($dQuery) use ($query) {
+                  ->orWhereHas('deviceImeis', function($dQuery) use ($term) {
                       $dQuery->where('status', 'In Stock')
-                             ->where(function($dq) use ($query) {
-                                 $dq->where('storage_capacity', 'like', "%{$query}%")
-                                    ->orWhere('imei', 'like', "%{$query}%")
-                                    ->orWhere('color', 'like', "%{$query}%");
+                             ->where(function($dq) use ($term) {
+                                 $dq->whereRaw('LOWER(storage_capacity) LIKE ?', [$term])
+                                    ->orWhereRaw('LOWER(imei) LIKE ?', [$term])
+                                    ->orWhereRaw('LOWER(color) LIKE ?', [$term]);
                              });
                   });
             });
@@ -109,11 +110,17 @@ class POSController extends Controller
             'items.*.id' => 'required',
             'items.*.price' => 'required|numeric',
             'payment_method' => 'required|in:Cash,Bank Transfer,MTN MoMo,Airtel Money,Layaway',
+            'deposit_payment_method' => 'nullable|in:Cash,Bank Transfer,MTN MoMo,Airtel Money',
             'amount_paid' => 'nullable|numeric|min:0',
             'tendered_amount' => 'nullable|numeric|min:0',
-            'discount' => 'numeric|min:0',
+            'discount' => 'nullable|numeric|min:0',
             'customer_id' => 'nullable|exists:customers,id'
         ]);
+
+        $userRole = auth()->user()->role ?? 'cashier';
+        if ($userRole === 'cashier' && floatval($request->discount ?? 0) > 0 && !\App\Models\Setting::get('allow_cashier_discounts', true)) {
+            return response()->json(['message' => 'Cashiers are not authorized to grant custom discounts.'], 422);
+        }
 
         DB::beginTransaction();
 
@@ -182,12 +189,14 @@ class POSController extends Controller
                 'tendered_amount' => $request->tendered_amount,
             ]);
 
+            $layawayPayment = null;
+            $depositMethod = $request->input('deposit_payment_method') ?: 'Cash';
             if ($request->payment_method === 'Layaway' && $request->amount_paid > 0) {
-                \App\Models\LayawayPayment::create([
+                $layawayPayment = \App\Models\LayawayPayment::create([
                     'sale_id' => $sale->id,
-                    'cash_drawer_id' => $activeDrawer->id,
+                    'cash_drawer_id' => $depositMethod === 'Cash' ? $activeDrawer->id : null,
                     'amount_paid' => $request->amount_paid,
-                    'payment_method' => 'Cash', // Defaulting initial deposit to Cash, or we can make it dynamic later
+                    'payment_method' => $depositMethod,
                     'payment_date' => now()
                 ]);
             }
@@ -221,7 +230,7 @@ class POSController extends Controller
                     $imeiStr .= '-TR' . rand(100, 999);
                 }
 
-                \App\Models\DeviceImei::create([
+                $tradeInDevice = \App\Models\DeviceImei::create([
                     'product_id' => $product->id,
                     'imei' => $imeiStr,
                     'condition' => !empty($tradeIn['condition']) ? $tradeIn['condition'] : 'Used Grade A',
@@ -231,6 +240,7 @@ class POSController extends Controller
                     'storage_capacity' => !empty($tradeIn['storage_capacity']) ? $tradeIn['storage_capacity'] : 'Unknown',
                     'color' => !empty($tradeIn['color']) ? $tradeIn['color'] : 'Unknown',
                 ]);
+                $sale->update(['trade_in_imei_id' => $tradeInDevice->id]);
             }
 
             foreach ($request->items as $item) {
@@ -267,21 +277,28 @@ class POSController extends Controller
                     ]);
                     \App\Models\Product::where('id', $item['id'])->decrement('quantity', $item['quantity'] ?? 1);
 
-                    // Automatically update bulk inward dealer consignment item status & balance
-                    $inwardDealerItem = \App\Models\DealerItem::where('product_id', $item['id'])
+                    // Automatically update bulk inward dealer consignment item status & balance (FIFO capped by batch availability)
+                    $qtyToAllocate = (int) ($item['quantity'] ?? 1);
+                    $inwardDealerItems = \App\Models\DealerItem::where('product_id', $item['id'])
                         ->where('direction', 'inward')
                         ->where('status', 'Pending')
-                        ->first();
+                        ->orderBy('id')
+                        ->get();
 
-                    if ($inwardDealerItem) {
-                        $qtySold = $item['quantity'] ?? 1;
-                        $inwardDealerItem->quantity_sold += $qtySold;
-                        if ($inwardDealerItem->quantity_sold >= $inwardDealerItem->quantity) {
+                    foreach ($inwardDealerItems as $inwardDealerItem) {
+                        if ($qtyToAllocate <= 0) break;
+                        $availableInBatch = max(0, (int) $inwardDealerItem->quantity - (int) $inwardDealerItem->quantity_sold - (int) $inwardDealerItem->quantity_returned);
+                        if ($availableInBatch <= 0) continue;
+
+                        $take = min($qtyToAllocate, $availableInBatch);
+                        $inwardDealerItem->quantity_sold += $take;
+                        if (($inwardDealerItem->quantity_sold + (int) $inwardDealerItem->quantity_returned) >= $inwardDealerItem->quantity) {
                             $inwardDealerItem->status = 'Sold';
                             $inwardDealerItem->sold_at = now();
                         }
                         $inwardDealerItem->sale_id = $sale->id;
                         $inwardDealerItem->save();
+                        $qtyToAllocate -= $take;
                     }
                 }
             }
@@ -297,23 +314,16 @@ class POSController extends Controller
                     null,
                     auth()->id()
                 );
-            } elseif ($request->payment_method === 'Layaway' && $request->amount_paid > 0) {
+            } elseif ($request->payment_method === 'Layaway' && $layawayPayment) {
                 \App\Services\TreasuryService::recordInflow(
-                    'Cash',
+                    $depositMethod,
                     floatval($request->amount_paid),
                     'Layaway Deposit',
-                    $sale,
+                    $layawayPayment,
                     "Layaway Deposit for Sale #{$sale->id}",
                     null,
                     auth()->id()
                 );
-            }
-
-            $userRole = auth()->user()->role ?? 'cashier';
-            if ($userRole === 'cashier') {
-                if ($discount > 0 && !\App\Models\Setting::get('allow_cashier_discounts', true)) {
-                    return response()->json(['message' => 'Cashiers are not authorized to grant custom discounts.'], 422);
-                }
             }
 
             // Record audit log

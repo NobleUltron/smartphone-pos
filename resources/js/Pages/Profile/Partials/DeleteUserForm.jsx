@@ -62,19 +62,19 @@ export default function DeleteUserForm() {
 
             {confirmingUserDeletion && (
                 <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm animate-fade-in">
-                    <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden flex flex-col">
-                        <div className="px-6 py-4 border-b border-rose-100 flex items-center justify-between bg-rose-50/50">
-                            <h3 className="font-bold text-slate-900 flex items-center gap-2">
+                    <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-2xl w-full max-w-md overflow-hidden flex flex-col">
+                        <div className="px-6 py-4 border-b border-rose-100 dark:border-rose-900/50 flex items-center justify-between bg-rose-50/50 dark:bg-rose-950/30">
+                            <h3 className="font-bold text-slate-900 dark:text-white flex items-center gap-2">
                                 <AlertTriangle size={18} className="text-rose-500" />
                                 Are you absolutely sure?
                             </h3>
-                            <button onClick={closeModal} className="text-slate-400 hover:text-slate-600 transition-colors">
+                            <button onClick={closeModal} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors">
                                 &times;
                             </button>
                         </div>
                         
                         <form onSubmit={deleteUser} className="p-6">
-                            <p className="text-sm text-slate-600 mb-6">
+                            <p className="text-sm text-slate-600 dark:text-slate-300 mb-6">
                                 Once your account is deleted, all of its resources and data will be permanently deleted. Please enter your password to confirm you would like to permanently delete your account.
                             </p>
 

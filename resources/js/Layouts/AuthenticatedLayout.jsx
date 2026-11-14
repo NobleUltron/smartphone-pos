@@ -90,7 +90,7 @@ function LayoutInner({ children }) {
             items: [
                 dashboardLink,
                 !isTechnician ? { name: 'POS Checkout', href: route('pos.index'), icon: ShoppingCart, active: route().current('pos.*') } : null,
-                isAdminOrManager ? { name: 'Money & Accounts', href: route('accounts.index'), icon: Landmark, active: route().current('accounts.*') } : null,
+                isAdminOrManager ? { name: 'Money & Accounts', href: route('accounts.index'), icon: Landmark, active: route().current('accounts.*') || route().current('partners.*') } : null,
                 !isTechnician ? { name: 'Shift Management', href: route('cash-drawer.index'), icon: Wallet, active: route().current('cash-drawer.*') } : null,
                 !isTechnician ? { name: 'Expenses', href: route('expenses.index'), icon: Receipt, active: route().current('expenses.*') } : null,
             ].filter(Boolean)
@@ -330,11 +330,11 @@ function LayoutInner({ children }) {
                                 <div className="max-h-72 overflow-y-auto divide-y divide-slate-800/60">
                                     {usePage().props.notifications?.length > 0 ? (
                                         usePage().props.notifications.map((n, i) => (
-                                            <div key={i} className="p-4 text-xs hover:bg-white/5 transition-colors">
+                                            <Link key={i} href={n.url || '#'} className="block p-4 text-xs hover:bg-white/5 transition-colors">
                                                 <p className="font-bold text-white">{n.title}</p>
-                                                <p className="text-slate-400 mt-1 leading-relaxed">{n.message}</p>
+                                                <p className="text-slate-400 mt-1 leading-relaxed">{n.description || n.message}</p>
                                                 <span className="text-[10px] text-slate-500 font-semibold block mt-2">{n.time}</span>
-                                            </div>
+                                            </Link>
                                         ))
                                     ) : (
                                         <div className="py-8 text-center text-xs text-slate-400">

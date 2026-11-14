@@ -73,7 +73,7 @@ export default function QuotationsEdit({ quotation, customers, products }) {
             const prod = products.find(p => String(p.id) === String(value));
             if (prod) {
                 updated[index].item_name = `${prod.brand?.name ? prod.brand.name + ' ' : ''}${prod.model_name}`;
-                updated[index].unit_price = prod.base_price;
+                updated[index].unit_price = prod.selling_price ?? prod.base_price ?? 0;
             }
         }
 
@@ -266,7 +266,7 @@ export default function QuotationsEdit({ quotation, customers, products }) {
                                                     <option value="">-- Choose Catalog Product --</option>
                                                     {products.map(p => (
                                                         <option key={p.id} value={p.id}>
-                                                            {p.brand?.name ? `${p.brand.name} ` : ''}{p.model_name} (UGX {Number(p.base_price).toLocaleString()})
+                                                            {p.brand?.name ? `${p.brand.name} ` : ''}{p.model_name} (Stock: {p.type === 'serialized' ? (p.in_stock_imeis_count ?? 0) : p.quantity}) — UGX {Number(p.selling_price ?? p.base_price ?? 0).toLocaleString()}
                                                         </option>
                                                     ))}
                                                 </select>

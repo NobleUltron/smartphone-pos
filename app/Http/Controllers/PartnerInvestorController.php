@@ -8,6 +8,7 @@ use App\Models\PaymentAccount;
 use App\Models\AccountTransaction;
 use App\Models\DeviceImei;
 use App\Models\Setting;
+use App\Services\TreasuryService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
@@ -87,7 +88,7 @@ class PartnerInvestorController extends Controller
             if (!empty($validated['initial_deposit']) && $validated['initial_deposit'] > 0) {
                 $paymentAccountId = $validated['payment_account_id'] ?? null;
 
-                PartnerTransaction::create([
+                $tx = PartnerTransaction::create([
                     'partner_investor_id' => $partner->id,
                     'payment_account_id' => $paymentAccountId,
                     'type' => 'deposit',
@@ -101,18 +102,15 @@ class PartnerInvestorController extends Controller
                 if ($paymentAccountId) {
                     $account = PaymentAccount::find($paymentAccountId);
                     if ($account) {
-                        $account->increment('current_balance', $validated['initial_deposit']);
-
-                        AccountTransaction::create([
-                            'payment_account_id' => $account->id,
-                            'type' => 'inflow',
-                            'category' => 'partner_capital',
-                            'amount' => $validated['initial_deposit'],
-                            'transaction_date' => now(),
-                            'transaction_reference' => 'PARTNER-' . $partner->id . '-' . time(),
-                            'description' => "Initial capital deposit from {$partner->name}",
-                            'user_id' => $request->user()->id ?? null,
-                        ]);
+                        TreasuryService::recordInflow(
+                            $account,
+                            (float) $validated['initial_deposit'],
+                            'partner_capital',
+                            $tx,
+                            "Initial capital deposit from {$partner->name}",
+                            'PARTNER-' . $partner->id . '-' . time(),
+                            $request->user()->id ?? null
+                        );
                     }
                 }
             }
@@ -183,18 +181,15 @@ class PartnerInvestorController extends Controller
             if (!empty($validated['payment_account_id'])) {
                 $account = PaymentAccount::find($validated['payment_account_id']);
                 if ($account) {
-                    $account->increment('current_balance', $validated['amount']);
-
-                    AccountTransaction::create([
-                        'payment_account_id' => $account->id,
-                        'type' => 'inflow',
-                        'category' => 'partner_capital',
-                        'amount' => $validated['amount'],
-                        'transaction_date' => $validated['transaction_date'],
-                        'transaction_reference' => $tx->reference,
-                        'description' => "Capital deposit from {$partner->name} - " . ($validated['notes'] ?? ''),
-                        'user_id' => $request->user()->id ?? null,
-                    ]);
+                    TreasuryService::recordInflow(
+                        $account,
+                        (float) $validated['amount'],
+                        'partner_capital',
+                        $tx,
+                        "Capital deposit from {$partner->name} - " . ($validated['notes'] ?? ''),
+                        $tx->reference,
+                        $request->user()->id ?? null
+                    );
                 }
             }
         });
@@ -231,18 +226,15 @@ class PartnerInvestorController extends Controller
                 'user_id' => $request->user()->id ?? null,
             ]);
 
-            $account->decrement('current_balance', $validated['amount']);
-
-            AccountTransaction::create([
-                'payment_account_id' => $account->id,
-                'type' => 'outflow',
-                'category' => 'partner_payout',
-                'amount' => $validated['amount'],
-                'transaction_date' => $validated['transaction_date'],
-                'transaction_reference' => $tx->reference,
-                'description' => "Payout to {$partner->name} (" . ($validated['type'] === 'profit_payout' ? 'Profit' : 'Principal') . ")",
-                'user_id' => $request->user()->id ?? null,
-            ]);
+            TreasuryService::recordOutflow(
+                $account,
+                (float) $validated['amount'],
+                'partner_payout',
+                $tx,
+                "Payout to {$partner->name} (" . ($validated['type'] === 'profit_payout' ? 'Profit' : 'Principal') . ")",
+                $tx->reference,
+                $request->user()->id ?? null
+            );
         });
 
         return redirect()->back()->with('success', "UGX " . number_format($validated['amount']) . " payout successfully disbursed to {$partner->name}.");

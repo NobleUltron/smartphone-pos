@@ -117,7 +117,7 @@ export default function Index({ auth, expenses, summary, filters, cashiers, cate
                 <PageHeader
                     title="Expense Management"
                     breadcrumbs={[
-                        { label: 'Dashboard', href: '/dashboard' },
+                        { label: 'Home', href: '/' },
                         { label: 'Expenses' }
                     ]}
                     actions={

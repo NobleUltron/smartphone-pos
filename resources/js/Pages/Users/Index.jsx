@@ -62,8 +62,10 @@ export default function UsersIndex({ auth, users = {}, filters = {}, summary }) 
         try {
             if (isEditing) {
                 await axios.put(`/api/users/${formData.id}`, formData);
+                toast.success("Staff account updated successfully");
             } else {
                 await axios.post('/api/users', formData);
+                toast.success("Staff account created successfully");
             }
             setShowModal(false);
             router.reload();
@@ -99,6 +101,7 @@ export default function UsersIndex({ auth, users = {}, filters = {}, summary }) 
         if (!confirm(`Are you sure you want to delete ${user.name}?`)) return;
         try {
             await axios.delete(`/api/users/${user.id}`);
+            toast.success("Staff account deleted successfully");
             router.reload();
         } catch (error) {
             toast.error(error.response?.data?.error || "Error deleting user");

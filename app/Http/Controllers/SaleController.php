@@ -9,10 +9,7 @@ class SaleController extends Controller
 {
     public function index()
     {
-        $sales = Sale::with(['user', 'customer', 'saleItems.deviceImei.product'])->latest()->get();
-        return Inertia::render('Sales/Index', [
-            'sales' => $sales
-        ]);
+        return redirect()->route('receipts.index');
     }
 
     public function show(Sale $sale)
