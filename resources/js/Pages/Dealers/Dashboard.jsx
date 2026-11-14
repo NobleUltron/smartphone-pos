@@ -736,30 +736,30 @@ export default function Dashboard({
                                                     </td>
 
                                                     {/* Store Inventory Status */}
-                                                    <td className="px-6 py-4">
-                                                        <div className="space-y-1">
-                                                            <div className="flex items-center gap-2">
+                                                    <td className="px-6 py-4 whitespace-nowrap">
+                                                        <div className="space-y-1.5">
+                                                            <div className="flex items-center gap-1.5">
                                                                 {item.availableQty > 0 ? (
-                                                                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-200">
+                                                                    <span className="inline-flex items-center whitespace-nowrap px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/60">
                                                                         {item.availableQty} in store
                                                                     </span>
                                                                 ) : (
-                                                                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400">
+                                                                    <span className="inline-flex items-center whitespace-nowrap px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400 border border-slate-200/60 dark:border-slate-700/60">
                                                                         0 in store
                                                                     </span>
                                                                 )}
                                                                 {item.qtySold > 0 && (
-                                                                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-50 text-indigo-700 dark:bg-indigo-950/60 dark:text-indigo-300 border border-indigo-200">
+                                                                    <span className="inline-flex items-center whitespace-nowrap px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-indigo-50 text-indigo-700 dark:bg-indigo-950/60 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800/60">
                                                                         {item.qtySold} sold
                                                                     </span>
                                                                 )}
                                                                 {item.qtyReturned > 0 && (
-                                                                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-50 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300 border border-blue-200">
+                                                                    <span className="inline-flex items-center whitespace-nowrap px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-blue-50 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300 border border-blue-200 dark:border-blue-800/60">
                                                                         {item.qtyReturned} returned
                                                                     </span>
                                                                 )}
                                                             </div>
-                                                            <div className="text-[11px] text-slate-400">
+                                                            <div className="text-[11px] text-slate-400 whitespace-nowrap">
                                                                 Total Batch: {item.qtyTotal} {item.qtyTotal === 1 ? 'unit' : 'units'}
                                                             </div>
                                                         </div>
@@ -802,14 +802,14 @@ export default function Dashboard({
                                                     </td>
 
                                                     {/* Actions */}
-                                                    <td className="px-6 py-4 text-right">
-                                                        <div className="flex flex-wrap items-center justify-end gap-2">
+                                                    <td className="px-6 py-4 text-right whitespace-nowrap">
+                                                        <div className="flex items-center justify-end gap-1.5">
                                                             {/* Primary Settle / Pay Button */}
                                                             {isAwaitingPay && (
                                                                 <button
                                                                     type="button"
                                                                     onClick={() => openSettleModal(item)}
-                                                                    className="px-3.5 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold transition-all shadow-sm shadow-rose-500/20 flex items-center gap-1.5"
+                                                                    className="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold transition-all shadow-sm shadow-rose-500/20 inline-flex items-center gap-1 whitespace-nowrap"
                                                                     title={`Pay ${item.dealer?.name} ${formatCurrency(item.remainingOwed)} for sold units`}
                                                                 >
                                                                     <DollarSign size={14} /> Pay Dealer
@@ -822,7 +822,7 @@ export default function Dashboard({
                                                                     href={`/dealers/items/${item.id}/voucher?mode=stream`}
                                                                     target="_blank"
                                                                     rel="noreferrer"
-                                                                    className="px-2.5 py-1.5 bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 rounded-lg text-xs font-bold flex items-center gap-1 transition-colors"
+                                                                    className="px-2.5 py-1.5 bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 rounded-lg text-xs font-bold inline-flex items-center gap-1 whitespace-nowrap transition-colors"
                                                                     title="View / Print Consignment Payout Voucher PDF"
                                                                 >
                                                                     <FileText size={13} /> Voucher
@@ -834,7 +834,7 @@ export default function Dashboard({
                                                                 <button
                                                                     type="button"
                                                                     onClick={() => openReturnModal(item)}
-                                                                    className="px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 rounded-lg text-xs font-bold flex items-center gap-1 transition-colors"
+                                                                    className="px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 rounded-lg text-xs font-bold inline-flex items-center gap-1 whitespace-nowrap transition-colors"
                                                                     title="Return unsold items back to dealer (removes from active shop stock)"
                                                                 >
                                                                     <RotateCcw size={13} /> Return
@@ -856,7 +856,7 @@ export default function Dashboard({
                                                             {/* Manage Dealer link */}
                                                             <Link
                                                                 href={route('dealers.show', item.dealer_id)}
-                                                                className="px-2.5 py-1.5 text-xs font-bold text-indigo-600 hover:text-indigo-800 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg hover:border-indigo-300 transition-colors"
+                                                                className="px-2.5 py-1.5 text-xs font-bold text-indigo-600 hover:text-indigo-800 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg hover:border-indigo-300 whitespace-nowrap transition-colors"
                                                             >
                                                                 Manage
                                                             </Link>
