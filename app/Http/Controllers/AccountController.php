@@ -30,7 +30,12 @@ class AccountController extends Controller
             TreasuryService::syncHistorical();
         }
 
-        $accounts = PaymentAccount::withCount('transactions')->get();
+        $accounts = PaymentAccount::withCount('transactions')
+            ->where('is_active', true)
+            ->orderBy('is_personal')
+            ->orderBy('type')
+            ->orderBy('id')
+            ->get();
 
         $businessAccounts = $accounts->where('is_personal', false);
         $personalAccounts = $accounts->where('is_personal', true);
@@ -67,6 +72,26 @@ class AccountController extends Controller
         $ownerBusinessEquity = $totalBusinessCapital - $partnerPortfolioValue;
         $ownerNetWorth = $ownerBusinessEquity + $personalReserveTotal;
 
+        // Receivables & Payables Visibility
+        $layawayReceivables = (float) \App\Models\Sale::withSum('layawayPayments', 'amount_paid')
+            ->whereIn('payment_status', ['Unpaid', 'Partial'])
+            ->get()
+            ->sum(fn($s) => max(0, (float) $s->final_amount - (float) ($s->layaway_payments_sum_amount_paid ?? 0)));
+        $invoiceReceivables = (float) \App\Models\Invoice::whereIn('payment_status', ['Unpaid', 'Partial'])
+            ->where('status', '!=', 'Cancelled')
+            ->selectRaw('COALESCE(SUM(GREATEST(total_amount - paid_amount, 0)), 0) as total')
+            ->value('total');
+        $totalReceivables = $layawayReceivables + $invoiceReceivables;
+
+        $supplierPayables = (float) \App\Models\Purchase::selectRaw('COALESCE(SUM(GREATEST(total_amount - paid_amount, 0)), 0) as total')
+            ->value('total');
+        $dealerPayables = (float) \App\Models\DealerItem::where('direction', 'inward')
+            ->where('quantity_sold', '>', 0)
+            ->get()
+            ->sum(fn($item) => max(0, ($item->quantity_sold * (float) $item->dealer_price) - (float) $item->amount_paid));
+        $totalPayables = $supplierPayables + $dealerPayables;
+        $adjustedNetWorth = $ownerNetWorth + $totalReceivables - $totalPayables;
+
         $query = AccountTransaction::with(['account', 'user']);
 
         if ($request->filled('account_id') && $request->account_id !== 'all') {
@@ -97,6 +122,15 @@ class AccountController extends Controller
             $query->whereDate('transaction_date', '<=', $request->date_to);
         }
 
+        $filteredInflows = (float) (clone $query)->whereIn('type', ['inflow', 'transfer_in'])->sum('amount');
+        $filteredOutflows = (float) (clone $query)->whereIn('type', ['outflow', 'transfer_out'])->sum('amount');
+
+        $categories = AccountTransaction::select('category')
+            ->whereNotNull('category')
+            ->distinct()
+            ->orderBy('category')
+            ->pluck('category');
+
         $transactions = $query->orderBy('transaction_date', 'desc')
             ->orderBy('id', 'desc')
             ->paginate(15)
@@ -104,6 +138,7 @@ class AccountController extends Controller
 
         return Inertia::render('Accounts/Index', [
             'accounts' => $accounts,
+            'categories' => $categories,
             'metrics' => [
                 'totalLiquidity' => $totalLiquidity,
                 'cashOnHand' => $cashOnHand,
@@ -127,6 +162,15 @@ class AccountController extends Controller
                 'ownerStockCost' => $ownerStockCost,
                 'ownerBusinessEquity' => $ownerBusinessEquity,
                 'ownerNetWorth' => $ownerNetWorth,
+                'layawayReceivables' => $layawayReceivables,
+                'invoiceReceivables' => $invoiceReceivables,
+                'totalReceivables' => $totalReceivables,
+                'supplierPayables' => $supplierPayables,
+                'dealerPayables' => $dealerPayables,
+                'totalPayables' => $totalPayables,
+                'adjustedNetWorth' => $adjustedNetWorth,
+                'filteredInflows' => $filteredInflows,
+                'filteredOutflows' => $filteredOutflows,
             ],
             'transactions' => $transactions,
             'filters' => $request->only(['account_id', 'type', 'category', 'search', 'date_from', 'date_to']),
