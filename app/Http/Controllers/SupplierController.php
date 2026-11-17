@@ -10,7 +10,10 @@ class SupplierController extends Controller
 {
     public function index(Request $request)
     {
-        $query = Supplier::query();
+        $query = Supplier::withCount('purchases')
+            ->withSum('purchases', 'total_amount')
+            ->withSum('purchases', 'paid_amount')
+            ->withMax('purchases', 'purchase_date');
 
         if ($request->filled('search')) {
             $search = '%' . strtolower($request->input('search')) . '%';
@@ -18,26 +21,38 @@ class SupplierController extends Controller
                 $q->whereRaw('LOWER(name) LIKE ?', [$search])
                   ->orWhereRaw('LOWER(contact_name) LIKE ?', [$search])
                   ->orWhereRaw('LOWER(phone) LIKE ?', [$search])
-                  ->orWhereRaw('LOWER(email) LIKE ?', [$search]);
+                  ->orWhereRaw('LOWER(email) LIKE ?', [$search])
+                  ->orWhereRaw('LOWER(address) LIKE ?', [$search]);
             });
         }
 
+        $balanceFilter = $request->input('balance_filter', 'all');
+        if ($balanceFilter === 'owing') {
+            $query->whereRaw('COALESCE((SELECT SUM(total_amount - paid_amount) FROM purchases WHERE purchases.supplier_id = suppliers.id), 0) > 0');
+        } elseif ($balanceFilter === 'settled') {
+            $query->whereRaw('COALESCE((SELECT SUM(total_amount - paid_amount) FROM purchases WHERE purchases.supplier_id = suppliers.id), 0) <= 0');
+        }
+
         $suppliers = $query->orderBy('name')->paginate(10)->through(function($supplier) {
-            $supplier->recalculateBalance();
+            $total = (float) ($supplier->purchases_sum_total_amount ?? 0);
+            $paid = (float) ($supplier->purchases_sum_paid_amount ?? 0);
+            $supplier->balance = max(0, $total - $paid);
             return $supplier;
         })->withQueryString();
 
         $totalSuppliers = Supplier::count();
         $pendingOrders = \App\Models\Purchase::where('status', 'Pending')->count();
-        $totalSpend = \App\Models\Purchase::sum('total_amount');
+        $totalSpend = (float) \App\Models\Purchase::sum('total_amount');
+        $totalPayable = (float) \App\Models\Purchase::selectRaw('COALESCE(SUM(GREATEST(total_amount - paid_amount, 0)), 0) as total')->value('total');
 
         return Inertia::render('Suppliers/Index', [
             'suppliers' => $suppliers,
-            'filters' => $request->only(['search']),
+            'filters' => $request->only(['search', 'balance_filter']),
             'summary' => [
                 'total_suppliers' => $totalSuppliers,
                 'pending_orders' => $pendingOrders,
                 'total_spend' => $totalSpend,
+                'total_payable' => $totalPayable,
             ]
         ]);
     }
@@ -53,7 +68,7 @@ class SupplierController extends Controller
         ]);
 
         Supplier::create($validated);
-        return redirect()->back();
+        return redirect()->back()->with('success', 'Supplier added successfully.');
     }
 
     public function show(Supplier $supplier)
@@ -86,15 +101,18 @@ class SupplierController extends Controller
         ]);
 
         $supplier->update($validated);
-        return redirect()->back();
+        return redirect()->back()->with('success', 'Supplier updated successfully.');
     }
 
     public function destroy(Supplier $supplier)
     {
-        if ($supplier->balance > 0) {
+        if ($supplier->recalculateBalance() > 0) {
             return redirect()->back()->withErrors(['error' => 'Cannot delete supplier with an outstanding balance.']);
         }
+        if ($supplier->purchases()->exists()) {
+            return redirect()->back()->withErrors(['error' => 'Cannot delete supplier with recorded purchase history.']);
+        }
         $supplier->delete();
-        return redirect()->route('suppliers.index');
+        return redirect()->route('suppliers.index')->with('success', 'Supplier deleted successfully.');
     }
 }
