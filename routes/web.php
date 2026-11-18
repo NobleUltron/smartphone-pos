@@ -69,12 +69,16 @@ Route::get('/dashboard', function () {
     $todayLayawayPayments = \App\Models\LayawayPayment::whereDate('payment_date', Carbon::today())
         ->sum('amount_paid');
 
+    $todayInvoicePayments = \App\Models\InvoicePayment::whereDate('payment_date', Carbon::today())
+        ->sum('amount');
+
     $todayRefunds = \App\Models\Expense::whereDate('expense_date', Carbon::today())
         ->whereIn('category', ['Refund', 'Refund (Past Shift)'])
         ->sum('amount');
 
-    $todaySales = $todayDirectSales + $todayLayawayPayments - $todayRefunds;
+    $todaySales = $todayDirectSales + $todayLayawayPayments + $todayInvoicePayments - $todayRefunds;
     $inStockCount = DeviceImei::where('status', 'In Stock')->count();
+    $bulkStockCount = (int) Product::where('type', 'bulk')->where('quantity', '>', 0)->sum('quantity');
     $scrappedCount = DeviceImei::where('status', 'Defective')->count();
     $lowStockCount = Cache::remember('global_low_stock_count', 90, function () {
         return Product::where(function ($query) {
@@ -99,12 +103,15 @@ Route::get('/dashboard', function () {
                 
             $layawayPayments = \App\Models\LayawayPayment::whereDate('payment_date', $date)
                 ->sum('amount_paid');
+
+            $invoicePayments = \App\Models\InvoicePayment::whereDate('payment_date', $date)
+                ->sum('amount');
                 
             $refunds = \App\Models\Expense::whereDate('expense_date', $date)
                 ->whereIn('category', ['Refund', 'Refund (Past Shift)'])
                 ->sum('amount');
                 
-            $total = $directSales + $layawayPayments - $refunds;
+            $total = $directSales + $layawayPayments + $invoicePayments - $refunds;
             return [
                 'date' => $date->format('M d'),
                 'sales' => (float) $total
@@ -151,13 +158,19 @@ Route::get('/dashboard', function () {
         ->where('quantity_sold', '>', 0)
         ->get()
         ->sum(function ($item) {
-            $unitCost = floatval($item->wholesale_cost ?? $item->dealer_price ?? 0);
+            $unitCost = floatval($item->dealer_price ?? 0);
             $totalOwed = $unitCost * $item->quantity_sold;
-            $alreadyPaid = floatval($item->settlement_amount ?? 0);
+            $alreadyPaid = floatval($item->amount_paid ?? 0);
             return max(0, $totalOwed - $alreadyPaid);
         });
-    $dealerOutwardPendingCount = \App\Models\DealerItem::where('direction', '!=', 'inward')->where('status', 'Pending')->count();
-    $dealerOutwardOverdueCount = \App\Models\DealerItem::where('direction', '!=', 'inward')
+    $dealerOutwardPendingCount = \App\Models\DealerItem::where(function ($q) {
+            $q->where('direction', 'outward')->orWhereNull('direction');
+        })
+        ->where('status', 'Pending')
+        ->count();
+    $dealerOutwardOverdueCount = \App\Models\DealerItem::where(function ($q) {
+            $q->where('direction', 'outward')->orWhereNull('direction');
+        })
         ->where('status', 'Pending')
         ->where('expected_return_date', '<', Carbon::today())
         ->count();
@@ -182,6 +195,7 @@ Route::get('/dashboard', function () {
     return Inertia::render('Dashboard', [
         'todaySales' => $todaySales,
         'inStockCount' => $inStockCount,
+        'bulkStockCount' => $bulkStockCount,
         'scrappedCount' => $scrappedCount,
         'lowStockCount' => $lowStockCount,
         'activeRepairsCount' => $activeRepairsCount,

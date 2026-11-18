@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Head, Link } from '@inertiajs/react';
 import axios from 'axios';
-import { TrendingUp, Smartphone, AlertTriangle, Sparkles, User, Banknote, PieChart as PieChartIcon, Minimize2, Maximize2, Trash2, Send, Bot, Clock, ArrowRight, ShoppingCart, Settings, Handshake, Layers, DollarSign, Wrench, Wallet, ArrowUpRight } from 'lucide-react';
+import { TrendingUp, Smartphone, AlertTriangle, Sparkles, User, Banknote, PieChart as PieChartIcon, Minimize2, Maximize2, Trash2, Send, Bot, Clock, ArrowRight, ShoppingCart, Settings, Handshake, Layers, DollarSign, Wrench, Wallet, ArrowUpRight, Landmark } from 'lucide-react';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Sector } from 'recharts';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import Card from '@/Components/SaaS/Card';
@@ -14,6 +14,7 @@ export default function Dashboard({
     auth, 
     todaySales = 0, 
     inStockCount = 0, 
+    bulkStockCount = 0,
     scrappedCount = 0, 
     lowStockCount = 0, 
     activeRepairsCount = 0, 
@@ -27,7 +28,8 @@ export default function Dashboard({
     repairMetrics = {},
     shiftMetrics = {}
 }) {
-    const COLORS = ['#F43F5E', '#1E293B', '#38BDF8', '#8B5CF6', '#10B981'];
+    const COLORS = ['#F43F5E', '#6366F1', '#38BDF8', '#8B5CF6', '#10B981'];
+    const roleLabel = (auth?.user?.role || '').toLowerCase() === 'manager' ? 'Store Manager' : 'Store Owner';
     
     const [messages, setMessages] = useState([
         { role: 'assistant', text: "👋 **Hello! I am SmartPOS AI.** Ask me about low stock alerts, today's sales summary, or inventory stats!", time: 'Just now' }
@@ -158,7 +160,7 @@ export default function Dashboard({
                         </h2>
                         <div className="flex flex-wrap items-center gap-3">
                             <span className="px-3 py-1 bg-white/10 border border-white/10 rounded-full text-[11px] font-bold uppercase tracking-widest text-indigo-100 backdrop-blur-md shadow-sm flex items-center gap-1.5">
-                                <User size={12} /> Store Owner
+                                <User size={12} /> {roleLabel}
                             </span>
                             <span className="flex items-center gap-1.5 px-3 py-1 bg-emerald-500/10 border border-emerald-500/20 rounded-full text-emerald-400 text-[11px] font-bold uppercase tracking-widest backdrop-blur-md shadow-sm">
                                 <span className="relative flex h-2 w-2">
@@ -171,21 +173,35 @@ export default function Dashboard({
                     </div>
                 </div>
 
-                <div className="flex flex-col sm:flex-row items-center gap-3 z-10 mt-4 md:mt-0">
+                <div className="flex flex-wrap items-center gap-2.5 z-10 mt-4 md:mt-0">
+                    <Link 
+                        href="/pos" 
+                        className="px-4 py-2.5 bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-400/30 text-emerald-200 font-semibold rounded-xl transition-all duration-300 flex items-center justify-center gap-2 backdrop-blur-md text-sm"
+                    >
+                        <ShoppingCart size={16} />
+                        <span>POS</span>
+                    </Link>
+                    <Link 
+                        href="/accounts" 
+                        className="px-4 py-2.5 bg-white/5 hover:bg-white/10 border border-white/10 text-slate-200 font-semibold rounded-xl transition-all duration-300 flex items-center justify-center gap-2 backdrop-blur-md text-sm"
+                    >
+                        <Landmark size={16} />
+                        <span>Treasury</span>
+                    </Link>
                     <Link 
                         href="/settings" 
-                        className="w-full sm:w-auto px-5 py-3 bg-white/5 hover:bg-white/10 border border-white/10 text-slate-200 font-semibold rounded-xl transition-all duration-300 flex items-center justify-center gap-2 backdrop-blur-md hover:shadow-lg focus:ring-2 focus:ring-indigo-500/50 outline-none"
+                        className="px-4 py-2.5 bg-white/5 hover:bg-white/10 border border-white/10 text-slate-200 font-semibold rounded-xl transition-all duration-300 flex items-center justify-center gap-2 backdrop-blur-md text-sm"
                     >
-                        <Settings size={18} />
-                        <span>Store Settings</span>
+                        <Settings size={16} />
+                        <span>Settings</span>
                     </Link>
                     <Link 
                         href="/reports" 
-                        className="group w-full sm:w-auto px-6 py-3 bg-gradient-to-r from-indigo-500 to-blue-600 hover:from-indigo-400 hover:to-blue-500 text-white font-bold rounded-xl transition-all duration-300 flex items-center justify-center gap-2 shadow-lg shadow-indigo-500/25 hover:shadow-indigo-500/40 hover:-translate-y-0.5 focus:ring-2 focus:ring-white/50 outline-none"
+                        className="group px-5 py-2.5 bg-gradient-to-r from-indigo-500 to-blue-600 hover:from-indigo-400 hover:to-blue-500 text-white font-bold rounded-xl transition-all duration-300 flex items-center justify-center gap-2 shadow-lg shadow-indigo-500/25 hover:shadow-indigo-500/40 hover:-translate-y-0.5 text-sm"
                     >
-                        <PieChartIcon size={18} className="transition-transform group-hover:scale-110" /> 
-                        <span>View Reports</span> 
-                        <ArrowRight size={18} className="transition-transform group-hover:translate-x-1" />
+                        <PieChartIcon size={16} className="transition-transform group-hover:scale-110" /> 
+                        <span>Reports</span> 
+                        <ArrowRight size={16} className="transition-transform group-hover:translate-x-1" />
                     </Link>
                 </div>
             </div>
@@ -209,132 +225,147 @@ export default function Dashboard({
             
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6 mb-8">
                 {/* Metric: Today's Sales */}
-                <Card className="relative overflow-hidden group">
-                    <div className="flex justify-between items-start mb-4">
-                        <div>
-                            <h6 className="text-slate-500 font-semibold text-xs uppercase tracking-wider mb-2">Today's Sales</h6>
-                            <div className="flex items-baseline gap-1">
-                                <h3 className="text-3xl font-bold text-slate-900">{Number(todaySales).toLocaleString()}</h3>
-                                <span className="text-sm text-slate-500 font-medium">UGX</span>
+                <Link href="/receipts" className="block">
+                    <Card className="relative overflow-hidden group h-full hover:border-rose-500/40 transition-all">
+                        <div className="flex justify-between items-start mb-4">
+                            <div>
+                                <h6 className="text-slate-500 dark:text-slate-400 font-semibold text-xs uppercase tracking-wider mb-2">Today's Sales</h6>
+                                <div className="flex items-baseline gap-1">
+                                    <h3 className="text-3xl font-bold text-slate-900 dark:text-white">{Number(todaySales).toLocaleString()}</h3>
+                                    <span className="text-sm text-slate-500 dark:text-slate-400 font-medium">UGX</span>
+                                </div>
+                            </div>
+                            <div className="w-12 h-12 rounded-2xl flex items-center justify-center shadow-lg bg-gradient-to-br from-rose-500 to-pink-600 text-white shadow-rose-500/30 group-hover:scale-110 transition-transform">
+                                <TrendingUp size={24} strokeWidth={2.5} />
                             </div>
                         </div>
-                        <div className="w-12 h-12 rounded-2xl flex items-center justify-center shadow-lg bg-gradient-to-br from-rose-500 to-pink-600 text-white shadow-rose-500/30 group-hover:scale-110 transition-transform">
-                            <TrendingUp size={24} strokeWidth={2.5} />
+                        <div className="mt-4 flex items-center gap-2 text-sm text-slate-600 dark:text-slate-400">
+                            <Badge variant="success">Active Shift</Badge> Net Revenue
                         </div>
-                    </div>
-                    <div className="mt-4 flex items-center gap-2 text-sm text-slate-600">
-                        <Badge variant="success">Active Shift</Badge> Gross Revenue
-                    </div>
-                    <TrendingUp className="absolute -right-4 -bottom-6 w-32 h-32 text-rose-500/5 -rotate-12 pointer-events-none group-hover:scale-110 transition-transform" />
-                </Card>
+                        <TrendingUp className="absolute -right-4 -bottom-6 w-32 h-32 text-rose-500/5 -rotate-12 pointer-events-none group-hover:scale-110 transition-transform" />
+                    </Card>
+                </Link>
 
                 {/* Metric: Phones in Stock */}
-                <Card className="relative overflow-hidden group">
-                    <div className="flex justify-between items-start mb-4">
-                        <div>
-                            <h6 className="text-slate-500 font-semibold text-xs uppercase tracking-wider mb-2">Phones in Stock</h6>
-                            <div className="flex items-baseline gap-1">
-                                <h3 className="text-3xl font-bold text-slate-900">{inStockCount}</h3>
-                                <span className="text-sm text-slate-500 font-medium">Units</span>
+                <Link href="/inventory" className="block">
+                    <Card className="relative overflow-hidden group h-full hover:border-sky-500/40 transition-all">
+                        <div className="flex justify-between items-start mb-4">
+                            <div>
+                                <h6 className="text-slate-500 dark:text-slate-400 font-semibold text-xs uppercase tracking-wider mb-2">Phones in Stock</h6>
+                                <div className="flex items-baseline gap-1.5">
+                                    <h3 className="text-3xl font-bold text-slate-900 dark:text-white">{inStockCount}</h3>
+                                    <span className="text-sm text-slate-500 dark:text-slate-400 font-medium">Devices</span>
+                                    {bulkStockCount > 0 && (
+                                        <span className="text-xs text-slate-400 font-medium">+ {bulkStockCount} acc</span>
+                                    )}
+                                </div>
+                            </div>
+                            <div className="w-12 h-12 rounded-2xl flex items-center justify-center shadow-lg bg-gradient-to-br from-sky-400 to-blue-600 text-white shadow-blue-500/30 group-hover:scale-110 transition-transform">
+                                <Smartphone size={24} strokeWidth={2.5} />
                             </div>
                         </div>
-                        <div className="w-12 h-12 rounded-2xl flex items-center justify-center shadow-lg bg-gradient-to-br from-sky-400 to-blue-600 text-white shadow-blue-500/30 group-hover:scale-110 transition-transform">
-                            <Smartphone size={24} strokeWidth={2.5} />
+                        <div className="mt-4 flex items-center gap-2 text-sm text-slate-600 dark:text-slate-400">
+                            {scrappedCount > 0 ? (
+                                <span className="text-rose-600 dark:text-rose-400 font-medium flex items-center gap-1"><AlertTriangle size={14}/> {scrappedCount} Defective</span>
+                            ) : (
+                                <span className="text-emerald-600 dark:text-emerald-400 font-medium flex items-center gap-1"><Sparkles size={14}/> All stock good</span>
+                            )}
                         </div>
-                    </div>
-                    <div className="mt-4 flex items-center gap-2 text-sm text-slate-600">
-                        {scrappedCount > 0 ? (
-                            <span className="text-rose-600 font-medium flex items-center gap-1"><AlertTriangle size={14}/> {scrappedCount} Defective</span>
-                        ) : (
-                            <span className="text-emerald-600 font-medium flex items-center gap-1"><Sparkles size={14}/> All stock good</span>
-                        )}
-                    </div>
-                    <Smartphone className="absolute -right-4 -bottom-6 w-32 h-32 text-blue-500/5 -rotate-12 pointer-events-none group-hover:scale-110 transition-transform" />
-                </Card>
+                        <Smartphone className="absolute -right-4 -bottom-6 w-32 h-32 text-blue-500/5 -rotate-12 pointer-events-none group-hover:scale-110 transition-transform" />
+                    </Card>
+                </Link>
 
                 {/* Metric: Inventory Value */}
-                <Card className="relative overflow-hidden group">
-                    <div className="flex justify-between items-start mb-4">
-                        <div>
-                            <h6 className="text-slate-500 font-semibold text-xs uppercase tracking-wider mb-2">Inventory Value</h6>
-                            <div className="flex items-baseline gap-1">
-                                <h3 className="text-3xl font-bold text-slate-900">{Number(inventoryValue).toLocaleString()}</h3>
-                                <span className="text-sm text-slate-500 font-medium">UGX</span>
+                <Link href="/inventory" className="block">
+                    <Card className="relative overflow-hidden group h-full hover:border-emerald-500/40 transition-all">
+                        <div className="flex justify-between items-start mb-4">
+                            <div>
+                                <h6 className="text-slate-500 dark:text-slate-400 font-semibold text-xs uppercase tracking-wider mb-2">Inventory Value</h6>
+                                <div className="flex items-baseline gap-1">
+                                    <h3 className="text-3xl font-bold text-slate-900 dark:text-white">{Number(inventoryValue).toLocaleString()}</h3>
+                                    <span className="text-sm text-slate-500 dark:text-slate-400 font-medium">UGX</span>
+                                </div>
+                            </div>
+                            <div className="w-12 h-12 rounded-2xl flex items-center justify-center shadow-lg bg-gradient-to-br from-emerald-400 to-green-600 text-white shadow-emerald-500/30 group-hover:scale-110 transition-transform">
+                                <Banknote size={24} strokeWidth={2.5} />
                             </div>
                         </div>
-                        <div className="w-12 h-12 rounded-2xl flex items-center justify-center shadow-lg bg-gradient-to-br from-emerald-400 to-green-600 text-white shadow-emerald-500/30 group-hover:scale-110 transition-transform">
-                            <Banknote size={24} strokeWidth={2.5} />
+                        <div className="mt-4 flex items-center gap-2 text-sm text-slate-600 dark:text-slate-400">
+                            Stock cost valuation
                         </div>
-                    </div>
-                    <div className="mt-4 flex items-center gap-2 text-sm text-slate-600">
-                        Estimated total capital
-                    </div>
-                    <Banknote className="absolute -right-4 -bottom-6 w-32 h-32 text-emerald-500/5 -rotate-12 pointer-events-none group-hover:scale-110 transition-transform" />
-                </Card>
+                        <Banknote className="absolute -right-4 -bottom-6 w-32 h-32 text-emerald-500/5 -rotate-12 pointer-events-none group-hover:scale-110 transition-transform" />
+                    </Card>
+                </Link>
 
                 {/* Metric: Low Stock Alerts */}
-                <Card className="relative overflow-hidden group">
-                    <div className="flex justify-between items-start mb-4">
-                        <div>
-                            <h6 className="text-slate-500 font-semibold text-xs uppercase tracking-wider mb-2">Low Stock Alerts</h6>
-                            <div className="flex items-baseline gap-1">
-                                <h3 className="text-3xl font-bold text-slate-900">{lowStockCount}</h3>
-                                <span className="text-sm text-slate-500 font-medium">Items</span>
+                <Link href="/inventory" className="block">
+                    <Card className="relative overflow-hidden group h-full hover:border-purple-500/40 transition-all">
+                        <div className="flex justify-between items-start mb-4">
+                            <div>
+                                <h6 className="text-slate-500 dark:text-slate-400 font-semibold text-xs uppercase tracking-wider mb-2">Low Stock Alerts</h6>
+                                <div className="flex items-baseline gap-1">
+                                    <h3 className="text-3xl font-bold text-slate-900 dark:text-white">{lowStockCount}</h3>
+                                    <span className="text-sm text-slate-500 dark:text-slate-400 font-medium">Items</span>
+                                </div>
+                            </div>
+                            <div className="w-12 h-12 rounded-2xl flex items-center justify-center shadow-lg bg-gradient-to-br from-violet-400 to-purple-600 text-white shadow-purple-500/30 group-hover:scale-110 transition-transform">
+                                <AlertTriangle size={24} strokeWidth={2.5} />
                             </div>
                         </div>
-                        <div className="w-12 h-12 rounded-2xl flex items-center justify-center shadow-lg bg-gradient-to-br from-violet-400 to-purple-600 text-white shadow-purple-500/30 group-hover:scale-110 transition-transform">
-                            <AlertTriangle size={24} strokeWidth={2.5} />
+                        <div className="mt-4 flex items-center gap-2 text-sm text-slate-600 dark:text-slate-400">
+                            {lowStockCount > 0 ? (
+                                <span className="text-amber-600 dark:text-amber-400 font-medium flex items-center gap-1">Restock needed soon</span>
+                            ) : (
+                                <span className="text-emerald-600 dark:text-emerald-400 font-medium flex items-center gap-1">Stock levels healthy</span>
+                            )}
                         </div>
-                    </div>
-                    <div className="mt-4 flex items-center gap-2 text-sm text-slate-600">
-                        {lowStockCount > 0 ? (
-                            <span className="text-amber-600 font-medium flex items-center gap-1">Restock needed soon</span>
-                        ) : (
-                            <span className="text-emerald-600 font-medium flex items-center gap-1">Stock levels healthy</span>
-                        )}
-                    </div>
-                    <AlertTriangle className="absolute -right-4 -bottom-6 w-32 h-32 text-purple-500/5 -rotate-12 pointer-events-none group-hover:scale-110 transition-transform" />
-                </Card>
+                        <AlertTriangle className="absolute -right-4 -bottom-6 w-32 h-32 text-purple-500/5 -rotate-12 pointer-events-none group-hover:scale-110 transition-transform" />
+                    </Card>
+                </Link>
 
                 {/* Metric: Active Repairs */}
-                <Card className="relative overflow-hidden group">
-                    <div className="flex justify-between items-start mb-4">
-                        <div>
-                            <h6 className="text-slate-500 font-semibold text-xs uppercase tracking-wider mb-2">Active Repairs</h6>
-                            <div className="flex items-baseline gap-1">
-                                <h3 className="text-3xl font-bold text-slate-900">{activeRepairsCount}</h3>
-                                <span className="text-sm text-slate-500 font-medium">Tickets</span>
+                <Link href="/repairs" className="block">
+                    <Card className="relative overflow-hidden group h-full hover:border-orange-500/40 transition-all">
+                        <div className="flex justify-between items-start mb-4">
+                            <div>
+                                <h6 className="text-slate-500 dark:text-slate-400 font-semibold text-xs uppercase tracking-wider mb-2">Active Repairs</h6>
+                                <div className="flex items-baseline gap-1">
+                                    <h3 className="text-3xl font-bold text-slate-900 dark:text-white">{activeRepairsCount}</h3>
+                                    <span className="text-sm text-slate-500 dark:text-slate-400 font-medium">Tickets</span>
+                                </div>
+                            </div>
+                            <div className="w-12 h-12 rounded-2xl flex items-center justify-center shadow-lg bg-gradient-to-br from-orange-400 to-amber-500 text-white shadow-orange-500/30 group-hover:scale-110 transition-transform">
+                                <Bot size={24} strokeWidth={2.5} />
                             </div>
                         </div>
-                        <div className="w-12 h-12 rounded-2xl flex items-center justify-center shadow-lg bg-gradient-to-br from-orange-400 to-amber-500 text-white shadow-orange-500/30 group-hover:scale-110 transition-transform">
-                            <Bot size={24} strokeWidth={2.5} />
+                        <div className="mt-4 flex items-center gap-2 text-sm text-slate-600 dark:text-slate-400">
+                            Pending or In Progress
                         </div>
-                    </div>
-                    <div className="mt-4 flex items-center gap-2 text-sm text-slate-600">
-                        Pending or In Progress
-                    </div>
-                    <Bot className="absolute -right-4 -bottom-6 w-32 h-32 text-orange-500/5 -rotate-12 pointer-events-none group-hover:scale-110 transition-transform" />
-                </Card>
+                        <Bot className="absolute -right-4 -bottom-6 w-32 h-32 text-orange-500/5 -rotate-12 pointer-events-none group-hover:scale-110 transition-transform" />
+                    </Card>
+                </Link>
 
                 {/* Metric: Repairs Completed Today */}
-                <Card className="relative overflow-hidden group">
-                    <div className="flex justify-between items-start mb-4">
-                        <div>
-                            <h6 className="text-slate-500 font-semibold text-xs uppercase tracking-wider mb-2">Repairs Completed</h6>
-                            <div className="flex items-baseline gap-1">
-                                <h3 className="text-3xl font-bold text-slate-900">{completedRepairsToday}</h3>
-                                <span className="text-sm text-slate-500 font-medium">Today</span>
+                <Link href="/repairs" className="block">
+                    <Card className="relative overflow-hidden group h-full hover:border-indigo-500/40 transition-all">
+                        <div className="flex justify-between items-start mb-4">
+                            <div>
+                                <h6 className="text-slate-500 dark:text-slate-400 font-semibold text-xs uppercase tracking-wider mb-2">Repairs Completed</h6>
+                                <div className="flex items-baseline gap-1">
+                                    <h3 className="text-3xl font-bold text-slate-900 dark:text-white">{completedRepairsToday}</h3>
+                                    <span className="text-sm text-slate-500 dark:text-slate-400 font-medium">Today</span>
+                                </div>
+                            </div>
+                            <div className="w-12 h-12 rounded-2xl flex items-center justify-center shadow-lg bg-gradient-to-br from-indigo-400 to-blue-600 text-white shadow-indigo-500/30 group-hover:scale-110 transition-transform">
+                                <Sparkles size={24} strokeWidth={2.5} />
                             </div>
                         </div>
-                        <div className="w-12 h-12 rounded-2xl flex items-center justify-center shadow-lg bg-gradient-to-br from-indigo-400 to-blue-600 text-white shadow-indigo-500/30 group-hover:scale-110 transition-transform">
-                            <Sparkles size={24} strokeWidth={2.5} />
+                        <div className="mt-4 flex items-center gap-2 text-sm text-slate-600 dark:text-slate-400">
+                            <Badge variant="success">Completed</Badge> devices ready
                         </div>
-                    </div>
-                    <div className="mt-4 flex items-center gap-2 text-sm text-slate-600">
-                        <Badge variant="success">Completed</Badge> devices ready
-                    </div>
-                    <Sparkles className="absolute -right-4 -bottom-6 w-32 h-32 text-indigo-500/5 -rotate-12 pointer-events-none group-hover:scale-110 transition-transform" />
-                </Card>
+                        <Sparkles className="absolute -right-4 -bottom-6 w-32 h-32 text-indigo-500/5 -rotate-12 pointer-events-none group-hover:scale-110 transition-transform" />
+                    </Card>
+                </Link>
             </div>
 
             {/* Operational Portfolios & Working Capital Grid */}
@@ -505,7 +536,7 @@ export default function Dashboard({
                 {/* 7-Day Revenue Trend */}
                 <div className="lg:col-span-2">
                     <Card className="h-full">
-                        <h3 className="text-lg font-bold text-slate-900 mb-6">7-Day Revenue Trend</h3>
+                        <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-6">7-Day Revenue Trend</h3>
                         <div className="h-[300px] w-full">
                             <ResponsiveContainer width="100%" height="100%">
                                 <AreaChart data={salesData} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
@@ -532,95 +563,106 @@ export default function Dashboard({
                 {/* Top Selling Brands */}
                 <div className="lg:col-span-1">
                     <Card className="h-full">
-                        <h3 className="text-lg font-bold text-slate-900 mb-6 flex items-center gap-2">
+                        <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-6 flex items-center gap-2">
                             <PieChartIcon size={20} className="text-rose-500" /> Top Selling Brands
                         </h3>
-                        <div className="h-[250px] w-full">
-                            <ResponsiveContainer width="100%" height="100%">
-                                <PieChart>
-                                    <Pie
-                                        activeIndex={activeIndex}
-                                        activeShape={renderActiveShape}
-                                        onMouseEnter={onPieEnter}
-                                        data={topBrands}
-                                        cx="50%"
-                                        cy="50%"
-                                        innerRadius={65}
-                                        outerRadius={90}
-                                        paddingAngle={5}
-                                        dataKey="value"
-                                        stroke="none"
-                                    >
-                                        {topBrands.map((entry, index) => (
-                                            <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                                        ))}
-                                    </Pie>
-                                    <Tooltip 
-                                        formatter={(value) => [`${value} items`, 'Sales']} 
-                                        contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)' }} 
-                                        cursor={false}
-                                    />
-                                </PieChart>
-                            </ResponsiveContainer>
-                        </div>
-                        <div className="flex flex-wrap justify-center gap-4 mt-4">
-                            {topBrands.map((brand, index) => (
-                                <div key={index} className="flex items-center gap-2 text-sm">
-                                    <div className="w-3 h-3 rounded-full" style={{ backgroundColor: COLORS[index % COLORS.length] }}></div>
-                                    <span className="font-medium text-slate-600">{brand.name}</span>
+                        {topBrands?.length > 0 ? (
+                            <>
+                                <div className="h-[250px] w-full">
+                                    <ResponsiveContainer width="100%" height="100%">
+                                        <PieChart>
+                                            <Pie
+                                                activeIndex={activeIndex}
+                                                activeShape={renderActiveShape}
+                                                onMouseEnter={onPieEnter}
+                                                data={topBrands}
+                                                cx="50%"
+                                                cy="50%"
+                                                innerRadius={65}
+                                                outerRadius={90}
+                                                paddingAngle={5}
+                                                dataKey="value"
+                                                stroke="none"
+                                            >
+                                                {topBrands.map((entry, index) => (
+                                                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                                                ))}
+                                            </Pie>
+                                            <Tooltip 
+                                                formatter={(value) => [`${value} items`, 'Sales']} 
+                                                contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)' }} 
+                                                cursor={false}
+                                            />
+                                        </PieChart>
+                                    </ResponsiveContainer>
                                 </div>
-                            ))}
-                        </div>
+                                <div className="flex flex-wrap justify-center gap-4 mt-4">
+                                    {topBrands.map((brand, index) => (
+                                        <div key={index} className="flex items-center gap-2 text-sm">
+                                            <div className="w-3 h-3 rounded-full" style={{ backgroundColor: COLORS[index % COLORS.length] }}></div>
+                                            <span className="font-medium text-slate-600 dark:text-slate-300">{brand.name}</span>
+                                        </div>
+                                    ))}
+                                </div>
+                            </>
+                        ) : (
+                            <div className="h-[250px] flex flex-col items-center justify-center text-slate-400 dark:text-slate-500 text-sm">
+                                <PieChartIcon size={36} className="mb-3 opacity-50" />
+                                <p>No brand sales recorded yet.</p>
+                            </div>
+                        )}
                     </Card>
                 </div>
             </div>
 
             {/* Recent Transactions Table */}
             <Card noPadding className="overflow-hidden mb-28">
-                <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-white">
-                    <h3 className="text-lg font-bold text-slate-900 flex items-center gap-2">
+                <div className="p-6 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center bg-white dark:bg-slate-900">
+                    <h3 className="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
                         <Clock size={20} className="text-rose-500" /> Recent Transactions
                     </h3>
                     {recentSales?.length > 0 && (
-                        <Link href="/receipts" className="text-sm font-semibold text-rose-600 hover:text-rose-700 flex items-center gap-1 transition-colors">
+                        <Link href="/receipts" className="text-sm font-semibold text-rose-600 dark:text-rose-400 hover:text-rose-700 dark:hover:text-rose-300 flex items-center gap-1 transition-colors">
                             View All <ArrowRight size={16} />
                         </Link>
                     )}
                 </div>
-                <div className="overflow-x-auto">
+
+                {/* Desktop Table */}
+                <div className="hidden sm:block overflow-x-auto">
                     <table className="w-full text-left border-collapse">
                         <thead>
-                            <tr className="bg-slate-50/50">
-                                <th className="py-4 px-6 text-xs font-semibold text-slate-500 uppercase tracking-wider border-b border-slate-100">
+                            <tr className="bg-slate-50/50 dark:bg-slate-800/60">
+                                <th className="py-4 px-6 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider border-b border-slate-100 dark:border-slate-800">
                                     <div className="w-56 mx-auto text-left">Customer</div>
                                 </th>
-                                <th className="py-4 px-6 text-xs font-semibold text-slate-500 uppercase tracking-wider border-b border-slate-100">
+                                <th className="py-4 px-6 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider border-b border-slate-100 dark:border-slate-800">
                                     <div className="w-36 mx-auto text-left">Amount</div>
                                 </th>
-                                <th className="py-4 px-6 text-xs font-semibold text-slate-500 uppercase tracking-wider border-b border-slate-100">
+                                <th className="py-4 px-6 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider border-b border-slate-100 dark:border-slate-800">
                                     <div className="w-24 mx-auto text-center">Status</div>
                                 </th>
-                                <th className="py-4 px-6 text-xs font-semibold text-slate-500 uppercase tracking-wider border-b border-slate-100">
+                                <th className="py-4 px-6 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider border-b border-slate-100 dark:border-slate-800">
                                     <div className="w-32 mx-auto text-left">Time</div>
                                 </th>
-                                <th className="py-4 px-6 text-xs font-semibold text-slate-500 uppercase tracking-wider border-b border-slate-100">
+                                <th className="py-4 px-6 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider border-b border-slate-100 dark:border-slate-800">
                                     <div className="w-40 mx-auto text-left">Cashier</div>
                                 </th>
                             </tr>
                         </thead>
-                        <tbody className="divide-y divide-slate-100">
+                        <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                             {recentSales?.length > 0 ? recentSales.map(sale => (
-                                <tr key={sale.id} className="hover:bg-slate-50/50 transition-colors">
+                                <tr key={sale.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/40 transition-colors">
                                     <td className="py-4 px-6">
-                                        <div className="flex items-center gap-3 w-56 mx-auto whitespace-nowrap">
-                                            <div className="w-10 h-10 rounded-full bg-indigo-50 text-indigo-600 flex items-center justify-center font-bold shrink-0">
+                                        <a href={`/pos/receipt/${sale.id}`} target="_blank" rel="noreferrer" className="flex items-center gap-3 w-56 mx-auto whitespace-nowrap group">
+                                            <div className="w-10 h-10 rounded-full bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 flex items-center justify-center font-bold shrink-0">
                                                 <User size={18} />
                                             </div>
-                                            <span className="font-semibold text-slate-900 text-left">{sale.customer_name}</span>
-                                        </div>
+                                            <span className="font-semibold text-slate-900 dark:text-white group-hover:text-indigo-600 dark:group-hover:text-indigo-400 text-left transition-colors">{sale.customer_name}</span>
+                                        </a>
                                     </td>
                                     <td className="py-4 px-6">
-                                        <div className="w-36 mx-auto font-bold text-slate-900 text-left whitespace-nowrap">
+                                        <div className="w-36 mx-auto font-bold text-slate-900 dark:text-white text-left whitespace-nowrap">
                                             {Number(sale.amount).toLocaleString()} UGX
                                         </div>
                                     </td>
@@ -645,24 +687,50 @@ export default function Dashboard({
                                             <img 
                                                 src={sale.cashier_photo} 
                                                 alt={sale.cashier}
-                                                className="w-6 h-6 rounded-full object-cover shadow-sm border border-slate-200 shrink-0"
+                                                className="w-6 h-6 rounded-full object-cover shadow-sm border border-slate-200 dark:border-slate-700 shrink-0"
                                             />
-                                            <span className="text-slate-600 text-sm font-medium text-left">{sale.cashier}</span>
+                                            <span className="text-slate-600 dark:text-slate-300 text-sm font-medium text-left">{sale.cashier}</span>
                                         </div>
                                     </td>
                                 </tr>
                             )) : (
                                 <tr>
-                                    <td colSpan="5" className="py-12 text-center text-slate-500">
+                                    <td colSpan="5" className="py-12 text-center text-slate-500 dark:text-slate-400">
                                         <div className="flex flex-col items-center justify-center">
-                                            <ShoppingCart size={40} className="mb-4 text-slate-300" />
-                                            <p className="font-medium text-slate-600">No recent sales.</p>
+                                            <ShoppingCart size={40} className="mb-4 text-slate-300 dark:text-slate-600" />
+                                            <p className="font-medium text-slate-600 dark:text-slate-400">No recent sales.</p>
                                         </div>
                                     </td>
                                 </tr>
                             )}
                         </tbody>
                     </table>
+                </div>
+
+                {/* Mobile Card List View */}
+                <div className="sm:hidden divide-y divide-slate-100 dark:divide-slate-800">
+                    {recentSales?.length > 0 ? recentSales.map(sale => (
+                        <a key={sale.id} href={`/pos/receipt/${sale.id}`} target="_blank" rel="noreferrer" className="block p-4 space-y-2 hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors">
+                            <div className="flex items-center justify-between">
+                                <span className="font-bold text-slate-900 dark:text-white text-sm">{sale.customer_name}</span>
+                                {sale.payment_status === 'Refunded' ? (
+                                    <Badge variant="danger">Refunded</Badge>
+                                ) : sale.payment_status === 'Partial' ? (
+                                    <Badge variant="warning">Partial</Badge>
+                                ) : (
+                                    <Badge variant="success">Paid</Badge>
+                                )}
+                            </div>
+                            <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400">
+                                <span className="font-bold text-slate-800 dark:text-slate-200">{Number(sale.amount).toLocaleString()} UGX</span>
+                                <span>{sale.cashier} • {sale.time}</span>
+                            </div>
+                        </a>
+                    )) : (
+                        <div className="p-8 text-center text-slate-500 dark:text-slate-400 text-sm">
+                            No recent sales.
+                        </div>
+                    )}
                 </div>
             </Card>
 
@@ -677,7 +745,7 @@ export default function Dashboard({
                 </button>
             ) : (
                 <div 
-                    className="fixed bottom-0 right-4 shadow-2xl rounded-t-2xl overflow-hidden bg-white border border-slate-200/60 border-b-0 z-50 transition-all duration-300 ease-in-out flex flex-col" 
+                    className="fixed bottom-0 right-4 shadow-2xl rounded-t-2xl overflow-hidden bg-white dark:bg-slate-900 border border-slate-200/60 dark:border-slate-800 border-b-0 z-50 transition-all duration-300 ease-in-out flex flex-col" 
                     style={{ 
                         width: isExpanded ? '460px' : '380px',
                         height: isExpanded ? '600px' : '500px'
@@ -709,11 +777,11 @@ export default function Dashboard({
 
                 <>
                     {/* Chat Body */}
-                        <div className="flex-1 p-4 bg-slate-50/50 overflow-y-auto">
+                        <div className="flex-1 p-4 bg-slate-50/50 dark:bg-slate-950/60 overflow-y-auto">
                             {messages.map((msg, index) => (
                                 <div key={index} className={`flex mb-4 ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
                                     {msg.role === 'assistant' && (
-                                        <div className="mr-3 w-8 h-8 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center shrink-0 shadow-sm mt-1">
+                                        <div className="mr-3 w-8 h-8 rounded-full bg-indigo-100 dark:bg-indigo-950/70 text-indigo-600 dark:text-indigo-400 flex items-center justify-center shrink-0 shadow-sm mt-1">
                                             <Bot size={16} />
                                         </div>
                                     )}
@@ -721,7 +789,7 @@ export default function Dashboard({
                                         <div className={`p-3 rounded-2xl shadow-sm text-sm leading-relaxed ${
                                             msg.role === 'user' 
                                                 ? 'bg-indigo-600 text-white rounded-tr-sm' 
-                                                : 'bg-white text-slate-700 border border-slate-200 rounded-tl-sm'
+                                                : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 rounded-tl-sm'
                                         }`}>
                                             {renderFormattedText(msg.text)}
                                         </div>
@@ -730,7 +798,7 @@ export default function Dashboard({
                                         </div>
                                     </div>
                                     {msg.role === 'user' && (
-                                        <div className="ml-3 w-8 h-8 rounded-full bg-slate-200 text-slate-600 flex items-center justify-center shrink-0 shadow-sm mt-1 order-3">
+                                        <div className="ml-3 w-8 h-8 rounded-full bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300 flex items-center justify-center shrink-0 shadow-sm mt-1 order-3">
                                             <User size={16} />
                                         </div>
                                     )}
@@ -739,10 +807,10 @@ export default function Dashboard({
 
                             {loading && (
                                 <div className="flex mb-4 items-end gap-3">
-                                    <div className="w-8 h-8 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center shrink-0 shadow-sm">
+                                    <div className="w-8 h-8 rounded-full bg-indigo-100 dark:bg-indigo-950/70 text-indigo-600 dark:text-indigo-400 flex items-center justify-center shrink-0 shadow-sm">
                                         <Bot size={16} />
                                     </div>
-                                    <div className="bg-white p-3 rounded-2xl rounded-tl-sm border border-slate-200 shadow-sm flex items-center gap-1.5 h-10">
+                                    <div className="bg-white dark:bg-slate-800 p-3 rounded-2xl rounded-tl-sm border border-slate-200 dark:border-slate-700 shadow-sm flex items-center gap-1.5 h-10">
                                         <div className="w-1.5 h-1.5 bg-indigo-600 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></div>
                                         <div className="w-1.5 h-1.5 bg-indigo-600 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></div>
                                         <div className="w-1.5 h-1.5 bg-indigo-600 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></div>
@@ -753,32 +821,32 @@ export default function Dashboard({
                         </div>
 
                         {/* Quick Prompts */}
-                        <div className="px-3 py-2 bg-white border-t border-slate-100 flex gap-2 overflow-x-auto no-scrollbar shrink-0">
-                            <button className="whitespace-nowrap px-3 py-1.5 rounded-full border border-indigo-100 bg-indigo-50 text-indigo-700 text-xs font-semibold hover:bg-indigo-100 transition-colors" onClick={() => handleSend("Which phones are low on stock?")}>
+                        <div className="px-3 py-2 bg-white dark:bg-slate-900 border-t border-slate-100 dark:border-slate-800 flex gap-2 overflow-x-auto no-scrollbar shrink-0">
+                            <button className="whitespace-nowrap px-3 py-1.5 rounded-full border border-indigo-100 dark:border-indigo-800/60 bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 text-xs font-semibold hover:bg-indigo-100 dark:hover:bg-indigo-900/60 transition-colors" onClick={() => handleSend("Which phones are low on stock?")}>
                                 ⚡ Low Stock
                             </button>
-                            <button className="whitespace-nowrap px-3 py-1.5 rounded-full border border-indigo-100 bg-indigo-50 text-indigo-700 text-xs font-semibold hover:bg-indigo-100 transition-colors" onClick={() => handleSend("Give me today's sales summary")}>
+                            <button className="whitespace-nowrap px-3 py-1.5 rounded-full border border-indigo-100 dark:border-indigo-800/60 bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 text-xs font-semibold hover:bg-indigo-100 dark:hover:bg-indigo-900/60 transition-colors" onClick={() => handleSend("Give me today's sales summary")}>
                                 📊 Sales Summary
                             </button>
-                            <button className="whitespace-nowrap px-3 py-1.5 rounded-full border border-indigo-100 bg-indigo-50 text-indigo-700 text-xs font-semibold hover:bg-indigo-100 transition-colors" onClick={() => handleSend("How many active repairs do we have?")}>
+                            <button className="whitespace-nowrap px-3 py-1.5 rounded-full border border-indigo-100 dark:border-indigo-800/60 bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 text-xs font-semibold hover:bg-indigo-100 dark:hover:bg-indigo-900/60 transition-colors" onClick={() => handleSend("How many active repairs do we have?")}>
                                 🛠️ Active Repairs
                             </button>
-                            <button className="whitespace-nowrap px-3 py-1.5 rounded-full border border-indigo-100 bg-indigo-50 text-indigo-700 text-xs font-semibold hover:bg-indigo-100 transition-colors" onClick={() => handleSend("What are our overdue dealer items?")}>
+                            <button className="whitespace-nowrap px-3 py-1.5 rounded-full border border-indigo-100 dark:border-indigo-800/60 bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 text-xs font-semibold hover:bg-indigo-100 dark:hover:bg-indigo-900/60 transition-colors" onClick={() => handleSend("What are our overdue dealer items?")}>
                                 🤝 Overdue Dealers
                             </button>
-                            <button className="whitespace-nowrap px-3 py-1.5 rounded-full border border-indigo-100 bg-indigo-50 text-indigo-700 text-xs font-semibold hover:bg-indigo-100 transition-colors" onClick={() => handleSend("What is our total layaway balance?")}>
+                            <button className="whitespace-nowrap px-3 py-1.5 rounded-full border border-indigo-100 dark:border-indigo-800/60 bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 text-xs font-semibold hover:bg-indigo-100 dark:hover:bg-indigo-900/60 transition-colors" onClick={() => handleSend("What is our total layaway balance?")}>
                                 💰 Layaway Balances
                             </button>
-                            <button className="whitespace-nowrap px-3 py-1.5 rounded-full border border-indigo-100 bg-indigo-50 text-indigo-700 text-xs font-semibold hover:bg-indigo-100 transition-colors" onClick={() => handleSend("What is our total inventory value?")}>
+                            <button className="whitespace-nowrap px-3 py-1.5 rounded-full border border-indigo-100 dark:border-indigo-800/60 bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 text-xs font-semibold hover:bg-indigo-100 dark:hover:bg-indigo-900/60 transition-colors" onClick={() => handleSend("What is our total inventory value?")}>
                                 📱 Stock Value
                             </button>
                         </div>
 
                         {/* Input Footer */}
-                        <div className="p-3 bg-white border-t border-slate-200 flex items-center gap-3 shrink-0 rounded-b-2xl">
+                        <div className="p-3 bg-white dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800 flex items-center gap-3 shrink-0 rounded-b-2xl">
                             <input 
                                 type="text" 
-                                className="flex-1 bg-slate-100 border-transparent focus:border-indigo-500 focus:bg-white focus:ring-2 focus:ring-indigo-200 rounded-xl px-4 py-2.5 text-sm transition-all outline-none text-slate-700 placeholder:text-slate-400" 
+                                className="flex-1 bg-slate-100 dark:bg-slate-800 border-transparent focus:border-indigo-500 focus:bg-white dark:focus:bg-slate-800 focus:ring-2 focus:ring-indigo-200 dark:focus:ring-indigo-900 rounded-xl px-4 py-2.5 text-sm transition-all outline-none text-slate-700 dark:text-slate-200 placeholder:text-slate-400" 
                                 placeholder="Message SmartPOS AI..." 
                                 value={prompt}
                                 onChange={(e) => setPrompt(e.target.value)}
