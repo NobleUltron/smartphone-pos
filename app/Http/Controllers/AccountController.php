@@ -88,7 +88,7 @@ class AccountController extends Controller
         $dealerPayables = (float) \App\Models\DealerItem::where('direction', 'inward')
             ->where('quantity_sold', '>', 0)
             ->get()
-            ->sum(fn($item) => max(0, ($item->quantity_sold * (float) $item->dealer_price) - (float) $item->amount_paid));
+            ->sum(fn($item) => max(0, ($item->quantity_sold * (float) ($item->wholesale_cost ?: $item->dealer_price ?: 0)) - (float) ($item->settlement_amount ?? 0)));
         $totalPayables = $supplierPayables + $dealerPayables;
         $adjustedNetWorth = $ownerNetWorth + $totalReceivables - $totalPayables;
 

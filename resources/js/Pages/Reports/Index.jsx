@@ -14,6 +14,7 @@ const COLORS = ['#4F46E5', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#3B82F6'
 export default function ReportsIndex({ 
     auth, 
     period = 'today', 
+    filters = {},
     metrics = {}, 
     inventory = {}, 
     consignments = {}, 
@@ -26,6 +27,8 @@ export default function ReportsIndex({
     brandProfitBreakdown = [] 
 }) {
     const [activeIndex, setActiveIndex] = useState(0);
+    const [dateFrom, setDateFrom] = useState(filters?.date_from || '');
+    const [dateTo, setDateTo] = useState(filters?.date_to || '');
 
     const onPieEnter = (_, index) => {
         setActiveIndex(index);
@@ -64,8 +67,27 @@ export default function ReportsIndex({
     };
     
     const handlePeriodChange = (e) => {
-        router.get('/reports', { period: e.target.value }, { preserveState: true });
+        setDateFrom('');
+        setDateTo('');
+        router.get('/reports', { period: e.target.value }, { preserveState: true, preserveScroll: true });
     };
+
+    const handleCustomDateApply = (nextFrom, nextTo) => {
+        const params = {};
+        if (nextFrom) params.date_from = nextFrom;
+        if (nextTo) params.date_to = nextTo;
+        if (!nextFrom && !nextTo) params.period = 'today';
+        router.get('/reports', params, { preserveState: true, preserveScroll: true });
+    };
+
+    const periodLabel = period === 'custom'
+        ? `${dateFrom || 'Start'} to ${dateTo || 'Today'}`
+        : (period === 'all' ? 'All Time' : period.charAt(0).toUpperCase() + period.slice(1));
+
+    const netOperatingProfit = Number(metrics?.netOperatingProfit ?? ((metrics?.grossProfit || 0) - (metrics?.operatingExpenses || 0)));
+    const netMarginPct = (metrics?.salesVolume || 0) > 0
+        ? ((netOperatingProfit / metrics.salesVolume) * 100).toFixed(1)
+        : '0.0';
 
     return (
         <AuthenticatedLayout>
@@ -75,10 +97,9 @@ export default function ReportsIndex({
                 title="Business Reports"
                 breadcrumbs={[{ label: 'Home', href: '/' }, { label: 'Reports' }]}
                 actions={
-                    <div className="flex items-center gap-3">
-                        <label className="text-xs font-bold text-slate-300 uppercase tracking-wider whitespace-nowrap">Date Range:</label>
+                    <div className="flex items-center gap-2 flex-wrap">
                         <select 
-                            className="bg-white/10 hover:bg-white/20 text-white border border-white/20 rounded-xl text-xs font-bold py-2.5 px-3.5 outline-none focus:ring-2 focus:ring-indigo-400/40 backdrop-blur-md transition-all cursor-pointer" 
+                            className="bg-white/10 hover:bg-white/20 text-white border border-white/20 rounded-xl text-xs font-bold py-2 px-3 outline-none focus:ring-2 focus:ring-indigo-400/40 backdrop-blur-md transition-all cursor-pointer" 
                             value={period} 
                             onChange={handlePeriodChange}
                         >
@@ -87,45 +108,66 @@ export default function ReportsIndex({
                             <option value="month" className="bg-slate-900 text-white">This Month</option>
                             <option value="year" className="bg-slate-900 text-white">This Year</option>
                             <option value="all" className="bg-slate-900 text-white">All Time</option>
+                            {period === 'custom' && <option value="custom" className="bg-slate-900 text-white">Custom Range</option>}
                         </select>
+                        <input
+                            type="date"
+                            value={dateFrom}
+                            onChange={(e) => {
+                                setDateFrom(e.target.value);
+                                handleCustomDateApply(e.target.value, dateTo);
+                            }}
+                            className="bg-white/10 text-white border border-white/20 rounded-xl text-xs font-semibold py-2 px-2.5 outline-none focus:ring-2 focus:ring-indigo-400/40"
+                            title="From Date"
+                        />
+                        <input
+                            type="date"
+                            value={dateTo}
+                            onChange={(e) => {
+                                setDateTo(e.target.value);
+                                handleCustomDateApply(dateFrom, e.target.value);
+                            }}
+                            className="bg-white/10 text-white border border-white/20 rounded-xl text-xs font-semibold py-2 px-2.5 outline-none focus:ring-2 focus:ring-indigo-400/40"
+                            title="To Date"
+                        />
                     </div>
                 }
             />
 
             {/* Sales Metrics Cards */}
-            <h3 className="text-lg font-bold text-slate-900 mb-4 flex items-center gap-2 mt-8">
+            <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-4 flex items-center gap-2 mt-8">
                 <TrendingUp size={20} className="text-emerald-500" /> 
-                Sales Performance ({period === 'all' ? 'All Time' : period.charAt(0).toUpperCase() + period.slice(1)})
+                Sales Performance ({periodLabel})
             </h3>
             
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-5">
                 <Card className="animate-slide-up relative overflow-hidden flex flex-col justify-between" style={{ animationDelay: '0.0s' }}>
                     <div className="flex justify-between items-start mb-4">
                         <div>
-                            <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Cash Collected</p>
-                            <h3 className="text-3xl font-black text-slate-900">{Number(metrics?.totalRevenue || 0).toLocaleString()} <span className="text-lg text-slate-500 font-normal">UGX</span></h3>
+                            <p className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">Cash Collected</p>
+                            <h3 className="text-3xl font-black text-slate-900 dark:text-white">{Number(metrics?.totalRevenue || 0).toLocaleString()} <span className="text-lg text-slate-500 dark:text-slate-400 font-normal">UGX</span></h3>
                         </div>
-                        <div className="w-12 h-12 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center">
+                        <div className="w-12 h-12 rounded-2xl bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 flex items-center justify-center">
                             <Wallet size={24} />
                         </div>
                     </div>
-                    <div className="flex items-center gap-2 text-sm text-slate-500">
+                    <div className="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
                         <Badge variant="success">Sales Vol</Badge>
-                        <span className="font-semibold text-slate-700" title="Total invoice value of goods sold">UGX {Number(metrics?.salesVolume || 0).toLocaleString()}</span>
+                        <span className="font-semibold text-slate-700 dark:text-slate-300" title="Total invoice value of goods sold">UGX {Number(metrics?.salesVolume || 0).toLocaleString()}</span>
                     </div>
                 </Card>
 
                 <Card className="animate-slide-up relative overflow-hidden flex flex-col justify-between" style={{ animationDelay: '0.1s' }}>
                     <div className="flex justify-between items-start mb-4">
                         <div>
-                            <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Cost of Goods Sold</p>
-                            <h3 className="text-3xl font-black text-slate-900">{Number(metrics?.cogs || 0).toLocaleString()} <span className="text-lg text-slate-500 font-normal">UGX</span></h3>
+                            <p className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">Cost of Goods Sold</p>
+                            <h3 className="text-3xl font-black text-slate-900 dark:text-white">{Number(metrics?.cogs || 0).toLocaleString()} <span className="text-lg text-slate-500 dark:text-slate-400 font-normal">UGX</span></h3>
                         </div>
-                        <div className="w-12 h-12 rounded-2xl bg-rose-50 text-rose-600 flex items-center justify-center">
+                        <div className="w-12 h-12 rounded-2xl bg-rose-50 dark:bg-rose-950/60 text-rose-600 dark:text-rose-400 flex items-center justify-center">
                             <DollarSign size={24} />
                         </div>
                     </div>
-                    <div className="flex items-center gap-2 text-sm text-slate-500">
+                    <div className="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
                         <Badge variant="danger">Outflow</Badge>
                         <span>COGS</span>
                     </div>
@@ -134,43 +176,68 @@ export default function ReportsIndex({
                 <Card className="animate-slide-up relative overflow-hidden flex flex-col justify-between" style={{ animationDelay: '0.2s' }}>
                     <div className="flex justify-between items-start mb-4">
                         <div>
-                            <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Gross Profit</p>
-                            <h3 className="text-3xl font-black text-slate-900">{Number(metrics?.grossProfit || 0).toLocaleString()} <span className="text-lg text-slate-500 font-normal">UGX</span></h3>
+                            <p className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">Gross Profit</p>
+                            <h3 className="text-3xl font-black text-slate-900 dark:text-white">{Number(metrics?.grossProfit || 0).toLocaleString()} <span className="text-lg text-slate-500 dark:text-slate-400 font-normal">UGX</span></h3>
                         </div>
-                        <div className="w-12 h-12 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center">
+                        <div className="w-12 h-12 rounded-2xl bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 flex items-center justify-center">
                             <TrendingUp size={24} />
                         </div>
                     </div>
-                    <div className="flex items-center gap-2 text-sm text-slate-500">
+                    <div className="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
                         <Badge variant="success">Est.</Badge>
-                        <span>Margin</span>
+                        <span>Gross Margin</span>
                     </div>
                 </Card>
 
                 <Card className="animate-slide-up relative overflow-hidden flex flex-col justify-between" style={{ animationDelay: '0.3s' }}>
                     <div className="flex justify-between items-start mb-4">
                         <div>
-                            <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Total Items Sold</p>
-                            <h3 className="text-3xl font-black text-slate-900">{Number(metrics?.itemsSold || 0).toLocaleString()} <span className="text-lg text-slate-500 font-normal">Units</span></h3>
+                            <p className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">Total Items Sold</p>
+                            <h3 className="text-3xl font-black text-slate-900 dark:text-white">{Number(metrics?.itemsSold || 0).toLocaleString()} <span className="text-lg text-slate-500 dark:text-slate-400 font-normal">Units</span></h3>
                         </div>
-                        <div className="w-12 h-12 rounded-2xl bg-cyan-50 text-cyan-600 flex items-center justify-center">
+                        <div className="w-12 h-12 rounded-2xl bg-cyan-50 dark:bg-cyan-950/60 text-cyan-600 dark:text-cyan-400 flex items-center justify-center">
                             <Smartphone size={24} />
                         </div>
                     </div>
-                    <div className="flex items-center gap-2 text-sm text-slate-500">
+                    <div className="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
                         <Badge variant="info">Volume</Badge>
                         <span>Sold</span>
                     </div>
                 </Card>
             </div>
 
+            {/* Net Operating Profit Strip */}
+            <div className="mb-8 p-5 rounded-2xl bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white border border-indigo-800/40 shadow-lg flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div>
+                    <div className="text-[11px] font-bold uppercase tracking-widest text-indigo-300">
+                        Net Operating Profit ({periodLabel})
+                    </div>
+                    <div className={`text-2xl sm:text-3xl font-black mt-1 ${netOperatingProfit >= 0 ? 'text-emerald-300' : 'text-rose-300'}`}>
+                        UGX {netOperatingProfit.toLocaleString()}
+                    </div>
+                    <p className="text-xs text-slate-300 mt-0.5">
+                        Gross Profit (UGX {Number(metrics?.grossProfit || 0).toLocaleString()}) &minus; Operating Expenses (UGX {Number(metrics?.operatingExpenses || 0).toLocaleString()})
+                    </p>
+                </div>
+                <div className="flex items-center gap-4">
+                    <div className="px-4 py-2.5 rounded-xl bg-white/10 border border-white/10 text-center">
+                        <div className="text-[10px] uppercase font-bold text-indigo-200">Net Margin</div>
+                        <div className="text-lg font-black text-white">{netMarginPct}%</div>
+                    </div>
+                    <div className="px-4 py-2.5 rounded-xl bg-white/10 border border-white/10 text-center">
+                        <div className="text-[10px] uppercase font-bold text-indigo-200">Settlements / Refunds</div>
+                        <div className="text-sm font-bold text-amber-300">UGX {Number(expenses?.settlements || 0).toLocaleString()}</div>
+                    </div>
+                </div>
+            </div>
+
             {/* Consignments & Dealer Settlements */}
             <div className="flex items-center justify-between mt-10 mb-4">
-                <h3 className="text-lg font-bold text-slate-900 flex items-center gap-2">
-                    <Handshake size={20} className="text-purple-600" /> 
-                    Dealer Consignments & Settlements ({period === 'all' ? 'All Time' : period.charAt(0).toUpperCase() + period.slice(1)})
+                <h3 className="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                    <Handshake size={20} className="text-purple-600 dark:text-purple-400" /> 
+                    Dealer Consignments & Settlements ({periodLabel})
                 </h3>
-                <Link href="/dealers/dashboard" className="text-xs font-bold text-purple-600 hover:text-purple-700 flex items-center gap-1">
+                <Link href="/dealers/dashboard" className="text-xs font-bold text-purple-600 dark:text-purple-400 hover:text-purple-700 dark:hover:text-purple-300 flex items-center gap-1">
                     Dealer Directory <ArrowUpRight size={14} />
                 </Link>
             </div>
@@ -211,14 +278,14 @@ export default function ReportsIndex({
                 <Card className="animate-slide-up relative overflow-hidden flex flex-col justify-between">
                     <div className="flex justify-between items-start mb-4">
                         <div>
-                            <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Consignment Net Profit</p>
-                            <h3 className="text-3xl font-black text-slate-900">{Number(consignments?.netProfit || 0).toLocaleString()} <span className="text-lg text-slate-500 font-normal">UGX</span></h3>
+                            <p className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">Consignment Net Profit</p>
+                            <h3 className="text-3xl font-black text-slate-900 dark:text-white">{Number(consignments?.netProfit || 0).toLocaleString()} <span className="text-lg text-slate-500 dark:text-slate-400 font-normal">UGX</span></h3>
                         </div>
-                        <div className="w-12 h-12 rounded-2xl bg-purple-50 text-purple-600 flex items-center justify-center">
+                        <div className="w-12 h-12 rounded-2xl bg-purple-50 dark:bg-purple-950/60 text-purple-600 dark:text-purple-400 flex items-center justify-center">
                             <TrendingUp size={24} />
                         </div>
                     </div>
-                    <div className="flex items-center gap-2 text-sm text-slate-500">
+                    <div className="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
                         <Badge variant="info">Margin</Badge>
                         <span>Shop gross markup</span>
                     </div>
@@ -227,14 +294,14 @@ export default function ReportsIndex({
                 <Card className="animate-slide-up relative overflow-hidden flex flex-col justify-between">
                     <div className="flex justify-between items-start mb-4">
                         <div>
-                            <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Consignment Volume</p>
-                            <h3 className="text-3xl font-black text-slate-900">{Number(consignments?.inwardSold || 0)} <span className="text-lg text-slate-500 font-normal">Sold</span></h3>
+                            <p className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">Consignment Volume</p>
+                            <h3 className="text-3xl font-black text-slate-900 dark:text-white">{Number(consignments?.inwardSold || 0)} <span className="text-lg text-slate-500 dark:text-slate-400 font-normal">Sold</span></h3>
                         </div>
-                        <div className="w-12 h-12 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center">
+                        <div className="w-12 h-12 rounded-2xl bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 flex items-center justify-center">
                             <Smartphone size={24} />
                         </div>
                     </div>
-                    <div className="flex items-center gap-2 text-sm text-slate-500">
+                    <div className="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
                         <Badge variant="neutral">{consignments?.inwardReceived || 0} Intake</Badge>
                         <span>{consignments?.outwardIssued || 0} Outward Partner</span>
                     </div>
@@ -243,11 +310,11 @@ export default function ReportsIndex({
 
             {/* Layaways & Receivables Portfolio */}
             <div className="flex items-center justify-between mt-10 mb-4">
-                <h3 className="text-lg font-bold text-slate-900 flex items-center gap-2">
-                    <Wallet size={20} className="text-emerald-600" /> 
-                    Layaways & Installments Portfolio ({period === 'all' ? 'All Time' : period.charAt(0).toUpperCase() + period.slice(1)})
+                <h3 className="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                    <Wallet size={20} className="text-emerald-600 dark:text-emerald-400" /> 
+                    Layaways & Installments Portfolio ({periodLabel})
                 </h3>
-                <Link href="/layaways" className="text-xs font-bold text-emerald-600 hover:text-emerald-700 flex items-center gap-1">
+                <Link href="/layaways" className="text-xs font-bold text-emerald-600 dark:text-emerald-400 hover:text-emerald-700 dark:hover:text-emerald-300 flex items-center gap-1">
                     Layaway Management <ArrowUpRight size={14} />
                 </Link>
             </div>
@@ -272,14 +339,14 @@ export default function ReportsIndex({
                 <Card className="animate-slide-up relative overflow-hidden flex flex-col justify-between">
                     <div className="flex justify-between items-start mb-4">
                         <div>
-                            <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Active Layaway Contracts</p>
-                            <h3 className="text-3xl font-black text-slate-900">{Number(layaways?.activePlans || 0)} <span className="text-lg text-slate-500 font-normal">Plans</span></h3>
+                            <p className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">Active Layaway Contracts</p>
+                            <h3 className="text-3xl font-black text-slate-900 dark:text-white">{Number(layaways?.activePlans || 0)} <span className="text-lg text-slate-500 dark:text-slate-400 font-normal">Plans</span></h3>
                         </div>
-                        <div className="w-12 h-12 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center">
+                        <div className="w-12 h-12 rounded-2xl bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 flex items-center justify-center">
                             <Layers size={24} />
                         </div>
                     </div>
-                    <div className="flex items-center gap-2 text-sm text-slate-500">
+                    <div className="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
                         <Badge variant="info">Ongoing</Badge>
                         <span>Customers currently paying</span>
                     </div>
@@ -288,14 +355,14 @@ export default function ReportsIndex({
                 <Card className="animate-slide-up relative overflow-hidden flex flex-col justify-between">
                     <div className="flex justify-between items-start mb-4">
                         <div>
-                            <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Outstanding Receivables</p>
-                            <h3 className="text-3xl font-black text-indigo-600">{Number(layaways?.totalReceivable || 0).toLocaleString()} <span className="text-lg text-slate-500 font-normal">UGX</span></h3>
+                            <p className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">Outstanding Receivables</p>
+                            <h3 className="text-3xl font-black text-indigo-600 dark:text-indigo-400">{Number(layaways?.totalReceivable || 0).toLocaleString()} <span className="text-lg text-slate-500 dark:text-slate-400 font-normal">UGX</span></h3>
                         </div>
-                        <div className="w-12 h-12 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center">
+                        <div className="w-12 h-12 rounded-2xl bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 flex items-center justify-center">
                             <DollarSign size={24} />
                         </div>
                     </div>
-                    <div className="flex items-center gap-2 text-sm text-slate-500">
+                    <div className="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
                         <Badge variant="warning">Receivable</Badge>
                         <span>Remaining customer balance</span>
                     </div>
@@ -304,14 +371,14 @@ export default function ReportsIndex({
                 <Card className="animate-slide-up relative overflow-hidden flex flex-col justify-between">
                     <div className="flex justify-between items-start mb-4">
                         <div>
-                            <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Completed Layaways</p>
-                            <h3 className="text-3xl font-black text-slate-900">{Number(layaways?.completedPlans || 0)} <span className="text-lg text-slate-500 font-normal">Finished</span></h3>
+                            <p className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">Completed Layaways</p>
+                            <h3 className="text-3xl font-black text-slate-900 dark:text-white">{Number(layaways?.completedPlans || 0)} <span className="text-lg text-slate-500 dark:text-slate-400 font-normal">Finished</span></h3>
                         </div>
-                        <div className="w-12 h-12 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center">
+                        <div className="w-12 h-12 rounded-2xl bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 flex items-center justify-center">
                             <Sparkles size={24} />
                         </div>
                     </div>
-                    <div className="flex items-center gap-2 text-sm text-slate-500">
+                    <div className="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
                         <Badge variant="success">Completed</Badge>
                         <span>Fully paid & released</span>
                     </div>
@@ -323,27 +390,29 @@ export default function ReportsIndex({
                 <Card className="lg:col-span-1 flex flex-col justify-between">
                     <div>
                         <div className="flex items-center justify-between mb-4">
-                            <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Total Expenses & Payouts</span>
-                            <div className="w-10 h-10 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center">
+                            <span className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Total Expenses & Payouts</span>
+                            <div className="w-10 h-10 rounded-xl bg-rose-50 dark:bg-rose-950/60 text-rose-600 dark:text-rose-400 flex items-center justify-center">
                                 <DollarSign size={20} />
                             </div>
                         </div>
-                        <h3 className="text-3xl font-black text-rose-600 mb-2">
-                            {Number(expenses?.total || 0).toLocaleString()} <span className="text-lg text-slate-500 font-normal">UGX</span>
+                        <h3 className="text-3xl font-black text-rose-600 dark:text-rose-400 mb-2">
+                            {Number(expenses?.total || 0).toLocaleString()} <span className="text-lg text-slate-500 dark:text-slate-400 font-normal">UGX</span>
                         </h3>
-                        <p className="text-sm text-slate-500">Total operational outflows in this period, including dealer payouts, refunds, and overheads.</p>
+                        <p className="text-sm text-slate-500 dark:text-slate-400">
+                            Operating Overheads: <strong className="text-slate-700 dark:text-slate-200">UGX {Number(expenses?.operating || 0).toLocaleString()}</strong> • Settlements & Refunds: <strong className="text-slate-700 dark:text-slate-200">UGX {Number(expenses?.settlements || 0).toLocaleString()}</strong>
+                        </p>
                     </div>
-                    <div className="mt-6 pt-4 border-t border-slate-100 flex items-center justify-between">
+                    <div className="mt-6 pt-4 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between">
                         <span className="text-xs text-slate-400 font-medium">Logged across all shifts</span>
-                        <Link href="/expenses" className="text-xs font-bold text-rose-600 hover:text-rose-700 flex items-center gap-1">
+                        <Link href="/expenses" className="text-xs font-bold text-rose-600 dark:text-rose-400 hover:text-rose-700 dark:hover:text-rose-300 flex items-center gap-1">
                             Expense Ledger <ArrowUpRight size={13} />
                         </Link>
                     </div>
                 </Card>
 
                 <Card noPadding className="lg:col-span-2 flex flex-col">
-                    <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
-                        <h3 className="font-bold text-slate-900 flex items-center gap-2">
+                    <div className="px-6 py-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
+                        <h3 className="font-bold text-slate-900 dark:text-white flex items-center gap-2">
                             <Receipt size={18} className="text-rose-500" />
                             Expense & Payout Breakdown by Category
                         </h3>
@@ -356,13 +425,13 @@ export default function ReportsIndex({
                                     return (
                                         <div key={idx}>
                                             <div className="flex justify-between items-center text-sm mb-1.5">
-                                                <span className="font-bold text-slate-800">{cat.name}</span>
+                                                <span className="font-bold text-slate-800 dark:text-slate-200">{cat.name}</span>
                                                 <div className="flex items-center gap-3">
-                                                    <span className="font-extrabold text-slate-900">{Number(cat.value).toLocaleString()} UGX</span>
-                                                    <span className="text-xs font-semibold text-slate-500 w-10 text-right">{pct}%</span>
+                                                    <span className="font-extrabold text-slate-900 dark:text-white">{Number(cat.value).toLocaleString()} UGX</span>
+                                                    <span className="text-xs font-semibold text-slate-500 dark:text-slate-400 w-10 text-right">{pct}%</span>
                                                 </div>
                                             </div>
-                                            <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden">
+                                            <div className="w-full bg-slate-100 dark:bg-slate-800 rounded-full h-2 overflow-hidden">
                                                 <div 
                                                     className="bg-gradient-to-r from-rose-500 to-pink-500 h-2 rounded-full transition-all duration-500"
                                                     style={{ width: `${pct}%` }}
@@ -382,23 +451,23 @@ export default function ReportsIndex({
             </div>
 
             {/* Repair Operations Metrics Cards */}
-            <h3 className="text-lg font-bold text-slate-900 mb-4 flex items-center gap-2 mt-8">
+            <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-4 flex items-center gap-2 mt-8">
                 <Wrench size={20} className="text-orange-500" /> 
-                Repair Operations ({period === 'all' ? 'All Time' : period.charAt(0).toUpperCase() + period.slice(1)})
+                Repair Operations ({periodLabel})
             </h3>
             
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
                 <Card className="animate-slide-up relative overflow-hidden flex flex-col justify-between" style={{ animationDelay: '0.4s' }}>
                     <div className="flex justify-between items-start mb-4">
                         <div>
-                            <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Repair Revenue</p>
-                            <h3 className="text-3xl font-black text-slate-900">{Number(metrics?.repairRevenue || 0).toLocaleString()} <span className="text-lg text-slate-500 font-normal">UGX</span></h3>
+                            <p className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">Repair Revenue</p>
+                            <h3 className="text-3xl font-black text-slate-900 dark:text-white">{Number(metrics?.repairRevenue || 0).toLocaleString()} <span className="text-lg text-slate-500 dark:text-slate-400 font-normal">UGX</span></h3>
                         </div>
-                        <div className="w-12 h-12 rounded-2xl bg-orange-50 text-orange-600 flex items-center justify-center">
+                        <div className="w-12 h-12 rounded-2xl bg-orange-50 dark:bg-orange-950/60 text-orange-600 dark:text-orange-400 flex items-center justify-center">
                             <Wallet size={24} />
                         </div>
                     </div>
-                    <div className="flex items-center gap-2 text-sm text-slate-500">
+                    <div className="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
                         <Badge variant="warning">Cash</Badge>
                         <span>Collected from repairs</span>
                     </div>
@@ -407,14 +476,14 @@ export default function ReportsIndex({
                 <Card className="animate-slide-up relative overflow-hidden flex flex-col justify-between" style={{ animationDelay: '0.5s' }}>
                     <div className="flex justify-between items-start mb-4">
                         <div>
-                            <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Repairs Completed</p>
-                            <h3 className="text-3xl font-black text-slate-900">{Number(metrics?.repairsCompleted || 0).toLocaleString()} <span className="text-lg text-slate-500 font-normal">Tickets</span></h3>
+                            <p className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">Repairs Completed</p>
+                            <h3 className="text-3xl font-black text-slate-900 dark:text-white">{Number(metrics?.repairsCompleted || 0).toLocaleString()} <span className="text-lg text-slate-500 dark:text-slate-400 font-normal">Tickets</span></h3>
                         </div>
-                        <div className="w-12 h-12 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center">
+                        <div className="w-12 h-12 rounded-2xl bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 flex items-center justify-center">
                             <Sparkles size={24} />
                         </div>
                     </div>
-                    <div className="flex items-center gap-2 text-sm text-slate-500">
+                    <div className="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
                         <Badge variant="success">Resolved</Badge>
                         <span>Successfully fixed</span>
                     </div>
@@ -424,9 +493,9 @@ export default function ReportsIndex({
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
                 {/* Top Brands */}
                 <Card noPadding className="flex flex-col animate-slide-up" style={{ animationDelay: '0.4s' }}>
-                    <div className="px-6 py-4 border-b border-slate-100 flex items-center gap-2">
+                    <div className="px-6 py-4 border-b border-slate-100 dark:border-slate-800 flex items-center gap-2">
                         <Activity size={20} className="text-pink-500" />
-                        <h3 className="font-bold text-slate-900">Top Selling Brands</h3>
+                        <h3 className="font-bold text-slate-900 dark:text-white">Top Selling Brands</h3>
                     </div>
                     <div className="p-6 h-[300px]">
                         {topBrands?.length > 0 ? (
@@ -468,9 +537,9 @@ export default function ReportsIndex({
 
                 {/* Top Categories */}
                 <Card noPadding className="flex flex-col animate-slide-up" style={{ animationDelay: '0.5s' }}>
-                    <div className="px-6 py-4 border-b border-slate-100 flex items-center gap-2">
+                    <div className="px-6 py-4 border-b border-slate-100 dark:border-slate-800 flex items-center gap-2">
                         <Tags size={20} className="text-indigo-500" />
-                        <h3 className="font-bold text-slate-900">Top Selling Categories</h3>
+                        <h3 className="font-bold text-slate-900 dark:text-white">Top Selling Categories</h3>
                     </div>
                     <div className="p-6 h-[300px]">
                         {topCategories?.length > 0 ? (
@@ -510,7 +579,7 @@ export default function ReportsIndex({
             </div>
 
             {/* Brand Profit Margin Analysis */}
-            <h3 className="text-lg font-bold text-slate-900 mb-4 flex items-center gap-2 mt-8">
+            <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-4 flex items-center gap-2 mt-8">
                 <TrendingUp size={20} className="text-emerald-500" />
                 Brand Profitability & Margin Breakdown
             </h3>
@@ -531,12 +600,12 @@ export default function ReportsIndex({
                         <tbody>
                             {brandProfitBreakdown?.length > 0 ? (
                                 brandProfitBreakdown.map((item, idx) => (
-                                    <tr key={idx} className="hover:bg-slate-50/50">
-                                        <td className="font-bold text-slate-900">{item.brand_name}</td>
-                                        <td className="text-center font-semibold text-slate-600">{item.items_sold} pcs</td>
-                                        <td className="text-right font-bold text-slate-900">{Number(item.revenue).toLocaleString()} UGX</td>
-                                        <td className="text-right font-medium text-slate-500">{Number(item.cogs).toLocaleString()} UGX</td>
-                                        <td className="text-right font-black text-emerald-600">{Number(item.profit).toLocaleString()} UGX</td>
+                                    <tr key={idx} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/40">
+                                        <td className="font-bold text-slate-900 dark:text-white">{item.brand_name}</td>
+                                        <td className="text-center font-semibold text-slate-600 dark:text-slate-300">{item.items_sold} pcs</td>
+                                        <td className="text-right font-bold text-slate-900 dark:text-white">{Number(item.revenue).toLocaleString()} UGX</td>
+                                        <td className="text-right font-medium text-slate-500 dark:text-slate-400">{Number(item.cogs).toLocaleString()} UGX</td>
+                                        <td className="text-right font-black text-emerald-600 dark:text-emerald-400">{Number(item.profit).toLocaleString()} UGX</td>
                                         <td className="text-center">
                                             <Badge variant={item.margin_pct >= 20 ? 'success' : item.margin_pct >= 10 ? 'warning' : 'danger'}>
                                                 {item.margin_pct}%
@@ -560,9 +629,9 @@ export default function ReportsIndex({
                 {/* Cashier Performance */}
                 <div className="lg:col-span-2">
                     <Card noPadding className="h-full animate-slide-up" style={{ animationDelay: '0.6s' }}>
-                        <div className="px-6 py-4 border-b border-slate-100 flex items-center gap-2">
+                        <div className="px-6 py-4 border-b border-slate-100 dark:border-slate-800 flex items-center gap-2">
                             <Users2 size={20} className="text-pink-500" />
-                            <h3 className="font-bold text-slate-900">Staff Sales & Profit Performance</h3>
+                            <h3 className="font-bold text-slate-900 dark:text-white">Staff Sales & Profit Performance</h3>
                         </div>
                         <div className="overflow-x-auto">
                             <table className="saas-table w-full whitespace-nowrap">
@@ -580,9 +649,9 @@ export default function ReportsIndex({
                                 <tbody>
                                     {cashierPerformance?.length > 0 ? cashierPerformance.map((staff, idx) => (
                                         <tr key={idx}>
-                                            <td className="font-bold text-slate-900">
+                                            <td className="font-bold text-slate-900 dark:text-white">
                                                 <div className="flex items-center gap-3">
-                                                    <div className="w-8 h-8 rounded-full bg-slate-100 text-slate-600 flex items-center justify-center font-bold text-xs border border-slate-200">
+                                                    <div className="w-8 h-8 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 flex items-center justify-center font-bold text-xs border border-slate-200 dark:border-slate-700">
                                                         {staff.name.charAt(0).toUpperCase()}
                                                     </div>
                                                     {staff.name}
@@ -597,23 +666,23 @@ export default function ReportsIndex({
                                                     <Badge variant="neutral">Cashier</Badge>
                                                 )}
                                             </td>
-                                            <td className="text-center text-slate-500 font-medium">{staff.sales_count}</td>
-                                            <td className="text-right font-bold text-slate-900">
-                                                {Number(staff.total_revenue).toLocaleString()} <span className="text-slate-500 font-normal text-xs">UGX</span>
+                                            <td className="text-center text-slate-500 dark:text-slate-400 font-medium">{staff.sales_count}</td>
+                                            <td className="text-right font-bold text-slate-900 dark:text-white">
+                                                {Number(staff.total_revenue).toLocaleString()} <span className="text-slate-500 dark:text-slate-400 font-normal text-xs">UGX</span>
                                             </td>
-                                            <td className="text-right font-semibold text-rose-600">
+                                            <td className="text-right font-semibold text-rose-600 dark:text-rose-400">
                                                 {Number(staff.total_discounts || 0).toLocaleString()} <span className="text-slate-400 font-normal text-xs">UGX</span>
                                             </td>
-                                            <td className="text-right font-black text-emerald-600">
+                                            <td className="text-right font-black text-emerald-600 dark:text-emerald-400">
                                                 {Number(staff.net_profit || 0).toLocaleString()} <span className="text-slate-400 font-normal text-xs">UGX</span>
                                             </td>
-                                            <td className="text-right font-medium text-slate-600">
+                                            <td className="text-right font-medium text-slate-600 dark:text-slate-300">
                                                 {Number(staff.avg_basket || 0).toLocaleString()} <span className="text-slate-400 font-normal text-xs">UGX</span>
                                             </td>
                                         </tr>
                                     )) : (
                                         <tr>
-                                            <td colSpan="7" className="text-center py-8 text-slate-500">
+                                            <td colSpan="7" className="text-center py-8 text-slate-500 dark:text-slate-400">
                                                 No sales data for this period.
                                             </td>
                                         </tr>
@@ -627,32 +696,32 @@ export default function ReportsIndex({
                 {/* Inventory Snapshot */}
                 <div className="lg:col-span-1">
                     <div className="flex flex-col gap-6 h-full animate-slide-up" style={{ animationDelay: '0.7s' }}>
-                        <h3 className="text-lg font-bold text-slate-900 flex items-center gap-2">
+                        <h3 className="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
                             <Package size={20} className="text-amber-500" /> Current Inventory (Real-Time)
                         </h3>
                         
                         <Card className="border-l-4 border-l-slate-400">
-                            <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Invested Cost (In Stock)</p>
-                            <h3 className="text-2xl font-black text-slate-900 mb-1">
-                                {Number(inventory?.inStockValue || 0).toLocaleString()} <span className="text-sm text-slate-500 font-normal">UGX</span>
+                            <p className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">Invested Cost (In Stock)</p>
+                            <h3 className="text-2xl font-black text-slate-900 dark:text-white mb-1">
+                                {Number(inventory?.inStockValue || 0).toLocaleString()} <span className="text-sm text-slate-500 dark:text-slate-400 font-normal">UGX</span>
                             </h3>
-                            <p className="text-sm text-slate-500">Money tied up in {inventory?.inStockCount || 0} in-stock items</p>
+                            <p className="text-sm text-slate-500 dark:text-slate-400">Money tied up in {inventory?.inStockCount || 0} in-stock items</p>
                         </Card>
 
                         <Card className="border-l-4 border-l-emerald-500">
-                            <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Expected Retail Revenue</p>
-                            <h3 className="text-2xl font-black text-slate-900 mb-1">
-                                {Number(inventory?.expectedRevenue || 0).toLocaleString()} <span className="text-sm text-slate-500 font-normal">UGX</span>
+                            <p className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">Expected Retail Revenue</p>
+                            <h3 className="text-2xl font-black text-slate-900 dark:text-white mb-1">
+                                {Number(inventory?.expectedRevenue || 0).toLocaleString()} <span className="text-sm text-slate-500 dark:text-slate-400 font-normal">UGX</span>
                             </h3>
-                            <p className="text-sm text-slate-500">Total value if all stock sells</p>
+                            <p className="text-sm text-slate-500 dark:text-slate-400">Total value if all stock sells</p>
                         </Card>
 
                         <Card className="border-l-4 border-l-cyan-500">
-                            <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Potential Profit</p>
-                            <h3 className="text-2xl font-black text-slate-900 mb-1">
-                                {Number(inventory?.potentialProfit || 0).toLocaleString()} <span className="text-sm text-slate-500 font-normal">UGX</span>
+                            <p className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">Potential Profit</p>
+                            <h3 className="text-2xl font-black text-slate-900 dark:text-white mb-1">
+                                {Number(inventory?.potentialProfit || 0).toLocaleString()} <span className="text-sm text-slate-500 dark:text-slate-400 font-normal">UGX</span>
                             </h3>
-                            <p className="text-sm text-slate-500">Excludes {inventory?.defectiveCount || 0} defective items</p>
+                            <p className="text-sm text-slate-500 dark:text-slate-400">Excludes {inventory?.defectiveCount || 0} defective items</p>
                         </Card>
                     </div>
                 </div>

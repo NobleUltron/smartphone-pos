@@ -20,42 +20,51 @@ class ReportController extends Controller
             abort(403, 'Unauthorized action. Business reports are restricted to Managers and Admins.');
         }
 
-        $period = $request->query('period', 'today'); // today, week, month, year, all
+        $period = $request->query('period', 'today'); // today, week, month, year, all, custom
+        $dateFrom = $request->query('date_from', '');
+        $dateTo = $request->query('date_to', '');
 
-        $startDate = match ($period) {
-            'today' => Carbon::today(),
-            'week' => Carbon::now()->startOfWeek(),
-            'month' => Carbon::now()->startOfMonth(),
-            'year' => Carbon::now()->startOfYear(),
-            'all' => Carbon::createFromTimestamp(0),
-            default => Carbon::today(),
-        };
+        if ($request->filled('date_from') || $request->filled('date_to')) {
+            $period = 'custom';
+            $startDate = $request->filled('date_from') ? Carbon::parse($dateFrom)->startOfDay() : Carbon::createFromTimestamp(0);
+            $endDate = $request->filled('date_to') ? Carbon::parse($dateTo)->endOfDay() : Carbon::now()->endOfDay();
+        } else {
+            $startDate = match ($period) {
+                'today' => Carbon::today(),
+                'week' => Carbon::now()->startOfWeek(),
+                'month' => Carbon::now()->startOfMonth(),
+                'year' => Carbon::now()->startOfYear(),
+                'all' => Carbon::createFromTimestamp(0),
+                default => Carbon::today(),
+            };
+            $endDate = Carbon::now()->endOfDay();
+        }
 
         $directSalesRevenue = Sale::whereNull('repair_id')
             ->whereIn('payment_status', ['Paid', 'Refunded'])
             ->where('payment_method', '!=', 'Layaway')
-            ->where('sale_date', '>=', $startDate)
+            ->whereBetween('sale_date', [$startDate, $endDate])
             ->sum('final_amount');
 
-        $layawayRevenue = \App\Models\LayawayPayment::where('payment_date', '>=', $startDate)
+        $layawayRevenue = \App\Models\LayawayPayment::whereBetween('payment_date', [$startDate, $endDate])
             ->sum('amount_paid');
 
-        $invoiceRevenue = \App\Models\InvoicePayment::where('payment_date', '>=', $startDate)
+        $invoiceRevenue = \App\Models\InvoicePayment::whereBetween('payment_date', [$startDate, $endDate])
             ->sum('amount');
 
         $refunds = \App\Models\Expense::whereIn('category', ['Refund', 'Refund (Past Shift)'])
-            ->where('expense_date', '>=', $startDate)
+            ->whereBetween('expense_date', [$startDate, $endDate])
             ->sum('amount');
 
         $totalRevenue = $directSalesRevenue + $layawayRevenue + $invoiceRevenue - $refunds;
 
         // Include trade_in_value (non-cash barter tender) and B2B invoices in gross sales volume
         $posSalesVolume = (float) Sale::where('payment_status', '!=', 'Refunded')
-            ->where('sale_date', '>=', $startDate)
+            ->whereBetween('sale_date', [$startDate, $endDate])
             ->sum(DB::raw('final_amount + COALESCE(trade_in_value, 0)'));
 
         $invoiceSalesVolume = (float) \App\Models\Invoice::where('status', '!=', 'Cancelled')
-            ->where('invoice_date', '>=', $startDate)
+            ->whereBetween('issue_date', [$startDate, $endDate])
             ->sum('total_amount');
 
         $salesVolume = $posSalesVolume + $invoiceSalesVolume;
@@ -66,7 +75,7 @@ class ReportController extends Controller
             ->join('sales', 'sale_items.sale_id', '=', 'sales.id')
             ->join('device_imeis', 'sale_items.device_imei_id', '=', 'device_imeis.id')
             ->where('sales.payment_status', '!=', 'Refunded')
-            ->where('sales.sale_date', '>=', $startDate)
+            ->whereBetween('sales.sale_date', [$startDate, $endDate])
             ->sum(DB::raw('device_imeis.cost_price * sale_items.quantity'));
 
         $bulkCogs = DB::table('sale_items')
@@ -74,52 +83,51 @@ class ReportController extends Controller
             ->join('products', 'sale_items.product_id', '=', 'products.id')
             ->whereNull('sale_items.device_imei_id')
             ->where('sales.payment_status', '!=', 'Refunded')
-            ->where('sales.sale_date', '>=', $startDate)
+            ->whereBetween('sales.sale_date', [$startDate, $endDate])
             ->sum(DB::raw('products.cost_price * sale_items.quantity'));
 
         $repairPartsCogs = DB::table('repair_parts')
             ->join('repairs', 'repair_parts.repair_id', '=', 'repairs.id')
             ->whereNotIn('repairs.status', ['Cancelled'])
-            ->where('repairs.created_at', '>=', $startDate)
+            ->whereBetween('repairs.created_at', [$startDate, $endDate])
             ->sum(DB::raw('repair_parts.cost * repair_parts.quantity'));
 
         $invoiceCogs = DB::table('invoice_items')
             ->join('invoices', 'invoice_items.invoice_id', '=', 'invoices.id')
             ->join('products', 'invoice_items.product_id', '=', 'products.id')
             ->where('invoices.status', '!=', 'Cancelled')
-            ->where('invoices.invoice_date', '>=', $startDate)
+            ->whereBetween('invoices.issue_date', [$startDate, $endDate])
             ->sum(DB::raw('products.cost_price * invoice_items.quantity'));
 
         $cogs = $serializedCogs + $bulkCogs + $repairPartsCogs + $invoiceCogs;
         $grossProfit = $salesVolume - $cogs;
         
         $repairsCompleted = Repair::whereIn('status', ['Completed', 'Delivered'])
-            ->whereDate('updated_at', '>=', $startDate)
+            ->whereBetween('updated_at', [$startDate, $endDate])
             ->count();
             
         $repairRevenue = \App\Models\LayawayPayment::whereHas('sale', function($q) {
                 $q->whereNotNull('repair_id');
             })
-            ->where('payment_date', '>=', $startDate)
+            ->whereBetween('payment_date', [$startDate, $endDate])
             ->sum('amount_paid');
         
         $totalItemsSold = (int) DB::table('sale_items')
             ->join('sales', 'sale_items.sale_id', '=', 'sales.id')
             ->where('sales.payment_status', '!=', 'Refunded')
-            ->where('sales.sale_date', '>=', $startDate)
+            ->whereBetween('sales.sale_date', [$startDate, $endDate])
             ->sum('sale_items.quantity');
 
         // Top Selling Brands (supports serialized & bulk items)
         $topBrands = DB::table('sale_items')
             ->join('sales', 'sale_items.sale_id', '=', 'sales.id')
             ->leftJoin('device_imeis', 'sale_items.device_imei_id', '=', 'device_imeis.id')
-            ->leftJoin('products', function($join) {
-                $join->on('sale_items.product_id', '=', 'products.id')
-                     ->orOn('device_imeis.product_id', '=', 'products.id');
+            ->join('products', function($join) {
+                $join->on('products.id', '=', DB::raw('COALESCE(sale_items.product_id, device_imeis.product_id)'));
             })
             ->join('brands', 'products.brand_id', '=', 'brands.id')
             ->where('sales.payment_status', '!=', 'Refunded')
-            ->where('sales.sale_date', '>=', $startDate)
+            ->whereBetween('sales.sale_date', [$startDate, $endDate])
             ->select('brands.name', DB::raw('sum(sale_items.quantity) as value'))
             ->groupBy('brands.id', 'brands.name')
             ->orderByDesc('value')
@@ -130,13 +138,12 @@ class ReportController extends Controller
         $topCategories = DB::table('sale_items')
             ->join('sales', 'sale_items.sale_id', '=', 'sales.id')
             ->leftJoin('device_imeis', 'sale_items.device_imei_id', '=', 'device_imeis.id')
-            ->leftJoin('products', function($join) {
-                $join->on('sale_items.product_id', '=', 'products.id')
-                     ->orOn('device_imeis.product_id', '=', 'products.id');
+            ->join('products', function($join) {
+                $join->on('products.id', '=', DB::raw('COALESCE(sale_items.product_id, device_imeis.product_id)'));
             })
             ->join('categories', 'products.category_id', '=', 'categories.id')
             ->where('sales.payment_status', '!=', 'Refunded')
-            ->where('sales.sale_date', '>=', $startDate)
+            ->whereBetween('sales.sale_date', [$startDate, $endDate])
             ->select('categories.name', DB::raw('sum(sale_items.quantity) as value'))
             ->groupBy('categories.id', 'categories.name')
             ->orderByDesc('value')
@@ -147,13 +154,12 @@ class ReportController extends Controller
         $brandProfitBreakdown = DB::table('sale_items')
             ->join('sales', 'sale_items.sale_id', '=', 'sales.id')
             ->leftJoin('device_imeis', 'sale_items.device_imei_id', '=', 'device_imeis.id')
-            ->leftJoin('products', function($join) {
-                $join->on('sale_items.product_id', '=', 'products.id')
-                     ->orOn('device_imeis.product_id', '=', 'products.id');
+            ->join('products', function($join) {
+                $join->on('products.id', '=', DB::raw('COALESCE(sale_items.product_id, device_imeis.product_id)'));
             })
             ->join('brands', 'products.brand_id', '=', 'brands.id')
             ->where('sales.payment_status', '!=', 'Refunded')
-            ->where('sales.sale_date', '>=', $startDate)
+            ->whereBetween('sales.sale_date', [$startDate, $endDate])
             ->select(
                 'brands.name as brand_name',
                 DB::raw('sum(sale_items.quantity) as items_sold'),
@@ -180,26 +186,28 @@ class ReportController extends Controller
         $cashierPerformance = DB::table('sales')
             ->join('users', 'sales.user_id', '=', 'users.id')
             ->where('sales.payment_status', '!=', 'Refunded')
-            ->where('sales.sale_date', '>=', $startDate)
+            ->whereBetween('sales.sale_date', [$startDate, $endDate])
             ->select(
                 'users.id as user_id',
                 'users.name',
                 'users.role',
                 DB::raw('count(*) as sales_count'),
-                DB::raw('sum(final_amount) as total_revenue'),
+                DB::raw('sum(final_amount + COALESCE(trade_in_value, 0)) as total_revenue'),
                 DB::raw('sum(discount) as total_discounts')
             )
             ->groupBy('users.id', 'users.name', 'users.role')
             ->orderByDesc('total_revenue')
             ->get()
-            ->map(function ($row) use ($startDate) {
+            ->map(function ($row) use ($startDate, $endDate) {
                 $cogs = DB::table('sale_items')
                     ->join('sales', 'sale_items.sale_id', '=', 'sales.id')
                     ->leftJoin('device_imeis', 'sale_items.device_imei_id', '=', 'device_imeis.id')
-                    ->leftJoin('products', 'sale_items.product_id', '=', 'products.id')
+                    ->leftJoin('products', function($join) {
+                        $join->on('products.id', '=', DB::raw('COALESCE(sale_items.product_id, device_imeis.product_id)'));
+                    })
                     ->where('sales.user_id', $row->user_id)
                     ->where('sales.payment_status', '!=', 'Refunded')
-                    ->where('sales.sale_date', '>=', $startDate)
+                    ->whereBetween('sales.sale_date', [$startDate, $endDate])
                     ->sum(DB::raw('COALESCE(device_imeis.cost_price, products.cost_price, 0) * sale_items.quantity'));
 
                 $profit = $row->total_revenue - $cogs;
@@ -230,9 +238,9 @@ class ReportController extends Controller
         $defectiveCount = DeviceImei::where('status', 'Defective')->count();
 
         // Consignments Breakdown in Period
-        $inwardReceivedCount = \App\Models\DealerItem::where('direction', 'inward')->where('created_at', '>=', $startDate)->count();
-        $inwardSoldCount = (int) \App\Models\DealerItem::where('direction', 'inward')->where('quantity_sold', '>', 0)->where('sold_at', '>=', $startDate)->sum('quantity_sold');
-        $inwardSettledAmount = (float) \App\Models\DealerItem::where('direction', 'inward')->where('settlement_amount', '>', 0)->where('settled_at', '>=', $startDate)->sum('settlement_amount');
+        $inwardReceivedCount = \App\Models\DealerItem::where('direction', 'inward')->whereBetween('created_at', [$startDate, $endDate])->count();
+        $inwardSoldCount = (int) \App\Models\DealerItem::where('direction', 'inward')->where('quantity_sold', '>', 0)->whereBetween('sold_at', [$startDate, $endDate])->sum('quantity_sold');
+        $inwardSettledAmount = (float) \App\Models\DealerItem::where('direction', 'inward')->where('settlement_amount', '>', 0)->whereBetween('settled_at', [$startDate, $endDate])->sum('settlement_amount');
         $unsettledOwedAmount = (float) \App\Models\DealerItem::where('direction', 'inward')
             ->where('quantity_sold', '>', 0)
             ->get()
@@ -240,41 +248,57 @@ class ReportController extends Controller
                 $unitCost = (float) ($item->wholesale_cost ?: $item->dealer_price ?: 0);
                 return max(0, ($unitCost * (int) $item->quantity_sold) - (float) ($item->settlement_amount ?? 0));
             });
-        $soldInwardPeriod = \App\Models\DealerItem::where('direction', 'inward')->where('quantity_sold', '>', 0)->where('sold_at', '>=', $startDate)->get();
+        $soldInwardPeriod = \App\Models\DealerItem::where('direction', 'inward')->where('quantity_sold', '>', 0)->whereBetween('sold_at', [$startDate, $endDate])->get();
         $consignmentGrossRevenue = (float) $soldInwardPeriod->sum(fn($i) => (float) ($i->retail_price ?? 0) * (int) $i->quantity_sold);
         $consignmentWholesaleCost = (float) $soldInwardPeriod->sum(fn($i) => (float) ($i->wholesale_cost ?: $i->dealer_price ?: 0) * (int) $i->quantity_sold);
         $consignmentNetProfit = max(0, $consignmentGrossRevenue - $consignmentWholesaleCost);
-        $outwardIssuedCount = \App\Models\DealerItem::where('direction', '!=', 'inward')->where('created_at', '>=', $startDate)->count();
-        $outwardSoldCount = \App\Models\DealerItem::where('direction', '!=', 'inward')->where('status', 'Sold')->where('sold_at', '>=', $startDate)->count();
+        $outwardIssuedCount = \App\Models\DealerItem::where(fn($q) => $q->where('direction', 'outward')->orWhereNull('direction'))->whereBetween('created_at', [$startDate, $endDate])->count();
+        $outwardSoldCount = \App\Models\DealerItem::where(fn($q) => $q->where('direction', 'outward')->orWhereNull('direction'))->where('status', 'Sold')->whereBetween('sold_at', [$startDate, $endDate])->count();
 
         // Layaways Breakdown in Period
-        $newLayawaysCount = Sale::where('payment_status', 'Partial')->where('created_at', '>=', $startDate)->count();
-        $completedLayawaysCount = Sale::where('payment_method', 'Layaway')->where('payment_status', 'Paid')->where('updated_at', '>=', $startDate)->count();
+        $newLayawaysCount = Sale::where('payment_status', 'Partial')->whereBetween('created_at', [$startDate, $endDate])->count();
+        $completedLayawaysCount = Sale::where('payment_method', 'Layaway')->where('payment_status', 'Paid')->whereBetween('updated_at', [$startDate, $endDate])->count();
         $activeLayaways = Sale::with('layawayPayments')->where('payment_status', 'Partial')->get();
         $activeLayawaysCount = $activeLayaways->count();
         $totalLayawayReceivable = (float) $activeLayaways->sum(function ($sale) {
             return max(0, $sale->final_amount - $sale->layawayPayments->sum('amount_paid'));
         });
-        $layawayCollectedInPeriod = (float) \App\Models\LayawayPayment::where('payment_date', '>=', $startDate)->sum('amount_paid');
+        $layawayCollectedInPeriod = (float) \App\Models\LayawayPayment::whereBetween('payment_date', [$startDate, $endDate])->sum('amount_paid');
 
-        // Expense & Payout Categories Breakdown in Period
-        $totalExpensesInPeriod = (float) \App\Models\Expense::where('expense_date', '>=', $startDate)->sum('amount');
-        $expenseCategories = \App\Models\Expense::where('expense_date', '>=', $startDate)
+        // Expense & Payout Categories Breakdown in Period (separating Operating Overheads from Debt/Settlements/Refunds)
+        $nonOperatingCategories = ['Dealer Settlement', 'Supplier Payment', 'Refund', 'Refund (Past Shift)', 'Cash In'];
+        $operatingExpenses = (float) \App\Models\Expense::whereBetween('expense_date', [$startDate, $endDate])
+            ->whereNotIn('category', $nonOperatingCategories)
+            ->sum('amount');
+        $settlementsAndRefunds = (float) \App\Models\Expense::whereBetween('expense_date', [$startDate, $endDate])
+            ->whereIn('category', ['Dealer Settlement', 'Supplier Payment', 'Refund', 'Refund (Past Shift)'])
+            ->sum('amount');
+        $totalExpensesInPeriod = $operatingExpenses + $settlementsAndRefunds;
+        $netOperatingProfit = $grossProfit - $operatingExpenses;
+
+        $expenseCategories = \App\Models\Expense::whereBetween('expense_date', [$startDate, $endDate])
+            ->where('category', '!=', 'Cash In')
             ->select('category as name', DB::raw('sum(amount) as value'))
             ->groupBy('category')
             ->orderByDesc('value')
             ->get();
 
         // Repairs Breakdown in Period
-        $repairsLogged = Repair::where('created_at', '>=', $startDate)->count();
+        $repairsLogged = Repair::whereBetween('created_at', [$startDate, $endDate])->count();
 
         return Inertia::render('Reports/Index', [
             'period' => $period,
+            'filters' => [
+                'date_from' => $dateFrom,
+                'date_to' => $dateTo,
+            ],
             'metrics' => [
                 'totalRevenue' => $totalRevenue,
                 'salesVolume' => $salesVolume,
                 'cogs' => $cogs,
                 'grossProfit' => $grossProfit,
+                'operatingExpenses' => $operatingExpenses,
+                'netOperatingProfit' => $netOperatingProfit,
                 'itemsSold' => $totalItemsSold,
                 'repairsCompleted' => $repairsCompleted,
                 'repairRevenue' => $repairRevenue,
@@ -306,6 +330,8 @@ class ReportController extends Controller
             ],
             'expenses' => [
                 'total' => $totalExpensesInPeriod,
+                'operating' => $operatingExpenses,
+                'settlements' => $settlementsAndRefunds,
                 'categories' => $expenseCategories,
             ],
             'repairs' => [

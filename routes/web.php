@@ -158,9 +158,9 @@ Route::get('/dashboard', function () {
         ->where('quantity_sold', '>', 0)
         ->get()
         ->sum(function ($item) {
-            $unitCost = floatval($item->dealer_price ?? 0);
+            $unitCost = floatval($item->wholesale_cost ?? $item->dealer_price ?? 0);
             $totalOwed = $unitCost * $item->quantity_sold;
-            $alreadyPaid = floatval($item->amount_paid ?? 0);
+            $alreadyPaid = floatval($item->settlement_amount ?? 0);
             return max(0, $totalOwed - $alreadyPaid);
         });
     $dealerOutwardPendingCount = \App\Models\DealerItem::where(function ($q) {
