@@ -10,12 +10,15 @@ class CustomerController extends Controller
 {
     public function index(Request $request)
     {
-        $query = Customer::withCount(['sales' => function ($query) {
-            $query->where('payment_status', '!=', 'Refunded');
-        }])
-        ->withSum(['sales' => function ($query) {
-            $query->where('payment_status', '!=', 'Refunded');
-        }], 'final_amount');
+        $type = $request->input('type', 'all');
+        $sort = $request->input('sort', 'newest');
+
+        $query = Customer::withCount([
+            'sales' => fn ($q) => $q->where('payment_status', '!=', 'Refunded'),
+            'invoices' => fn ($q) => $q->where('status', '!=', 'Cancelled'),
+        ])->withSum([
+            'sales' => fn ($q) => $q->where('payment_status', '!=', 'Refunded'),
+        ], 'final_amount');
 
         if ($request->filled('search')) {
             $term = '%' . strtolower(trim($request->search)) . '%';
@@ -27,19 +30,41 @@ class CustomerController extends Controller
             });
         }
 
-        $customers = $query->orderBy('created_at', 'desc')
-            ->paginate(10)
-            ->withQueryString();
-            
+        if ($type === 'corporate') {
+            $query->whereNotNull('company_name')->whereRaw("TRIM(company_name) != ''");
+        } elseif ($type === 'individual') {
+            $query->where(function ($q) {
+                $q->whereNull('company_name')->orWhereRaw("TRIM(company_name) = ''");
+            });
+        }
+
+        if ($sort === 'top_spenders') {
+            $query->orderByRaw('sales_sum_final_amount DESC NULLS LAST')->orderBy('created_at', 'desc');
+        } elseif ($sort === 'most_orders') {
+            $query->orderByDesc('sales_count')->orderBy('created_at', 'desc');
+        } else {
+            $query->orderBy('created_at', 'desc');
+        }
+
+        $customers = $query->paginate(10)->withQueryString();
+
         $totalCustomers = Customer::count();
-        $totalLtv = \App\Models\Sale::where('payment_status', '!=', 'Refunded')->sum('final_amount');
-        $averageSpend = $totalCustomers > 0 ? $totalLtv / $totalCustomers : 0;
+        $corporateCustomers = Customer::whereNotNull('company_name')->whereRaw("TRIM(company_name) != ''")->count();
+        $totalLtv = (float) \App\Models\Sale::whereNotNull('customer_id')
+            ->where('payment_status', '!=', 'Refunded')
+            ->sum('final_amount');
+        $averageSpend = $totalCustomers > 0 ? round($totalLtv / $totalCustomers) : 0;
 
         return Inertia::render('Customers/Index', [
             'customers' => $customers,
-            'filters' => $request->only(['search']),
+            'filters' => [
+                'search' => $request->input('search', ''),
+                'type' => $type,
+                'sort' => $sort,
+            ],
             'summary' => [
                 'total_customers' => $totalCustomers,
+                'corporate_customers' => $corporateCustomers,
                 'total_ltv' => $totalLtv,
                 'average_spend' => $averageSpend,
             ]
@@ -61,6 +86,13 @@ class CustomerController extends Controller
 
         $customer = Customer::create($validated);
 
+        \App\Models\ActivityLog::log(
+            'customer_created',
+            'Customers',
+            "Created customer {$customer->name}" . ($customer->company_name ? " ({$customer->company_name})" : ''),
+            ['customer_id' => $customer->id]
+        );
+
         return response()->json(['message' => 'Customer created successfully.', 'customer' => $customer]);
     }
 
@@ -79,16 +111,38 @@ class CustomerController extends Controller
 
         $customer->update($validated);
 
+        \App\Models\ActivityLog::log(
+            'customer_updated',
+            'Customers',
+            "Updated customer {$customer->name}",
+            ['customer_id' => $customer->id]
+        );
+
         return response()->json(['message' => 'Customer updated successfully.', 'customer' => $customer]);
     }
 
     public function destroy(Customer $customer)
     {
-        if ($customer->sales()->count() > 0) {
+        if ($customer->sales()->exists()) {
             return response()->json(['error' => 'Cannot delete customer with existing sales records.'], 400);
         }
+        if ($customer->invoices()->exists()) {
+            return response()->json(['error' => 'Cannot delete customer with existing corporate invoices.'], 400);
+        }
+        if ($customer->quotations()->exists()) {
+            return response()->json(['error' => 'Cannot delete customer with existing quotations.'], 400);
+        }
 
+        $name = $customer->name;
+        $id = $customer->id;
         $customer->delete();
+
+        \App\Models\ActivityLog::log(
+            'customer_deleted',
+            'Customers',
+            "Deleted customer {$name}",
+            ['customer_id' => $id]
+        );
 
         return response()->json(['message' => 'Customer deleted successfully.']);
     }
@@ -155,23 +209,24 @@ class CustomerController extends Controller
         }
 
         if ($startDate) {
-            $query->whereDate('sale_date', '>=', $startDate);
+            $query->whereRaw('DATE(COALESCE(sale_date, created_at)) >= ?', [$startDate]);
         }
 
         if ($endDate) {
-            $query->whereDate('sale_date', '<=', $endDate);
+            $query->whereRaw('DATE(COALESCE(sale_date, created_at)) <= ?', [$endDate]);
         }
 
         $sales = $query->orderBy('created_at', 'desc')->get();
 
-        $totalSpent = $customer->sales()->where('payment_status', '!=', 'Refunded')->sum('final_amount');
+        $totalSpent = (float) $customer->sales()->where('payment_status', '!=', 'Refunded')->sum('final_amount');
         
-        $totalPaidDirect = $customer->sales()
+        $totalPaidDirect = (float) $customer->sales()
             ->where('payment_status', 'Paid')
             ->whereDoesntHave('layawayPayments')
             ->sum('final_amount');
-        $totalLayawayPaid = \App\Models\LayawayPayment::whereHas('sale', function ($q) use ($customer) {
-            $q->where('customer_id', $customer->id);
+        $totalLayawayPaid = (float) \App\Models\LayawayPayment::whereHas('sale', function ($q) use ($customer) {
+            $q->where('customer_id', $customer->id)
+              ->where('payment_status', '!=', 'Refunded');
         })->sum('amount_paid');
 
         $totalPaid = $totalPaidDirect + $totalLayawayPaid;

@@ -40,7 +40,14 @@ class Customer extends Model
 
     public function getOutstandingBalanceAttribute(): float
     {
-        return floatval($this->invoices()->where('payment_status', '!=', 'Paid')->sum('total_amount'))
-            - floatval($this->invoices()->where('payment_status', '!=', 'Paid')->sum('paid_amount'));
+        $unpaidInvoices = $this->invoices()
+            ->where('status', '!=', 'Cancelled')
+            ->where('payment_status', '!=', 'Paid');
+
+        return max(
+            0,
+            floatval((clone $unpaidInvoices)->sum('total_amount'))
+            - floatval((clone $unpaidInvoices)->sum('paid_amount'))
+        );
     }
 }

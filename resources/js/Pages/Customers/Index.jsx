@@ -1,8 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import toast from 'react-hot-toast';
 import { Head, Link, router } from '@inertiajs/react';
 import axios from 'axios';
-import { Users, Pencil, Trash2, Search, Plus, UserSquare, Phone, Mail, MapPin, History, Receipt, ChevronRight, X, DollarSign, TrendingUp, FileText, Printer, Download } from 'lucide-react';
+import { Users, Pencil, Trash2, Search, Plus, UserSquare, Phone, Mail, History, Receipt, X, DollarSign, TrendingUp, FileText, Printer, AlertTriangle } from 'lucide-react';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import PageHeader from '@/Components/SaaS/PageHeader';
 import Card from '@/Components/SaaS/Card';
@@ -12,23 +12,34 @@ import Modal from '@/Components/Modal';
 
 export default function CustomersIndex({ auth, customers = {}, summary, filters = {} }) {
     const [search, setSearch] = useState(filters?.search || '');
-    const [isInitialRender, setIsInitialRender] = useState(true);
+    const [typeFilter, setTypeFilter] = useState(filters?.type || 'all');
+    const [sortBy, setSortBy] = useState(filters?.sort || 'newest');
+    const isInitialRender = useRef(true);
 
     useEffect(() => {
-        if (isInitialRender) {
-            setIsInitialRender(false);
+        if (isInitialRender.current) {
+            isInitialRender.current = false;
             return;
         }
         const timer = setTimeout(() => {
-            router.get(route('customers.index'), search ? { search } : {}, {
+            const params = {};
+            if (search) params.search = search;
+            if (typeFilter && typeFilter !== 'all') params.type = typeFilter;
+            if (sortBy && sortBy !== 'newest') params.sort = sortBy;
+
+            router.get(route('customers.index'), params, {
                 preserveState: true,
+                preserveScroll: true,
                 replace: true,
             });
         }, 300);
         return () => clearTimeout(timer);
-    }, [search]);
+    }, [search, typeFilter, sortBy]);
+
     const [showEditModal, setShowEditModal] = useState(false);
     const [showHistoryModal, setShowHistoryModal] = useState(false);
+    const [deletingCustomer, setDeletingCustomer] = useState(null);
+    const [isDeleting, setIsDeleting] = useState(false);
     const [isEditing, setIsEditing] = useState(false);
     
     const [formData, setFormData] = useState({ 
@@ -86,9 +97,10 @@ export default function CustomersIndex({ auth, customers = {}, summary, filters 
                 toast.success("Customer added successfully");
             }
             setShowEditModal(false);
-            router.reload();
+            router.reload({ preserveScroll: true });
         } catch (error) {
-            toast.error(error.response?.data?.message || "Error saving customer");
+            const firstErr = error.response?.data?.errors ? Object.values(error.response.data.errors)[0]?.[0] : null;
+            toast.error(firstErr || error.response?.data?.message || "Error saving customer");
         }
         setLoading(false);
     };
@@ -109,14 +121,18 @@ export default function CustomersIndex({ auth, customers = {}, summary, filters 
         setShowEditModal(true);
     };
 
-    const handleDelete = async (customer) => {
-        if (!confirm(`Are you sure you want to delete ${customer.name}?`)) return;
+    const confirmDelete = async () => {
+        if (!deletingCustomer) return;
+        setIsDeleting(true);
         try {
-            await axios.delete(`/api/customers/${customer.id}`);
+            await axios.delete(`/api/customers/${deletingCustomer.id}`);
             toast.success("Customer deleted successfully");
-            router.reload();
+            setDeletingCustomer(null);
+            router.reload({ preserveScroll: true });
         } catch (error) {
             toast.error(error.response?.data?.error || "Error deleting customer");
+        } finally {
+            setIsDeleting(false);
         }
     };
 
@@ -166,83 +182,137 @@ export default function CustomersIndex({ auth, customers = {}, summary, filters 
                 }
             />
 
-            <div className="p-6 md:p-8 max-w-7xl mx-auto">
+            <div className="p-4 sm:p-6 md:p-8 max-w-7xl mx-auto">
                 {summary && (
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-                        <Card className="animate-slide-up relative overflow-hidden flex flex-col justify-between" style={{ animationDelay: '0.0s' }}>
+                        <Card
+                            className="animate-slide-up relative overflow-hidden flex flex-col justify-between cursor-pointer hover:ring-2 hover:ring-blue-400/50 transition-all"
+                            style={{ animationDelay: '0.0s' }}
+                            onClick={() => setTypeFilter('all')}
+                        >
                             <div className="flex justify-between items-start mb-4">
                                 <div>
-                                    <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Total Customers</p>
+                                    <p className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">Total Customers</p>
                                     <h3 className="text-3xl font-black text-slate-900 dark:text-white">{summary.total_customers || 0}</h3>
                                 </div>
                                 <div className="w-12 h-12 rounded-2xl bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 flex items-center justify-center">
                                     <Users size={24} />
                                 </div>
                             </div>
-                            <div className="flex items-center gap-2 text-sm text-slate-500">
-                                <Badge variant="primary">Registered</Badge>
-                                <span>Clients</span>
+                            <div className="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
+                                <Badge variant="primary">{summary.corporate_customers || 0} Corporate</Badge>
+                                <span>Registered Clients</span>
                             </div>
                         </Card>
 
-                        <Card className="animate-slide-up relative overflow-hidden flex flex-col justify-between" style={{ animationDelay: '0.1s' }}>
+                        <Card
+                            className="animate-slide-up relative overflow-hidden flex flex-col justify-between cursor-pointer hover:ring-2 hover:ring-emerald-400/50 transition-all"
+                            style={{ animationDelay: '0.1s' }}
+                            onClick={() => setSortBy('top_spenders')}
+                        >
                             <div className="flex justify-between items-start mb-4">
                                 <div>
-                                    <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Total Lifetime Value</p>
-                                    <h3 className="text-3xl font-black text-slate-900 dark:text-white">
-                                        {new Intl.NumberFormat('en-US').format(summary.total_ltv || 0)}
+                                    <p className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">Total Lifetime Value</p>
+                                    <h3 className="text-2xl sm:text-3xl font-black text-slate-900 dark:text-white">
+                                        {new Intl.NumberFormat('en-US').format(summary.total_ltv || 0)} <span className="text-sm font-normal text-slate-500">UGX</span>
                                     </h3>
                                 </div>
                                 <div className="w-12 h-12 rounded-2xl bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 flex items-center justify-center">
                                     <DollarSign size={24} />
                                 </div>
                             </div>
-                            <div className="flex items-center gap-2 text-sm text-slate-500">
-                                <Badge variant="success">Revenue</Badge>
-                                <span>Generated</span>
+                            <div className="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
+                                <Badge variant="success">Registered Sales</Badge>
+                                <span>Click to rank top buyers</span>
                             </div>
                         </Card>
 
                         <Card className="animate-slide-up relative overflow-hidden flex flex-col justify-between" style={{ animationDelay: '0.2s' }}>
                             <div className="flex justify-between items-start mb-4">
                                 <div>
-                                    <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Average Spend</p>
-                                    <h3 className="text-3xl font-black text-slate-900 dark:text-white">
-                                        {new Intl.NumberFormat('en-US').format(summary.average_spend || 0)}
+                                    <p className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">Average Spend</p>
+                                    <h3 className="text-2xl sm:text-3xl font-black text-slate-900 dark:text-white">
+                                        {new Intl.NumberFormat('en-US').format(Math.round(summary.average_spend || 0))} <span className="text-sm font-normal text-slate-500">UGX</span>
                                     </h3>
                                 </div>
                                 <div className="w-12 h-12 rounded-2xl bg-rose-50 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400 flex items-center justify-center">
                                     <TrendingUp size={24} />
                                 </div>
                             </div>
-                            <div className="flex items-center gap-2 text-sm text-slate-500">
+                            <div className="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
                                 <Badge variant="danger">Per Customer</Badge>
-                                <span>Average</span>
+                                <span>Average LTV</span>
                             </div>
                         </Card>
                     </div>
                 )}
 
-                <Card className="animate-slide-up relative overflow-hidden" style={{ animationDelay: '0.3s' }}>
-                    <div className="p-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between gap-4">
+                <Card noPadding className="animate-slide-up relative overflow-hidden" style={{ animationDelay: '0.3s' }}>
+                    <div className="p-4 border-b border-slate-100 dark:border-slate-800 flex flex-col lg:flex-row lg:items-center justify-between gap-3">
                         <div className="relative flex-1 max-w-md">
-                            <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                            <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
                             <input
                                 type="text"
-                                className="saas-input pl-10 text-sm"
+                                className="saas-input !pl-10 text-sm"
                                 placeholder="Search customers by name, phone, email, or company..."
                                 value={search}
                                 onChange={(e) => setSearch(e.target.value)}
                             />
                         </div>
+
+                        <div className="flex flex-wrap items-center gap-2.5">
+                            {/* Type Tabs */}
+                            <div className="inline-flex rounded-xl bg-slate-100 dark:bg-slate-800 p-1 border border-slate-200 dark:border-slate-700">
+                                {[
+                                    { key: 'all', label: 'All' },
+                                    { key: 'corporate', label: 'Corporate' },
+                                    { key: 'individual', label: 'Individual' },
+                                ].map(tab => (
+                                    <button
+                                        key={tab.key}
+                                        type="button"
+                                        onClick={() => setTypeFilter(tab.key)}
+                                        className={`px-3 py-1 rounded-lg text-xs font-bold transition-all ${
+                                            typeFilter === tab.key
+                                                ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-sm'
+                                                : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200'
+                                        }`}
+                                    >
+                                        {tab.label}
+                                    </button>
+                                ))}
+                            </div>
+
+                            <select
+                                value={sortBy}
+                                onChange={(e) => setSortBy(e.target.value)}
+                                className="saas-input !py-1.5 !text-xs !w-auto font-semibold"
+                            >
+                                <option value="newest">Newest First</option>
+                                <option value="top_spenders">Top Spenders</option>
+                                <option value="most_orders">Most Orders</option>
+                            </select>
+
+                            {(search || typeFilter !== 'all' || sortBy !== 'newest') && (
+                                <button
+                                    type="button"
+                                    onClick={() => { setSearch(''); setTypeFilter('all'); setSortBy('newest'); }}
+                                    className="px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 text-xs font-bold"
+                                >
+                                    Clear
+                                </button>
+                            )}
+                        </div>
                     </div>
-                    <div className="overflow-x-auto">
+
+                    {/* Desktop Table */}
+                    <div className="hidden md:block overflow-x-auto">
                         <table className="w-full text-left border-collapse">
                             <thead>
                                 <tr className="bg-slate-50/50 dark:bg-slate-800">
                                     <th className="py-4 px-6 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider border-b border-slate-100 dark:border-slate-800">Customer</th>
                                     <th className="py-4 px-6 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider border-b border-slate-100 dark:border-slate-800">Contact</th>
-                                    <th className="py-4 px-6 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider border-b border-slate-100 dark:border-slate-800 text-center">Purchases</th>
+                                    <th className="py-4 px-6 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider border-b border-slate-100 dark:border-slate-800 text-center">Activity</th>
                                     <th className="py-4 px-6 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider border-b border-slate-100 dark:border-slate-800 text-right">Total Spent</th>
                                     <th className="py-4 px-6 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider border-b border-slate-100 dark:border-slate-800 text-center">Actions</th>
                                 </tr>
@@ -266,7 +336,7 @@ export default function CustomersIndex({ auth, customers = {}, summary, filters 
                                                             </span>
                                                         )}
                                                     </div>
-                                                    <div className="text-xs text-slate-500">
+                                                    <div className="text-xs text-slate-500 dark:text-slate-400">
                                                         Joined {new Date(customer.created_at).toLocaleDateString()}
                                                         {customer.tin_number && ` • TIN: ${customer.tin_number}`}
                                                     </div>
@@ -275,12 +345,12 @@ export default function CustomersIndex({ auth, customers = {}, summary, filters 
                                         </td>
                                         <td className="py-4 px-6">
                                             <div className="flex flex-col space-y-1">
-                                                <div className="flex items-center text-sm text-slate-600 gap-2">
+                                                <div className="flex items-center text-sm text-slate-600 dark:text-slate-300 gap-2">
                                                     <Phone size={14} className="text-slate-400 shrink-0" />
                                                     {customer.phone}
                                                 </div>
                                                 {customer.email && (
-                                                    <div className="flex items-center text-sm text-slate-600 gap-2">
+                                                    <div className="flex items-center text-sm text-slate-600 dark:text-slate-300 gap-2">
                                                         <Mail size={14} className="text-slate-400 shrink-0" />
                                                         {customer.email}
                                                     </div>
@@ -288,11 +358,18 @@ export default function CustomersIndex({ auth, customers = {}, summary, filters 
                                             </div>
                                         </td>
                                         <td className="py-4 px-6 text-center">
-                                            <Badge variant={customer.sales_count > 0 ? "primary" : "neutral"}>
-                                                {customer.sales_count || 0} Orders
-                                            </Badge>
+                                            <div className="flex flex-col items-center gap-1">
+                                                <Badge variant={customer.sales_count > 0 ? "primary" : "neutral"}>
+                                                    {customer.sales_count || 0} POS Order{customer.sales_count === 1 ? '' : 's'}
+                                                </Badge>
+                                                {customer.invoices_count > 0 && (
+                                                    <span className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400">
+                                                        {customer.invoices_count} Invoice{customer.invoices_count === 1 ? '' : 's'}
+                                                    </span>
+                                                )}
+                                            </div>
                                         </td>
-                                        <td className="py-4 px-6 text-right font-bold text-slate-900 whitespace-nowrap">
+                                        <td className="py-4 px-6 text-right font-bold text-slate-900 dark:text-white whitespace-nowrap">
                                             {Number(customer.sales_sum_final_amount || 0).toLocaleString()} UGX
                                         </td>
                                         <td className="py-4 px-6 text-center">
@@ -300,28 +377,28 @@ export default function CustomersIndex({ auth, customers = {}, summary, filters 
                                                 <Button 
                                                     variant="primary"
                                                     onClick={() => handleViewHistory(customer)}
-                                                    className="!px-3 !py-1.5 text-sm"
+                                                    className="!px-3 !py-1.5 text-xs"
                                                 >
                                                     <History size={14} /> History
                                                 </Button>
                                                 <Button 
                                                     variant="secondary"
                                                     onClick={() => openStatementModal(customer)}
-                                                    className="!px-3 !py-1.5 text-sm"
+                                                    className="!px-3 !py-1.5 text-xs"
                                                 >
                                                     <FileText size={14} /> Statement
                                                 </Button>
                                                 <Button 
                                                     variant="secondary"
                                                     onClick={() => handleEdit(customer)}
-                                                    className="!px-3 !py-1.5 text-sm"
+                                                    className="!px-3 !py-1.5 text-xs"
                                                 >
                                                     <Pencil size={14} /> Edit
                                                 </Button>
                                                 <Button 
                                                     variant="danger"
-                                                    onClick={() => handleDelete(customer)}
-                                                    className="!px-3 !py-1.5 text-sm"
+                                                    onClick={() => setDeletingCustomer(customer)}
+                                                    className="!px-3 !py-1.5 text-xs"
                                                 >
                                                     <Trash2 size={14} />
                                                 </Button>
@@ -331,8 +408,8 @@ export default function CustomersIndex({ auth, customers = {}, summary, filters 
                                 ))}
                                 {(!customers.data || customers.data.length === 0) && (
                                     <tr>
-                                        <td colSpan="5" className="py-12 text-center text-slate-500">
-                                            <UserSquare size={48} className="mx-auto text-slate-300 mb-3" />
+                                        <td colSpan="5" className="py-12 text-center text-slate-500 dark:text-slate-400">
+                                            <UserSquare size={48} className="mx-auto text-slate-300 dark:text-slate-600 mb-3" />
                                             <p>No customers found.</p>
                                         </td>
                                     </tr>
@@ -340,16 +417,66 @@ export default function CustomersIndex({ auth, customers = {}, summary, filters 
                             </tbody>
                         </table>
                     </div>
+
+                    {/* Mobile Cards View */}
+                    <div className="md:hidden divide-y divide-slate-100 dark:divide-slate-800">
+                        {customers.data?.map(customer => (
+                            <div key={customer.id} className="p-4 space-y-3 bg-white dark:bg-slate-900">
+                                <div className="flex items-start justify-between gap-2">
+                                    <div className="min-w-0">
+                                        <p className="font-bold text-slate-900 dark:text-white text-sm truncate">{customer.name}</p>
+                                        {customer.company_name && (
+                                            <span className="inline-block text-[10px] font-bold px-1.5 py-0.5 rounded bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 mt-0.5">
+                                                {customer.company_name}
+                                            </span>
+                                        )}
+                                        <p className="text-xs text-slate-500 dark:text-slate-400 font-mono mt-1">{customer.phone}</p>
+                                    </div>
+                                    <div className="text-right shrink-0">
+                                        <p className="font-extrabold text-slate-900 dark:text-white text-sm">
+                                            {Number(customer.sales_sum_final_amount || 0).toLocaleString()} UGX
+                                        </p>
+                                        <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                                            {customer.sales_count || 0} orders{customer.invoices_count > 0 ? ` • ${customer.invoices_count} inv` : ''}
+                                        </p>
+                                    </div>
+                                </div>
+                                <div className="grid grid-cols-4 gap-1.5">
+                                    <button type="button" onClick={() => handleViewHistory(customer)} className="py-1.5 rounded-lg bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 text-xs font-bold flex items-center justify-center gap-1">
+                                        <History size={13} /> History
+                                    </button>
+                                    <button type="button" onClick={() => openStatementModal(customer)} className="py-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 text-xs font-bold flex items-center justify-center gap-1">
+                                        <FileText size={13} /> PDF
+                                    </button>
+                                    <button type="button" onClick={() => handleEdit(customer)} className="py-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 text-xs font-bold flex items-center justify-center gap-1">
+                                        <Pencil size={13} /> Edit
+                                    </button>
+                                    <button type="button" onClick={() => setDeletingCustomer(customer)} className="py-1.5 rounded-lg bg-rose-50 dark:bg-rose-900/30 text-rose-600 dark:text-rose-400 text-xs font-bold flex items-center justify-center">
+                                        <Trash2 size={13} />
+                                    </button>
+                                </div>
+                            </div>
+                        ))}
+                        {(!customers.data || customers.data.length === 0) && (
+                            <div className="py-10 text-center text-sm text-slate-400">No customers found.</div>
+                        )}
+                    </div>
+
                     {/* Pagination Component */}
                     {customers.links && customers.links.length > 3 && (
-                        <div className="flex justify-center mt-6 p-6 border-t border-slate-100 bg-white">
-                            <nav className="inline-flex bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden">
+                        <div className="flex flex-wrap items-center justify-between gap-3 p-5 border-t border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900">
+                            <span className="text-xs text-slate-500 dark:text-slate-400">
+                                Showing {customers.from || 0}–{customers.to || 0} of {customers.total || 0}
+                            </span>
+                            <nav className="inline-flex flex-wrap bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden">
                                 {customers.links.map((link, k) => (
                                     <Link 
                                         key={k}
                                         href={link.url || '#'}
-                                        className={`px-4 py-2 text-sm font-medium border-r border-slate-100 last:border-0 ${
-                                            link.active ? 'bg-indigo-50 text-indigo-600' : 'text-slate-600 hover:bg-slate-50'
+                                        preserveScroll
+                                        preserveState
+                                        className={`px-3.5 py-2 text-xs font-semibold border-r border-slate-200 dark:border-slate-700 last:border-0 ${
+                                            link.active ? 'bg-indigo-50 dark:bg-indigo-900/40 text-indigo-600 dark:text-indigo-300 font-bold' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700'
                                         } ${link.url === null ? 'opacity-50 cursor-not-allowed pointer-events-none' : ''}`}
                                         dangerouslySetInnerHTML={{ __html: link.label }}
                                     />
@@ -362,14 +489,17 @@ export default function CustomersIndex({ auth, customers = {}, summary, filters 
 
             {/* Edit/Add Customer Modal */}
             <Modal show={showEditModal} onClose={() => setShowEditModal(false)} maxWidth="md">
-                <div className="p-6">
+                <div className="p-6 dark:bg-slate-900">
                     <div className="flex items-center justify-between mb-6">
-                        <h2 className="text-xl font-bold text-slate-900 flex items-center gap-2">
-                            <div className="w-10 h-10 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center">
+                        <h2 className="text-xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                            <div className="w-10 h-10 rounded-xl bg-indigo-50 dark:bg-indigo-900/40 text-indigo-600 dark:text-indigo-400 flex items-center justify-center">
                                 <UserSquare size={20} />
                             </div>
                             {isEditing ? 'Edit Customer' : 'Add Customer'}
                         </h2>
+                        <button type="button" onClick={() => setShowEditModal(false)} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">
+                            <X size={20} />
+                        </button>
                     </div>
 
                     <form onSubmit={handleSubmit} className="space-y-4">
@@ -465,7 +595,7 @@ export default function CustomersIndex({ auth, customers = {}, summary, filters 
                             ></textarea>
                         </div>
 
-                        <div className="flex justify-end gap-3 pt-4 border-t border-slate-100 mt-6">
+                        <div className="flex justify-end gap-3 pt-4 border-t border-slate-100 dark:border-slate-800 mt-6">
                             <Button type="button" variant="neutral" onClick={() => setShowEditModal(false)}>
                                 Cancel
                             </Button>
@@ -535,6 +665,12 @@ export default function CustomersIndex({ auth, customers = {}, summary, filters 
                                                     <Mail size={16} className="text-indigo-400" /> {selectedCustomer?.email}
                                                 </div>
                                             )}
+                                            {Number(selectedCustomer?.credit_limit) > 0 && (
+                                                <div className="text-xs font-bold text-indigo-700 dark:text-indigo-300 bg-indigo-50 dark:bg-indigo-950/50 p-2.5 rounded-xl border border-indigo-100 dark:border-indigo-800">
+                                                    Credit Limit: UGX {Number(selectedCustomer.credit_limit).toLocaleString()}
+                                                    {selectedCustomer?.payment_terms_days > 0 ? ` • Net ${selectedCustomer.payment_terms_days}d` : ''}
+                                                </div>
+                                            )}
                                         </div>
                                     </div>
                                 </div>
@@ -596,7 +732,18 @@ export default function CustomersIndex({ auth, customers = {}, summary, filters 
                                                 </div>
                                                 <div className="text-right">
                                                     <div className="text-xl font-black text-slate-900 dark:text-white">{Number(sale.final_amount).toLocaleString()} <span className="text-sm font-bold text-slate-500 dark:text-slate-400">UGX</span></div>
-                                                    <div className="text-xs font-bold text-indigo-600 dark:text-indigo-400 bg-indigo-50/80 dark:bg-indigo-950/60 px-3 py-1 rounded-lg inline-block mt-1 border border-indigo-100 dark:border-indigo-900/50">{sale.payment_method}</div>
+                                                    <div className="flex items-center justify-end gap-2 mt-1">
+                                                        <span className="text-xs font-bold text-indigo-600 dark:text-indigo-400 bg-indigo-50/80 dark:bg-indigo-950/60 px-2.5 py-1 rounded-lg border border-indigo-100 dark:border-indigo-900/50">{sale.payment_method}</span>
+                                                        <a
+                                                            href={`/pos/receipt/${sale.id}`}
+                                                            target="_blank"
+                                                            rel="noreferrer"
+                                                            className="inline-flex items-center gap-1 text-xs font-bold text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 px-2.5 py-1 rounded-lg transition-colors"
+                                                            title="Print Receipt"
+                                                        >
+                                                            <Printer size={12} /> Receipt
+                                                        </a>
+                                                    </div>
                                                 </div>
                                             </div>
                                             
@@ -717,6 +864,42 @@ export default function CustomersIndex({ auth, customers = {}, summary, filters 
                                     <FileText size={15} /> Download PDF
                                 </button>
                             </div>
+                        </div>
+                    </div>
+                )}
+            </Modal>
+
+            {/* Delete Customer Confirmation Modal */}
+            <Modal show={!!deletingCustomer} onClose={() => setDeletingCustomer(null)} maxWidth="sm">
+                {deletingCustomer && (
+                    <div className="p-6 text-center space-y-4 dark:bg-slate-900">
+                        <div className="w-14 h-14 bg-rose-50 dark:bg-rose-900/30 text-rose-500 rounded-full flex items-center justify-center mx-auto">
+                            <AlertTriangle size={28} />
+                        </div>
+                        <div>
+                            <h3 className="text-lg font-bold text-slate-900 dark:text-white">Delete Customer?</h3>
+                            <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
+                                Permanently delete <strong className="text-slate-900 dark:text-white">{deletingCustomer.name}</strong>?
+                                Customers with linked sales, invoices, or quotations cannot be deleted.
+                            </p>
+                        </div>
+                        <div className="flex gap-3 pt-2">
+                            <button
+                                type="button"
+                                onClick={() => setDeletingCustomer(null)}
+                                className="flex-1 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 font-bold text-sm hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                type="button"
+                                disabled={isDeleting}
+                                onClick={confirmDelete}
+                                className="flex-1 py-2.5 rounded-xl bg-rose-500 hover:bg-rose-600 disabled:opacity-50 text-white font-bold text-sm shadow-md transition-colors flex items-center justify-center gap-2"
+                            >
+                                <Trash2 size={15} />
+                                {isDeleting ? 'Deleting...' : 'Yes, Delete'}
+                            </button>
                         </div>
                     </div>
                 )}
