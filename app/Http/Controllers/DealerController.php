@@ -51,10 +51,16 @@ class DealerController extends Controller
         $metrics = [
             // Outward (Given to Dealers)
             'items_out' => $outwardQuery->clone()->where('status', 'Pending')->count(),
-            'pending_value' => (float) $outwardQuery->clone()->where('status', 'Pending')->sum('dealer_price'),
-            'sold_value' => (float) $outwardQuery->clone()->where('status', 'Sold')->sum('dealer_price'),
+            'pending_value' => (float) $outwardQuery->clone()->where('status', 'Pending')
+                ->selectRaw("COALESCE(SUM(CASE WHEN type = 'serialized' THEN dealer_price ELSE dealer_price * GREATEST(quantity - quantity_sold - quantity_returned, 1) END), 0) as total")
+                ->value('total'),
+            'sold_value' => (float) $outwardQuery->clone()->where('status', 'Sold')
+                ->selectRaw("COALESCE(SUM(CASE WHEN type = 'serialized' THEN dealer_price ELSE dealer_price * GREATEST(quantity_sold, 1) END), 0) as total")
+                ->value('total'),
             'items_sold' => $outwardQuery->clone()->where('status', 'Sold')->count(),
-            'returned_value' => (float) $outwardQuery->clone()->where('status', 'Returned')->sum('dealer_price'),
+            'returned_value' => (float) $outwardQuery->clone()->where('status', 'Returned')
+                ->selectRaw("COALESCE(SUM(CASE WHEN type = 'serialized' THEN dealer_price ELSE dealer_price * GREATEST(quantity_returned, 1) END), 0) as total")
+                ->value('total'),
             'items_returned' => $outwardQuery->clone()->where('status', 'Returned')->count(),
             'overdue_items' => $outwardQuery->clone()->where('status', 'Pending')
                                          ->whereNotNull('expected_return_date')
@@ -93,18 +99,22 @@ class DealerController extends Controller
             ->take(5)
             ->get();
 
-        // Top Dealers Leaderboard by Sales Value
+        // Top Dealers Leaderboard by Outward Sales Value
         $topDealers = Dealer::withSum(['dealerItems as sales_value' => function ($q) {
-            $q->where('status', 'Sold');
-        }], 'dealer_price')
+            $q->where(function ($d) {
+                $d->where('direction', 'outward')->orWhereNull('direction');
+            })->where('status', 'Sold');
+        }], DB::raw("CASE WHEN type = 'serialized' THEN dealer_price ELSE dealer_price * GREATEST(quantity_sold, 1) END"))
         ->withCount(['dealerItems as items_out_count' => function ($q) {
-            $q->where('status', 'Pending');
+            $q->where(function ($d) {
+                $d->where('direction', 'outward')->orWhereNull('direction');
+            })->where('status', 'Pending');
         }])
         ->orderByDesc('sales_value')
         ->take(5)
         ->get();
 
-        // 6-Month Network Sales & Issued Trend
+        // 6-Month Network Sales & Issued Trend (Outward Consignments)
         $networkTrends = collect(range(5, 0))->map(function ($months) {
             $date = Carbon::today()->subMonths($months);
             $startOfMonth = $date->copy()->startOfMonth();
@@ -114,16 +124,22 @@ class DealerController extends Controller
                 ->where(function ($q) {
                     $q->where('direction', 'outward')->orWhereNull('direction');
                 })
-                ->sum('dealer_price');
+                ->selectRaw("COALESCE(SUM(CASE WHEN type = 'serialized' THEN dealer_price ELSE dealer_price * GREATEST(quantity, 1) END), 0) as total")
+                ->value('total');
 
             $soldValue = DealerItem::where('status', 'Sold')
+                ->where(function ($q) {
+                    $q->where('direction', 'outward')->orWhereNull('direction');
+                })
                 ->where(function ($q) use ($startOfMonth, $endOfMonth) {
                     $q->whereBetween('sold_at', [$startOfMonth, $endOfMonth])
                       ->orWhere(function ($q2) use ($startOfMonth, $endOfMonth) {
                           $q2->whereNull('sold_at')
                              ->whereBetween('updated_at', [$startOfMonth, $endOfMonth]);
                       });
-                })->sum('dealer_price');
+                })
+                ->selectRaw("COALESCE(SUM(CASE WHEN type = 'serialized' THEN dealer_price ELSE dealer_price * GREATEST(quantity_sold, 1) END), 0) as total")
+                ->value('total');
 
             return [
                 'month' => $date->format('M Y'),

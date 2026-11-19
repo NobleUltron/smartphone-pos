@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from 'react';
+import toast from 'react-hot-toast';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import { Head, Link, router, useForm, usePage } from '@inertiajs/react';
 import { 
@@ -51,9 +52,11 @@ export default function Dashboard({
         metrics.unsettled_inward_count > 0 ? 'inward' : 'outward'
     );
 
-    // Outward view mode: 'grouped' | 'flat'
+    // Outward view mode: 'grouped' | 'flat' + search & overdue filter
     const [viewMode, setViewMode] = useState('grouped');
     const [collapsedDealers, setCollapsedDealers] = useState({});
+    const [outwardSearch, setOutwardSearch] = useState('');
+    const [outwardOverdueOnly, setOutwardOverdueOnly] = useState(false);
 
     // Inward filters & search
     const [inwardFilter, setInwardFilter] = useState('all'); // 'all' | 'owed' | 'in_stock' | 'settled'
@@ -103,10 +106,33 @@ export default function Dashboard({
         return `UGX ${val}`;
     };
 
+    // Filtered outward pending items
+    const filteredPendingItems = useMemo(() => {
+        const today = dayjs().startOf('day');
+        return pendingItems.filter(item => {
+            if (outwardOverdueOnly) {
+                if (!item.expected_return_date || !dayjs(item.expected_return_date).isBefore(today)) {
+                    return false;
+                }
+            }
+            if (outwardSearch.trim()) {
+                const q = outwardSearch.toLowerCase();
+                const dealerName = (item.dealer?.name || '').toLowerCase();
+                const dealerPhone = (item.dealer?.phone || '').toLowerCase();
+                const modelName = (item.device_imei?.product?.model_name || item.product?.model_name || '').toLowerCase();
+                const brandName = (item.device_imei?.product?.brand?.name || item.product?.brand?.name || '').toLowerCase();
+                const imei = (item.device_imei?.imei || '').toLowerCase();
+                const sku = (item.product?.sku || '').toLowerCase();
+                return dealerName.includes(q) || dealerPhone.includes(q) || modelName.includes(q) || brandName.includes(q) || imei.includes(q) || sku.includes(q);
+            }
+            return true;
+        });
+    }, [pendingItems, outwardSearch, outwardOverdueOnly]);
+
     // Group outward pending items by dealer
     const groupedByDealer = useMemo(() => {
         const groups = {};
-        pendingItems.forEach(item => {
+        filteredPendingItems.forEach(item => {
             const dId = item.dealer?.id || 'unknown';
             if (!groups[dId]) {
                 groups[dId] = {
@@ -122,7 +148,7 @@ export default function Dashboard({
             groups[dId].totalValue += (Number(item.dealer_price) || 0) * (item.type === 'serialized' ? 1 : effectiveQty);
         });
         return Object.values(groups);
-    }, [pendingItems]);
+    }, [filteredPendingItems]);
 
     // Computed inward items with financial math
     const computedInwardItems = useMemo(() => {
@@ -219,14 +245,23 @@ export default function Dashboard({
     const submitSettle = (e) => {
         e.preventDefault();
         const currentItem = settleItem;
+        if (currentItem?.remainingOwed && Number(settleData.amount) > Number(currentItem.remainingOwed)) {
+            toast.error(`Payout cannot exceed remaining balance owed (${formatCurrency(currentItem.remainingOwed)}).`);
+            return;
+        }
         postSettle(route('dealers.settle', settleItem.id), {
             preserveScroll: true,
             onSuccess: (page) => {
                 if (page?.props?.flash?.error) {
+                    toast.error(page.props.flash.error);
                     return;
                 }
+                toast.success('Dealer payout recorded successfully');
                 closeSettleModal();
                 setSettledSuccessItem(currentItem);
+            },
+            onError: (errs) => {
+                toast.error(Object.values(errs)[0] || 'Failed to process payout');
             }
         });
     };
@@ -250,7 +285,11 @@ export default function Dashboard({
         postReturn(route('dealers.mark-returned', returnModalItem.id), {
             preserveScroll: true,
             onSuccess: () => {
+                toast.success('Unsold stock returned to dealer');
                 closeReturnModal();
+            },
+            onError: (errs) => {
+                toast.error(Object.values(errs)[0] || 'Failed to return stock');
             }
         });
     };
@@ -302,10 +341,14 @@ export default function Dashboard({
             {/* Two-Way Financial & Consignment Metrics */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-6">
                 {/* 1. Outward Stock Out */}
-                <Card className="flex flex-col justify-between">
+                <Card
+                    className="flex flex-col justify-between cursor-pointer hover:border-amber-500/40 transition-all"
+                    onClick={() => setActiveDirectionTab('outward')}
+                    title="Click to view outward consignments"
+                >
                     <div className="flex justify-between items-start mb-4">
                         <div>
-                            <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Items Out (Consignments)</p>
+                            <p className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">Items Out (Consignments)</p>
                             <h3 className="text-3xl font-black text-slate-900 dark:text-white">{metrics.items_out || 0}</h3>
                         </div>
                         <div className="w-12 h-12 rounded-2xl bg-amber-50 dark:bg-amber-950/40 text-amber-500 flex items-center justify-center">
@@ -313,16 +356,23 @@ export default function Dashboard({
                         </div>
                     </div>
                     <div className="mt-2 flex justify-between items-center text-sm">
-                        <span className="text-slate-500 font-medium">Outward Value</span>
+                        <span className="text-slate-500 dark:text-slate-400 font-medium">Outward Value</span>
                         <span className="font-bold text-slate-700 dark:text-slate-200">{formatCurrency(metrics.pending_value)}</span>
                     </div>
                 </Card>
 
                 {/* 2. Inward Stock Taken (In Store) */}
-                <Card className="flex flex-col justify-between border-l-4 border-l-indigo-500">
+                <Card
+                    className="flex flex-col justify-between border-l-4 border-l-indigo-500 cursor-pointer hover:border-indigo-500/60 transition-all"
+                    onClick={() => {
+                        setActiveDirectionTab('inward');
+                        setInwardFilter('in_stock');
+                    }}
+                    title="Click to view inward items currently in shop"
+                >
                     <div className="flex justify-between items-start mb-4">
                         <div>
-                            <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Items Taken (In Shop)</p>
+                            <p className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">Items Taken (In Shop)</p>
                             <h3 className="text-3xl font-black text-indigo-600 dark:text-indigo-400">{metrics.inward_stock_units || 0}</h3>
                         </div>
                         <div className="w-12 h-12 rounded-2xl bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400 flex items-center justify-center">
@@ -330,7 +380,7 @@ export default function Dashboard({
                         </div>
                     </div>
                     <div className="mt-2 flex justify-between items-center text-sm">
-                        <span className="text-slate-500 font-medium">Sales Progress</span>
+                        <span className="text-slate-500 dark:text-slate-400 font-medium">Sales Progress</span>
                         <span className="font-bold text-indigo-600 dark:text-indigo-300">
                             {metrics.inward_sold_units || 0} sold of {metrics.inward_total_units || 0} intake
                         </span>
@@ -414,13 +464,13 @@ export default function Dashboard({
                 <Card className="lg:col-span-2 flex flex-col justify-between">
                     <div className="flex items-center justify-between mb-4">
                         <div>
-                            <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
-                                <TrendingUp size={18} className="text-emerald-600" />
+                            <h3 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                                <TrendingUp size={18} className="text-emerald-600 dark:text-emerald-400" />
                                 Dealer Network Sales Volume (6 Months)
                             </h3>
-                            <p className="text-xs text-slate-500">Monthly aggregate partner sales revenue across all dealers</p>
+                            <p className="text-xs text-slate-500 dark:text-slate-400">Monthly aggregate partner sales revenue across all dealers</p>
                         </div>
-                        <div className="text-xs font-semibold text-emerald-600 bg-emerald-50 px-2.5 py-1 rounded-full border border-emerald-100">
+                        <div className="text-xs font-semibold text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/60 px-2.5 py-1 rounded-full border border-emerald-200 dark:border-emerald-800/60">
                             Partner Network Trend
                         </div>
                     </div>
@@ -434,9 +484,9 @@ export default function Dashboard({
                                         <stop offset="95%" stopColor="#10b981" stopOpacity={0}/>
                                     </linearGradient>
                                 </defs>
-                                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                                <XAxis dataKey="month" tickLine={false} axisLine={false} tick={{ fontSize: 11, fill: '#64748b' }} />
-                                <YAxis tickLine={false} axisLine={false} tick={{ fontSize: 11, fill: '#64748b' }} tickFormatter={(val) => `UGX ${(val/1000).toFixed(0)}k`} />
+                                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#334155" strokeOpacity={0.25} />
+                                <XAxis dataKey="month" tickLine={false} axisLine={false} tick={{ fontSize: 11, fill: '#94a3b8' }} />
+                                <YAxis tickLine={false} axisLine={false} tick={{ fontSize: 11, fill: '#94a3b8' }} tickFormatter={(val) => `UGX ${(val/1000).toFixed(0)}k`} />
                                 <Tooltip 
                                     formatter={(val) => [formatCurrency(val), 'Dealer Sales']}
                                     contentStyle={{ backgroundColor: '#0f172a', borderColor: '#334155', borderRadius: '12px', color: '#fff', fontSize: '12px' }}
@@ -451,7 +501,7 @@ export default function Dashboard({
                 <Card className="flex flex-col justify-between">
                     <div>
                         <div className="flex items-center justify-between mb-4">
-                            <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
+                            <h3 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
                                 <Trophy size={18} className="text-amber-500" />
                                 Top Partner Dealers
                             </h3>
@@ -463,26 +513,26 @@ export default function Dashboard({
                                 <p className="text-xs text-slate-400 py-8 text-center">No dealer sales recorded yet.</p>
                             ) : (
                                 topDealers.map((dealer, idx) => (
-                                    <div key={dealer.id} className="p-3 rounded-xl bg-slate-50 border border-slate-100 flex items-center justify-between hover:bg-indigo-50/50 hover:border-indigo-100 transition-colors">
+                                    <div key={dealer.id} className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-100 dark:border-slate-700/70 flex items-center justify-between hover:bg-indigo-50/50 dark:hover:bg-indigo-950/40 hover:border-indigo-200 dark:hover:border-indigo-800 transition-colors">
                                         <div className="flex items-center gap-3 truncate pr-2">
                                             <div className={`w-7 h-7 rounded-lg font-black text-xs flex items-center justify-center shrink-0 ${
-                                                idx === 0 ? 'bg-amber-100 text-amber-700 border border-amber-200' :
-                                                idx === 1 ? 'bg-slate-200 text-slate-700' :
-                                                idx === 2 ? 'bg-amber-800/10 text-amber-800' : 'bg-slate-100 text-slate-500'
+                                                idx === 0 ? 'bg-amber-100 dark:bg-amber-950/80 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800' :
+                                                idx === 1 ? 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200' :
+                                                idx === 2 ? 'bg-amber-800/15 dark:bg-amber-900/40 text-amber-800 dark:text-amber-300' : 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400'
                                             }`}>
                                                 #{idx + 1}
                                             </div>
                                             <div className="truncate">
-                                                <Link href={route('dealers.show', dealer.id)} className="font-bold text-xs text-slate-900 hover:text-indigo-600 truncate block">
+                                                <Link href={route('dealers.show', dealer.id)} className="font-bold text-xs text-slate-900 dark:text-white hover:text-indigo-600 dark:hover:text-indigo-400 truncate block">
                                                     {dealer.name}
                                                 </Link>
-                                                <div className="text-[10px] text-slate-500 mt-0.5">
+                                                <div className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5">
                                                     {dealer.items_out_count} items currently out
                                                 </div>
                                             </div>
                                         </div>
                                         <div className="text-right shrink-0">
-                                            <div className="text-xs font-black text-emerald-600">{formatCurrency(dealer.sales_value || 0)}</div>
+                                            <div className="text-xs font-black text-emerald-600 dark:text-emerald-400">{formatCurrency(dealer.sales_value || 0)}</div>
                                         </div>
                                     </div>
                                 ))
@@ -670,7 +720,8 @@ export default function Dashboard({
                                 </Button>
                             </div>
                         ) : (
-                            <div className="overflow-x-auto">
+                            <>
+                            <div className="hidden md:block overflow-x-auto">
                                 <table className="w-full text-sm text-left">
                                     <thead className="text-[11px] text-slate-400 uppercase bg-slate-50/80 dark:bg-slate-800/50 border-b border-slate-100 dark:border-slate-800">
                                         <tr>
@@ -868,6 +919,73 @@ export default function Dashboard({
                                     </tbody>
                                 </table>
                             </div>
+
+                            {/* Mobile Card List for Inward Consignments */}
+                            <div className="md:hidden divide-y divide-slate-100 dark:divide-slate-800">
+                                {filteredInwardItems.map((item) => {
+                                    const isSerial = item.type === 'serialized';
+                                    const brand = isSerial ? item.device_imei?.product?.brand?.name : item.product?.brand?.name;
+                                    const model = isSerial ? item.device_imei?.product?.model_name : item.product?.model_name;
+                                    const imei = isSerial ? item.device_imei?.imei : null;
+                                    const sku = !isSerial ? item.product?.sku : null;
+                                    const isAwaitingPay = item.qtySold > 0 && item.remainingOwed > 0;
+
+                                    return (
+                                        <div key={item.id} className="py-4 space-y-3">
+                                            <div className="flex items-start justify-between gap-2">
+                                                <div>
+                                                    <div className="font-bold text-slate-900 dark:text-white text-sm">{brand} {model}</div>
+                                                    <div className="text-xs text-slate-500 dark:text-slate-400">{item.dealer?.name || 'Partner Dealer'} • {isSerial ? `IMEI: ${imei || 'N/A'}` : `SKU: ${sku || 'N/A'}`}</div>
+                                                </div>
+                                                {isAwaitingPay ? (
+                                                    <span className="px-2 py-0.5 rounded-md text-[11px] font-black bg-rose-50 dark:bg-rose-950/60 text-rose-600 dark:text-rose-400 border border-rose-200 dark:border-rose-800">
+                                                        Owe {formatCurrency(item.remainingOwed)}
+                                                    </span>
+                                                ) : item.isSettled ? (
+                                                    <span className="px-2 py-0.5 rounded-md text-[11px] font-bold bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
+                                                        Settled ✓
+                                                    </span>
+                                                ) : (
+                                                    <span className="px-2 py-0.5 rounded-md text-[11px] font-bold bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400">
+                                                        {item.availableQty} in store
+                                                    </span>
+                                                )}
+                                            </div>
+                                            <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400">
+                                                <span>Cost: <strong className="text-slate-800 dark:text-slate-200">{formatCurrency(item.unitCost)}</strong></span>
+                                                <span>{item.qtySold} sold / {item.qtyTotal} total</span>
+                                            </div>
+                                            <div className="flex items-center justify-end gap-2 pt-1">
+                                                {isAwaitingPay && (
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => openSettleModal(item)}
+                                                        className="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold inline-flex items-center gap-1"
+                                                    >
+                                                        <DollarSign size={13} /> Pay Dealer
+                                                    </button>
+                                                )}
+                                                {item.availableQty > 0 && (
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => openReturnModal(item)}
+                                                        className="px-2.5 py-1.5 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 rounded-lg text-xs font-bold"
+                                                    >
+                                                        Return
+                                                    </button>
+                                                )}
+                                                <Link
+                                                    href={route('dealers.show', item.dealer_id)}
+                                                    className="px-2.5 py-1.5 text-xs font-bold text-indigo-600 dark:text-indigo-400 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg"
+                                                >
+                                                    Manage
+                                                </Link>
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                            </>
                         )}
                     </div>
                 )}
@@ -875,43 +993,77 @@ export default function Dashboard({
                 {/* TAB 2: OUTWARD ISSUED ITEMS (Given to Dealer) */}
                 {activeDirectionTab === 'outward' && (
                     <div>
-                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6">
+                        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 mb-6">
                             <div>
                                 <h3 className="text-lg font-bold text-slate-900 dark:text-white">Items Given to Dealers (Outward Consignments)</h3>
                                 <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                                    Active consignments held across {groupedByDealer.length} partner shops ({pendingItems.length} total items out)
+                                    Active consignments held across {groupedByDealer.length} partner shops ({filteredPendingItems.length} of {pendingItems.length} items shown)
                                 </p>
                             </div>
 
                             {pendingItems.length > 0 && (
-                                <div className="flex items-center bg-slate-100 dark:bg-slate-800 p-1 rounded-xl border border-slate-200/80 dark:border-slate-700 self-start sm:self-auto">
+                                <div className="flex flex-wrap items-center gap-2">
                                     <button
                                         type="button"
-                                        onClick={() => setViewMode('grouped')}
-                                        className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all ${
-                                            viewMode === 'grouped'
-                                                ? 'bg-white dark:bg-slate-900 text-indigo-600 dark:text-indigo-400 shadow-sm'
-                                                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                                        onClick={() => setOutwardOverdueOnly(!outwardOverdueOnly)}
+                                        className={`px-3 py-1.5 rounded-xl text-xs font-bold border transition-all flex items-center gap-1.5 ${
+                                            outwardOverdueOnly
+                                                ? 'bg-rose-600 text-white border-rose-600 shadow-sm'
+                                                : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-200 dark:hover:bg-slate-700'
                                         }`}
                                     >
-                                        <Users size={14} /> Grouped by Dealer
+                                        <AlertCircle size={13} /> Overdue Only ({metrics.overdue_items || 0})
                                     </button>
-                                    <button
-                                        type="button"
-                                        onClick={() => setViewMode('flat')}
-                                        className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all ${
-                                            viewMode === 'flat'
-                                                ? 'bg-white dark:bg-slate-900 text-indigo-600 dark:text-indigo-400 shadow-sm'
-                                                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
-                                        }`}
-                                    >
-                                        <ListFilter size={14} /> Itemized List
-                                    </button>
+
+                                    <div className="relative min-w-[190px]">
+                                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={14} />
+                                        <input
+                                            type="text"
+                                            placeholder="Search Dealer, IMEI, Model..."
+                                            className="w-full pl-8 pr-3 py-1.5 text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white focus:border-amber-500 focus:ring-1 focus:ring-amber-500"
+                                            value={outwardSearch}
+                                            onChange={(e) => setOutwardSearch(e.target.value)}
+                                        />
+                                        {outwardSearch && (
+                                            <button
+                                                type="button"
+                                                onClick={() => setOutwardSearch('')}
+                                                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 text-xs"
+                                            >
+                                                ×
+                                            </button>
+                                        )}
+                                    </div>
+
+                                    <div className="flex items-center bg-slate-100 dark:bg-slate-800 p-1 rounded-xl border border-slate-200/80 dark:border-slate-700">
+                                        <button
+                                            type="button"
+                                            onClick={() => setViewMode('grouped')}
+                                            className={`px-3 py-1 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all ${
+                                                viewMode === 'grouped'
+                                                    ? 'bg-white dark:bg-slate-900 text-indigo-600 dark:text-indigo-400 shadow-sm'
+                                                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                                            }`}
+                                        >
+                                            <Users size={14} /> Grouped
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => setViewMode('flat')}
+                                            className={`px-3 py-1 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all ${
+                                                viewMode === 'flat'
+                                                    ? 'bg-white dark:bg-slate-900 text-indigo-600 dark:text-indigo-400 shadow-sm'
+                                                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                                            }`}
+                                        >
+                                            <ListFilter size={14} /> Flat List
+                                        </button>
+                                    </div>
                                 </div>
                             )}
                         </div>
                         
-                        {pendingItems.length === 0 ? (
+                        {filteredPendingItems.length === 0 ? (
                             <div className="p-12 text-center border border-dashed border-slate-200 dark:border-slate-800 rounded-2xl bg-slate-50/50 dark:bg-slate-900/30">
                                 <PackageOpen className="mx-auto text-slate-300 dark:text-slate-600 mb-3" size={48} />
                                 <p className="text-slate-700 dark:text-slate-300 font-bold mb-1">No items currently out with dealers</p>
@@ -1048,7 +1200,7 @@ export default function Dashboard({
                             /* Flat Itemized Table */
                             <div className="overflow-x-auto">
                                 <table className="w-full text-sm text-left">
-                                    <thead className="text-xs text-slate-500 uppercase bg-slate-50/50 border-b border-slate-200">
+                                    <thead className="text-xs text-slate-500 dark:text-slate-400 uppercase bg-slate-50/50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-800">
                                         <tr>
                                             <th className="px-6 py-4 font-semibold">Item & IMEI</th>
                                             <th className="px-6 py-4 font-semibold">Dealer</th>
@@ -1058,29 +1210,29 @@ export default function Dashboard({
                                             <th className="px-6 py-4 font-semibold text-right">Action</th>
                                         </tr>
                                     </thead>
-                                    <tbody className="divide-y divide-slate-100">
-                                        {pendingItems.map((item) => (
-                                            <tr key={item.id} className="hover:bg-slate-50 transition-colors">
+                                    <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                                        {filteredPendingItems.map((item) => (
+                                            <tr key={item.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors">
                                                 <td className="px-6 py-4">
-                                                    <div className="font-semibold text-slate-900">
+                                                    <div className="font-semibold text-slate-900 dark:text-white">
                                                         {item.type === 'serialized' ? `${item.device_imei?.product?.brand?.name || ''} ${item.device_imei?.product?.model_name}` : `${item.product?.brand?.name || ''} ${item.product?.model_name}`}
                                                     </div>
-                                                    <div className="text-xs text-slate-500">
+                                                    <div className="text-xs text-slate-500 dark:text-slate-400">
                                                         {item.type === 'serialized' ? `IMEI: ${item.device_imei?.imei}` : `SKU: ${item.product?.sku || 'N/A'} • Qty: ${item.quantity - item.quantity_sold - item.quantity_returned}`}
                                                     </div>
                                                 </td>
                                                 <td className="px-6 py-4">
-                                                    <Link href={route('dealers.show', item.dealer.id)} className="font-medium text-indigo-600 hover:underline">
+                                                    <Link href={route('dealers.show', item.dealer.id)} className="font-medium text-indigo-600 dark:text-indigo-400 hover:underline">
                                                         {item.dealer.name}
                                                     </Link>
                                                 </td>
-                                                <td className="px-6 py-4 text-slate-600 whitespace-nowrap">
+                                                <td className="px-6 py-4 text-slate-600 dark:text-slate-300 whitespace-nowrap">
                                                     {dayjs(item.issued_at).format('DD MMM YYYY')}
                                                 </td>
-                                                <td className="px-6 py-4 text-slate-600 whitespace-nowrap">
+                                                <td className="px-6 py-4 text-slate-600 dark:text-slate-300 whitespace-nowrap">
                                                     <DueDateBadge date={item.expected_return_date} />
                                                 </td>
-                                                <td className="px-6 py-4 font-bold text-slate-900 whitespace-nowrap">
+                                                <td className="px-6 py-4 font-bold text-slate-900 dark:text-white whitespace-nowrap">
                                                     {formatCurrency(item.dealer_price)}
                                                 </td>
                                                 <td className="px-6 py-4 text-right">
@@ -1279,11 +1431,12 @@ export default function Dashboard({
                                 </label>
                                 <input
                                     type="number"
-                                    className="w-full rounded-xl border-slate-300 dark:border-slate-700 dark:bg-slate-900 text-lg font-bold text-rose-600 focus:border-emerald-500 focus:ring-emerald-500"
+                                    className="w-full rounded-xl border-slate-300 dark:border-slate-700 dark:bg-slate-900 text-lg font-bold text-rose-600 dark:text-rose-400 focus:border-emerald-500 focus:ring-emerald-500"
                                     value={settleData.amount}
                                     onChange={e => setSettleData('amount', e.target.value)}
                                     required
                                     min="1"
+                                    max={settleItem.remainingOwed || undefined}
                                 />
                                 {settleErrors.amount && <p className="text-rose-500 text-xs mt-1">{settleErrors.amount}</p>}
                             </div>
