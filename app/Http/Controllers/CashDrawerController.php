@@ -8,16 +8,19 @@ use App\Models\CashDrawer;
 use App\Models\Sale;
 use App\Models\Expense;
 use App\Models\PaymentAccount;
+use App\Models\User;
 use App\Services\TreasuryService;
 use Inertia\Inertia;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
 
 class CashDrawerController extends Controller
 {
     public function index()
     {
-        $activeDrawer = CashDrawer::with('expenses')
+        $activeDrawer = CashDrawer::with(['expenses' => fn ($q) => $q->orderBy('created_at', 'desc')])
             ->where('user_id', Auth::id())
             ->where('status', 'open')
             ->first();
@@ -26,50 +29,57 @@ class CashDrawerController extends Controller
         if ($activeDrawer) {
             $activeDrawer->calculated_expected = $activeDrawer->calculateExpectedCash();
 
-            $cashSales = Sale::where('cash_drawer_id', $activeDrawer->id)
+            $cashSales = (float) Sale::where('cash_drawer_id', $activeDrawer->id)
                 ->whereNull('repair_id')
                 ->where('payment_method', 'Cash')
                 ->whereIn('payment_status', ['Paid', 'Refunded'])
                 ->sum('final_amount');
                 
-            $layawayCash = \App\Models\LayawayPayment::where('cash_drawer_id', $activeDrawer->id)
+            $layawayCash = (float) \App\Models\LayawayPayment::where('cash_drawer_id', $activeDrawer->id)
                 ->where('payment_method', 'Cash')
                 ->sum('amount_paid');
 
-            $momoSales = Sale::where('cash_drawer_id', $activeDrawer->id)
+            $cashRefunds = (float) $activeDrawer->expenses
+                ->whereIn('category', ['Refund', 'Refund (Past Shift)'])
+                ->sum('amount');
+
+            $momoSales = (float) Sale::where('cash_drawer_id', $activeDrawer->id)
                 ->whereNull('repair_id')
                 ->whereIn('payment_method', ['MTN MoMo', 'MoMo'])
                 ->whereIn('payment_status', ['Paid'])
                 ->sum('final_amount')
-                + \App\Models\LayawayPayment::where('cash_drawer_id', $activeDrawer->id)
+                + (float) \App\Models\LayawayPayment::where('cash_drawer_id', $activeDrawer->id)
                 ->whereIn('payment_method', ['MTN MoMo', 'MoMo'])
                 ->sum('amount_paid');
 
-            $airtelSales = Sale::where('cash_drawer_id', $activeDrawer->id)
+            $airtelSales = (float) Sale::where('cash_drawer_id', $activeDrawer->id)
                 ->whereNull('repair_id')
                 ->where('payment_method', 'Airtel Money')
                 ->whereIn('payment_status', ['Paid'])
                 ->sum('final_amount')
-                + \App\Models\LayawayPayment::where('cash_drawer_id', $activeDrawer->id)
+                + (float) \App\Models\LayawayPayment::where('cash_drawer_id', $activeDrawer->id)
                 ->where('payment_method', 'Airtel Money')
                 ->sum('amount_paid');
 
-            $bankSales = Sale::where('cash_drawer_id', $activeDrawer->id)
+            $bankSales = (float) Sale::where('cash_drawer_id', $activeDrawer->id)
                 ->whereNull('repair_id')
                 ->whereIn('payment_method', ['Bank Transfer', 'Card'])
                 ->whereIn('payment_status', ['Paid'])
                 ->sum('final_amount')
-                + \App\Models\LayawayPayment::where('cash_drawer_id', $activeDrawer->id)
+                + (float) \App\Models\LayawayPayment::where('cash_drawer_id', $activeDrawer->id)
                 ->whereIn('payment_method', ['Bank Transfer', 'Card'])
                 ->sum('amount_paid');
 
-            $totalSalesCount = Sale::where('cash_drawer_id', $activeDrawer->id)->count();
+            $totalSalesCount = Sale::where('cash_drawer_id', $activeDrawer->id)
+                ->where('payment_status', '!=', 'Refunded')
+                ->count();
 
             $activeDrawer->cash_sales = $cashSales + $layawayCash;
+            $activeDrawer->cash_refunds = $cashRefunds;
             $activeDrawer->momo_sales = $momoSales;
             $activeDrawer->airtel_sales = $airtelSales;
             $activeDrawer->bank_sales = $bankSales;
-            $activeDrawer->total_shift_sales = ($cashSales + $layawayCash) + $momoSales + $airtelSales + $bankSales;
+            $activeDrawer->total_shift_sales = max(0, ($cashSales + $layawayCash - $cashRefunds)) + $momoSales + $airtelSales + $bankSales;
             $activeDrawer->total_sales_count = $totalSalesCount;
 
             $openedAt = Carbon::parse($activeDrawer->opened_at);
@@ -92,67 +102,93 @@ class CashDrawerController extends Controller
             'source_account_id' => 'nullable|string',
         ]);
 
-        // Ensure no active drawer exists
-        if (CashDrawer::where('user_id', Auth::id())->where('status', 'open')->exists()) {
-            return back()->with('error', 'You already have an open shift.');
-        }
-
-        // Handle opening float transfer/injection if starting_cash > 0 and source specified
         $startingCash = floatval($request->starting_cash);
         $sourceId = $request->source_account_id;
-        $sourceAccount = null;
-        $tillAccount = TreasuryService::getTillAccount();
 
-        // 1. If user claims cash was already in the register till, verify the register has that balance on the books
-        if ($startingCash > 0 && ($sourceId === 'existing' || empty($sourceId))) {
-            $tillBalance = floatval($tillAccount?->current_balance ?? 0);
-            if ($tillBalance < $startingCash) {
-                return back()->withErrors([
-                    'source_account_id' => "Cannot claim UGX " . number_format($startingCash) . " is 'Already in Register' because the register balance on the books is only UGX " . number_format($tillBalance) . ". Please select Shop Safe or External Cash Injection to avoid ghost money."
+        DB::transaction(function () use ($startingCash, $sourceId) {
+            // Lock check to prevent concurrent double-open shifts
+            $existing = CashDrawer::where('user_id', Auth::id())
+                ->where('status', 'open')
+                ->lockForUpdate()
+                ->exists();
+
+            if ($existing) {
+                throw ValidationException::withMessages([
+                    'starting_cash' => 'You already have an open shift.',
                 ]);
             }
-        }
 
-        // 2. If user selected a funding account (e.g. Shop Safe), verify it has sufficient balance
-        if ($startingCash > 0 && $sourceId && $sourceId !== 'existing' && $sourceId !== 'external') {
-            if (is_numeric($sourceId) && (int)$sourceId !== (int)$tillAccount?->id) {
-                $sourceAccount = PaymentAccount::find($sourceId);
-                if ($sourceAccount && $sourceAccount->current_balance < $startingCash) {
-                    return back()->withErrors([
-                        'source_account_id' => "Insufficient balance in {$sourceAccount->name}! Available balance is UGX " . number_format($sourceAccount->current_balance) . "."
+            $sourceAccount = null;
+            $tillAccount = TreasuryService::getTillAccount();
+
+            // 1. If user claims cash was already in the register till, verify the register has that balance on the books
+            if ($startingCash > 0 && ($sourceId === 'existing' || empty($sourceId))) {
+                $lockedTill = $tillAccount ? PaymentAccount::where('id', $tillAccount->id)->lockForUpdate()->first() : null;
+                $tillBalance = floatval($lockedTill?->current_balance ?? 0);
+                if ($tillBalance < $startingCash) {
+                    throw ValidationException::withMessages([
+                        'source_account_id' => "Cannot claim UGX " . number_format($startingCash) . " is 'Already in Register' because the register balance on the books is only UGX " . number_format($tillBalance) . ". Please select Shop Safe or External Cash Injection to avoid ghost money.",
                     ]);
                 }
             }
-        }
 
-        $drawer = CashDrawer::create([
-            'user_id'       => Auth::id(),
-            'starting_cash' => $request->starting_cash,
-            'status'        => 'open',
-            'opened_at'     => Carbon::now()
-        ]);
-
-        if ($startingCash > 0 && $sourceId && $sourceId !== 'existing') {
-            if ($sourceId === 'external') {
-                TreasuryService::recordInflow(
-                    'Cash',
-                    $startingCash,
-                    'Opening Float',
-                    $drawer,
-                    "Opening shift float for Shift #{$drawer->id} (External funds)",
-                    null,
-                    Auth::id()
-                );
-            } elseif ($sourceAccount && (int)$sourceAccount->id !== (int)$tillAccount?->id) {
-                TreasuryService::transfer(
-                    (int) $sourceAccount->id,
-                    (int) $tillAccount->id,
-                    $startingCash,
-                    "Opening shift float for Shift #{$drawer->id} from {$sourceAccount->name}",
-                    Auth::id()
-                );
+            // 2. If user selected a funding account (e.g. Shop Safe), verify it has sufficient balance
+            if ($startingCash > 0 && $sourceId && $sourceId !== 'existing' && $sourceId !== 'external') {
+                if (is_numeric($sourceId) && (int) $sourceId !== (int) $tillAccount?->id) {
+                    $sourceAccount = PaymentAccount::where('id', (int) $sourceId)->lockForUpdate()->first();
+                    if (!$sourceAccount) {
+                        throw ValidationException::withMessages([
+                            'source_account_id' => 'Selected funding account was not found.',
+                        ]);
+                    }
+                    if ($sourceAccount->current_balance < $startingCash) {
+                        throw ValidationException::withMessages([
+                            'source_account_id' => "Insufficient balance in {$sourceAccount->name}! Available balance is UGX " . number_format($sourceAccount->current_balance) . ".",
+                        ]);
+                    }
+                }
             }
-        }
+
+            $drawer = CashDrawer::create([
+                'user_id'       => Auth::id(),
+                'starting_cash' => $startingCash,
+                'status'        => 'open',
+                'opened_at'     => Carbon::now(),
+            ]);
+
+            if ($startingCash > 0 && $sourceId && $sourceId !== 'existing') {
+                if ($sourceId === 'external') {
+                    TreasuryService::recordInflow(
+                        'Cash',
+                        $startingCash,
+                        'Opening Float',
+                        $drawer,
+                        "Opening shift float for Shift #{$drawer->id} (External funds)",
+                        null,
+                        Auth::id()
+                    );
+                } elseif ($sourceAccount && $tillAccount && (int) $sourceAccount->id !== (int) $tillAccount->id) {
+                    TreasuryService::transfer(
+                        (int) $sourceAccount->id,
+                        (int) $tillAccount->id,
+                        $startingCash,
+                        "Opening shift float for Shift #{$drawer->id} from {$sourceAccount->name}",
+                        Auth::id()
+                    );
+                }
+            }
+
+            \App\Models\ActivityLog::log(
+                'shift_opened',
+                'Cash Drawer',
+                "Opened Shift #{$drawer->id} with starting float UGX " . number_format($startingCash),
+                [
+                    'cash_drawer_id' => $drawer->id,
+                    'starting_cash' => $startingCash,
+                    'source_account_id' => $sourceId,
+                ]
+            );
+        });
 
         return back()->with('success', 'Shift opened successfully.');
     }
@@ -166,65 +202,117 @@ class CashDrawerController extends Controller
             'notes'            => 'nullable|string|max:500',
         ]);
 
-        $activeDrawer = CashDrawer::where('user_id', Auth::id())
-            ->where('status', 'open')
-            ->firstOrFail();
-
-        $expectedCash = $activeDrawer->calculateExpectedCash();
-        $difference = $request->actual_cash - $expectedCash;
-
-        $activeDrawer->update([
-            'expected_cash' => $expectedCash,
-            'actual_cash'   => $request->actual_cash,
-            'difference'    => $difference,
-            'status'        => 'closed',
-            'closed_at'     => Carbon::now()
-        ]);
-
-        // Transfer counted cash to Shop Safe if deposit_to_safe is selected
+        $actualCash = floatval($request->actual_cash);
         $shouldDeposit = $request->has('deposit_to_safe')
             ? filter_var($request->deposit_to_safe, FILTER_VALIDATE_BOOLEAN)
             : true;
 
         $depositAmount = $request->filled('deposit_amount')
             ? floatval($request->deposit_amount)
-            : floatval($request->actual_cash);
+            : $actualCash;
 
-        if ($shouldDeposit && $depositAmount > 0) {
-            $safeAccount = TreasuryService::getSafeAccount();
-            $tillAccount = TreasuryService::getTillAccount();
-
-            if ($safeAccount && $tillAccount && (int)$safeAccount->id !== (int)$tillAccount->id) {
-                $notes = "Shift #{$activeDrawer->id} End-of-Shift Cash Drop to Safe" . ($request->notes ? " - {$request->notes}" : '');
-                TreasuryService::transfer(
-                    (int) $tillAccount->id,
-                    (int) $safeAccount->id,
-                    $depositAmount,
-                    $notes,
-                    Auth::id()
-                );
-
-                return back()->with('success', "Shift closed successfully. UGX " . number_format($depositAmount) . " deposited into {$safeAccount->name}.");
-            }
+        if ($shouldDeposit && $depositAmount > $actualCash) {
+            throw ValidationException::withMessages([
+                'deposit_amount' => 'Safe deposit amount cannot exceed the actual counted cash (UGX ' . number_format($actualCash) . ').',
+            ]);
         }
 
-        return back()->with('success', 'Shift closed successfully.');
+        $safeDropMessage = null;
+
+        DB::transaction(function () use ($request, $actualCash, $shouldDeposit, $depositAmount, &$safeDropMessage) {
+            $activeDrawer = CashDrawer::where('user_id', Auth::id())
+                ->where('status', 'open')
+                ->lockForUpdate()
+                ->first();
+
+            if (!$activeDrawer) {
+                throw ValidationException::withMessages([
+                    'actual_cash' => 'No active open shift found to close.',
+                ]);
+            }
+
+            $expectedCash = (float) $activeDrawer->calculateExpectedCash();
+            $difference = $actualCash - $expectedCash;
+
+            $activeDrawer->update([
+                'expected_cash' => $expectedCash,
+                'actual_cash'   => $actualCash,
+                'difference'    => $difference,
+                'status'        => 'closed',
+                'closed_at'     => Carbon::now(),
+            ]);
+
+            $depositedToSafe = 0;
+            if ($shouldDeposit && $depositAmount > 0) {
+                $safeAccount = TreasuryService::getSafeAccount();
+                $tillAccount = TreasuryService::getTillAccount();
+
+                if ($safeAccount && $tillAccount && (int) $safeAccount->id !== (int) $tillAccount->id) {
+                    $notes = "Shift #{$activeDrawer->id} End-of-Shift Cash Drop to Safe" . ($request->notes ? " - {$request->notes}" : '');
+                    TreasuryService::transfer(
+                        (int) $tillAccount->id,
+                        (int) $safeAccount->id,
+                        $depositAmount,
+                        $notes,
+                        Auth::id()
+                    );
+                    $depositedToSafe = $depositAmount;
+                    $safeDropMessage = "Shift closed successfully. UGX " . number_format($depositAmount) . " deposited into {$safeAccount->name}.";
+                }
+            }
+
+            \App\Models\ActivityLog::log(
+                'shift_closed',
+                'Cash Drawer',
+                "Closed Shift #{$activeDrawer->id} — Expected: UGX " . number_format($expectedCash) . ", Counted: UGX " . number_format($actualCash) . ", Variance: " . ($difference >= 0 ? '+' : '') . number_format($difference),
+                [
+                    'cash_drawer_id' => $activeDrawer->id,
+                    'expected_cash' => $expectedCash,
+                    'actual_cash' => $actualCash,
+                    'difference' => $difference,
+                    'deposited_to_safe' => $depositedToSafe,
+                    'notes' => $request->notes,
+                ]
+            );
+        });
+
+        return back()->with('success', $safeDropMessage ?? 'Shift closed successfully.');
     }
 
-    public function history()
+    public function history(Request $request)
     {
         $user = Auth::user();
+        $isManager = in_array(strtolower($user->role ?? ''), ['admin', 'manager']);
+        $status = $request->input('status', 'all');
+        $userId = $request->input('user_id', '');
+
         $query = CashDrawer::with('user')->orderBy('opened_at', 'desc');
 
         // Cashiers and non-admins only see their own shift history; admins/managers see all
-        if (!in_array(strtolower($user->role), ['admin', 'manager'])) {
+        if (!$isManager) {
             $query->where('user_id', $user->id);
+        } elseif ($userId !== '' && is_numeric($userId)) {
+            $query->where('user_id', (int) $userId);
         }
 
-        $drawers = $query->paginate(10);
-            
+        if (in_array($status, ['open', 'closed'], true)) {
+            $query->where('status', $status);
+        }
+
+        $drawers = $query->paginate(10)->withQueryString();
+
+        $cashiers = $isManager
+            ? User::orderBy('name')->get(['id', 'name'])
+            : collect();
+
         return Inertia::render('CashDrawer/History', [
-            'drawers' => $drawers
+            'drawers' => $drawers,
+            'cashiers' => $cashiers,
+            'isManager' => $isManager,
+            'filters' => [
+                'status' => $status,
+                'user_id' => $userId,
+            ],
         ]);
     }
 }

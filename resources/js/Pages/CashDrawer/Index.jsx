@@ -79,28 +79,29 @@ export default function Index({ auth, activeDrawer, accounts = [] }) {
                 setShowConfirmClose(false);
             },
             onError: (err) => {
-                toast.error(err.actual_cash || 'Failed to close shift.');
+                toast.error(err.actual_cash || err.deposit_amount || 'Failed to close shift.');
                 setShowConfirmClose(false);
             }
         });
     };
 
-    // Calculate live totals for active shift
+    // Calculate live totals for active shift (consistent with CashDrawer::calculateExpectedCash)
     const startingCash = Number(activeDrawer?.starting_cash || 0);
     const cashSales = Number(activeDrawer?.cash_sales || 0);
-    
-    // Sum only operating expenses for the 'Shift Expenses' tile
-    const operatingExpenses = Number(activeDrawer?.expenses?.filter(e => e.category !== 'Refund' && e.category !== 'Cash In').reduce((a, b) => a + Number(b.amount), 0) || 0);
-    const totalExpenses = Number(activeDrawer?.expenses?.filter(e => e.category !== 'Cash In').reduce((a, b) => a + Number(b.amount), 0) || 0);
+    const isRefundCategory = (cat) => cat === 'Refund' || cat === 'Refund (Past Shift)';
+
+    const refundExpenses = Number(activeDrawer?.expenses?.filter(e => isRefundCategory(e.category)).reduce((a, b) => a + Number(b.amount), 0) || 0);
+    const operatingExpenses = Number(activeDrawer?.expenses?.filter(e => !isRefundCategory(e.category) && e.category !== 'Cash In').reduce((a, b) => a + Number(b.amount), 0) || 0);
+    const totalExpenses = operatingExpenses + refundExpenses;
     const cashIns = Number(activeDrawer?.expenses?.filter(e => e.category === 'Cash In').reduce((a, b) => a + Number(b.amount), 0) || 0);
-    
+
     // Handle 0 correctly for calculated_expected
     const expectedCash = activeDrawer?.calculated_expected !== undefined && activeDrawer?.calculated_expected !== null
-        ? Number(activeDrawer.calculated_expected) 
-        : (startingCash + cashSales + cashIns - operatingExpenses);
-        
+        ? Number(activeDrawer.calculated_expected)
+        : (startingCash + cashSales + cashIns - refundExpenses - operatingExpenses);
+
     const countedCash = Number(closeForm.data.actual_cash || 0);
-    const variance = closeForm.data.actual_cash ? (countedCash - expectedCash) : 0;
+    const variance = closeForm.data.actual_cash !== '' ? (countedCash - expectedCash) : 0;
 
     return (
         <AuthenticatedLayout user={auth.user}>
@@ -129,18 +130,18 @@ export default function Index({ auth, activeDrawer, accounts = [] }) {
                 {!activeDrawer ? (
                     /* Shift Start Card (No active shift) */
                     <div className="max-w-md mx-auto my-12">
-                        <Card className="p-8 text-center border-slate-200/80 shadow-xl space-y-6">
+                        <Card className="p-8 text-center border-slate-200/80 dark:border-slate-800 shadow-xl space-y-6">
                             <div className="w-16 h-16 rounded-2xl bg-gradient-to-tr from-rose-500 to-indigo-600 text-white flex items-center justify-center mx-auto shadow-lg shadow-rose-500/20">
                                 <Wallet size={32} />
                             </div>
                             <div>
-                                <h2 className="text-xl font-bold text-slate-900">Start New Sales Shift</h2>
-                                <p className="text-xs text-slate-500 mt-1">Enter your opening cash drawer balance to activate POS checkout and track cash flow.</p>
+                                <h2 className="text-xl font-bold text-slate-900 dark:text-white">Start New Sales Shift</h2>
+                                <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">Enter your opening cash drawer balance to activate POS checkout and track cash flow.</p>
                             </div>
                             
                             <form onSubmit={handleOpenShift} className="space-y-4 text-left">
                                 <div className="space-y-1.5">
-                                    <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">Starting Cash Balance (UGX) *</label>
+                                    <label className="text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider">Starting Cash Balance (UGX) *</label>
                                     <div className="relative">
                                         <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400">UGX</span>
                                         <input
@@ -149,7 +150,7 @@ export default function Index({ auth, activeDrawer, accounts = [] }) {
                                             step="any"
                                             required
                                             placeholder="e.g. 50000"
-                                            className="w-full pl-12 pr-4 py-3 text-lg font-bold text-slate-900 bg-slate-50 border border-slate-300 focus:border-rose-500 focus:ring-rose-500 rounded-xl shadow-sm transition-all"
+                                            className="w-full pl-12 pr-4 py-3 text-lg font-bold text-slate-900 dark:text-white bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 focus:border-rose-500 focus:ring-rose-500 rounded-xl shadow-sm transition-all"
                                             value={openForm.data.starting_cash}
                                             onChange={e => openForm.setData('starting_cash', e.target.value)}
                                         />
@@ -158,13 +159,13 @@ export default function Index({ auth, activeDrawer, accounts = [] }) {
                                 </div>
 
                                 {Number(openForm.data.starting_cash) > 0 && (
-                                    <div className="space-y-1.5 p-3 rounded-xl bg-slate-50 border border-slate-200">
-                                        <label className="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center justify-between">
+                                    <div className="space-y-1.5 p-3 rounded-xl bg-slate-50 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700">
+                                        <label className="text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider flex items-center justify-between">
                                             <span>Float Source</span>
                                             <span className="text-[10px] text-slate-400 font-semibold lowercase">where is cash drawn from?</span>
                                         </label>
                                         <select
-                                            className="w-full bg-white border border-slate-300 focus:border-rose-500 focus:ring-rose-500 rounded-xl px-3 py-2 text-xs font-semibold text-slate-800 shadow-sm"
+                                            className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 focus:border-rose-500 focus:ring-rose-500 rounded-xl px-3 py-2 text-xs font-semibold text-slate-800 dark:text-slate-200 shadow-sm"
                                             value={openForm.data.source_account_id}
                                             onChange={e => openForm.setData('source_account_id', e.target.value)}
                                         >
@@ -187,14 +188,14 @@ export default function Index({ auth, activeDrawer, accounts = [] }) {
                                             <option value="external">External / Owner Cash (Direct Injection from personal wallet)</option>
                                         </select>
                                         {Number(openForm.data.starting_cash) > Number(tillAccount?.current_balance || 0) && openForm.data.source_account_id === 'existing' && (
-                                            <div className="p-2.5 rounded-lg bg-amber-50 border border-amber-200 text-[11px] text-amber-800 font-medium">
+                                            <div className="p-2.5 rounded-lg bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 text-[11px] text-amber-800 dark:text-amber-200 font-medium">
                                                 ⚠️ Register balance on the books is <strong>UGX {Number(tillAccount?.current_balance || 0).toLocaleString()}</strong>. To prevent ghost money, please select <strong>Shop Safe</strong> or <strong>External / Owner Cash</strong>.
                                             </div>
                                         )}
                                         {openForm.errors.source_account_id && (
-                                            <p className="text-xs text-rose-600 font-bold mt-1">{openForm.errors.source_account_id}</p>
+                                            <p className="text-xs text-rose-600 dark:text-rose-400 font-bold mt-1">{openForm.errors.source_account_id}</p>
                                         )}
-                                        <p className="text-[11px] text-slate-500">
+                                        <p className="text-[11px] text-slate-500 dark:text-slate-400">
                                             {openForm.data.source_account_id === 'existing'
                                                 ? 'Counted from verified cash already in register. Account balances remain unchanged.'
                                                 : openForm.data.source_account_id === 'external'
@@ -220,7 +221,6 @@ export default function Index({ auth, activeDrawer, accounts = [] }) {
                     <div className="space-y-8">
                         
                         {/* Active Shift Status Bar */}
-                        {/* Active Shift Status Bar */}
                         <Card className="p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
                             <div className="flex items-center gap-3">
                                 <div className="relative flex h-3 w-3">
@@ -228,11 +228,16 @@ export default function Index({ auth, activeDrawer, accounts = [] }) {
                                     <span className="relative inline-flex rounded-full h-3 w-3 bg-emerald-500"></span>
                                 </div>
                                 <div>
-                                    <div className="flex items-center gap-2">
+                                    <div className="flex items-center flex-wrap gap-2">
                                         <h2 className="text-base font-bold text-slate-900 dark:text-white">Shift Active</h2>
                                         <Badge variant="success">LIVE SHIFT</Badge>
+                                        {activeDrawer.hours_open !== undefined && (
+                                            <span className="inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
+                                                <Clock size={11} /> {activeDrawer.hours_open}h open
+                                            </span>
+                                        )}
                                     </div>
-                                    <p className="text-xs text-slate-500">Opened by <span className="font-semibold text-slate-700 dark:text-slate-200">{auth.user.name}</span> at {new Date(activeDrawer.opened_at).toLocaleString()}</p>
+                                    <p className="text-xs text-slate-500 dark:text-slate-400">Opened by <span className="font-semibold text-slate-700 dark:text-slate-200">{auth.user.name}</span> at {new Date(activeDrawer.opened_at).toLocaleString()}</p>
                                 </div>
                             </div>
                             <div className="flex flex-wrap items-center gap-2.5">
@@ -335,18 +340,19 @@ export default function Index({ auth, activeDrawer, accounts = [] }) {
                             <Card className="relative overflow-hidden group">
                                 <div className="flex justify-between items-start mb-2">
                                     <div>
-                                        <h6 className="text-slate-500 font-semibold text-xs uppercase tracking-wider mb-1">Till Cash Outflows</h6>
+                                        <h6 className="text-slate-500 dark:text-slate-400 font-semibold text-xs uppercase tracking-wider mb-1">Till Cash Outflows</h6>
                                         <div className="flex items-baseline gap-1">
-                                            <h3 className="text-2xl font-bold text-rose-600">{operatingExpenses > 0 ? `-${operatingExpenses.toLocaleString()}` : '0'}</h3>
-                                            <span className="text-xs text-rose-600 font-medium">UGX</span>
+                                            <h3 className="text-2xl font-bold text-rose-600 dark:text-rose-400">{totalExpenses > 0 ? `-${totalExpenses.toLocaleString()}` : '0'}</h3>
+                                            <span className="text-xs text-rose-600 dark:text-rose-400 font-medium">UGX</span>
                                         </div>
                                     </div>
                                     <div className="w-10 h-10 rounded-xl flex items-center justify-center bg-gradient-to-br from-rose-500 to-pink-600 text-white shadow-md shadow-rose-500/20 group-hover:scale-105 transition-transform">
                                         <Receipt size={20} />
                                     </div>
                                 </div>
-                                <div className="flex items-center gap-1 text-xs text-slate-500 font-medium">
-                                    <Badge variant="danger">Register Outflow</Badge> Expenses & Payouts
+                                <div className="flex items-center flex-wrap gap-1 text-xs text-slate-500 dark:text-slate-400 font-medium">
+                                    <Badge variant="danger">Register Outflow</Badge>
+                                    <span>{refundExpenses > 0 ? `Incl. ${refundExpenses.toLocaleString()} refunds` : 'Expenses & Payouts'}</span>
                                 </div>
                             </Card>
 
@@ -454,15 +460,15 @@ export default function Index({ auth, activeDrawer, accounts = [] }) {
                             {/* Left Column: Logged Expenses Table */}
                             <Card noPadding className="lg:col-span-7 flex flex-col justify-between overflow-hidden">
                                 <div>
-                                    <div className="p-5 border-b border-slate-100 flex items-center justify-between">
+                                    <div className="p-5 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
                                         <div className="flex items-center gap-2.5">
-                                            <div className="w-8 h-8 rounded-lg bg-rose-50 border border-rose-100 flex items-center justify-center text-rose-500">
+                                            <div className="w-8 h-8 rounded-lg bg-rose-50 dark:bg-rose-900/30 border border-rose-100 dark:border-rose-800 flex items-center justify-center text-rose-500">
                                                 <Receipt size={18} />
                                             </div>
-                                            <h3 className="text-base font-bold text-slate-900 dark:text-white">Shift Expenses Log</h3>
+                                            <h3 className="text-base font-bold text-slate-900 dark:text-white">Shift Cash Log</h3>
                                         </div>
                                         {activeDrawer.expenses?.length > 0 && (
-                                            <span className="text-xs font-bold bg-rose-50 text-rose-600 px-3 py-1 rounded-full border border-rose-200">
+                                            <span className="text-xs font-bold bg-rose-50 dark:bg-rose-900/30 text-rose-600 dark:text-rose-400 px-3 py-1 rounded-full border border-rose-200 dark:border-rose-800">
                                                 {activeDrawer.expenses.length} Logged
                                             </span>
                                         )}
@@ -472,28 +478,30 @@ export default function Index({ auth, activeDrawer, accounts = [] }) {
                                         <div className="overflow-x-auto">
                                             <table className="w-full text-left border-collapse text-sm">
                                                 <thead>
-                                                    <tr className="bg-slate-50/70 border-b border-slate-100 text-xs font-semibold text-slate-500 uppercase tracking-wider">
+                                                    <tr className="bg-slate-50/70 dark:bg-slate-800/60 border-b border-slate-100 dark:border-slate-800 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
                                                         <th className="px-5 py-3">Category</th>
                                                         <th className="px-5 py-3">Description</th>
                                                         <th className="px-5 py-3 text-right">Amount</th>
                                                     </tr>
                                                 </thead>
-                                                <tbody className="divide-y divide-slate-100">
+                                                <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                                                     {activeDrawer.expenses.map((expense) => (
-                                                        <tr key={expense.id} className="hover:bg-slate-50/60 transition-colors">
+                                                        <tr key={expense.id} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/50 transition-colors">
                                                             <td className="px-5 py-3.5 font-semibold text-slate-900 dark:text-white">
                                                                 <span className={`inline-block px-2.5 py-0.5 rounded-md text-xs border ${
                                                                     expense.category === 'Cash In' 
-                                                                    ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                                                                    : 'bg-slate-100 text-slate-700 border-slate-200'
+                                                                    ? 'bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800'
+                                                                    : isRefundCategory(expense.category)
+                                                                    ? 'bg-rose-50 dark:bg-rose-900/30 text-rose-700 dark:text-rose-300 border-rose-200 dark:border-rose-800'
+                                                                    : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700'
                                                                 }`}>
                                                                     {expense.category}
                                                                 </span>
                                                             </td>
-                                                            <td className="px-5 py-3.5 text-slate-600 text-xs">
+                                                            <td className="px-5 py-3.5 text-slate-600 dark:text-slate-300 text-xs">
                                                                 {expense.description || <span className="text-slate-400 italic">No description</span>}
                                                             </td>
-                                                            <td className={`px-5 py-3.5 text-right font-bold text-sm ${expense.category === 'Cash In' ? 'text-emerald-600' : 'text-rose-600'}`}>
+                                                            <td className={`px-5 py-3.5 text-right font-bold text-sm ${expense.category === 'Cash In' ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
                                                                 {expense.category === 'Cash In' ? '+' : '-'} UGX {Number(expense.amount).toLocaleString()}
                                                             </td>
                                                         </tr>
@@ -503,17 +511,17 @@ export default function Index({ auth, activeDrawer, accounts = [] }) {
                                         </div>
                                     ) : (
                                         <div className="text-center py-12 px-4 text-slate-400">
-                                            <Receipt size={40} className="mx-auto mb-2 text-slate-300" />
+                                            <Receipt size={40} className="mx-auto mb-2 text-slate-300 dark:text-slate-600" />
                                             <p className="text-base font-semibold text-slate-700 dark:text-slate-200">No expenses logged yet</p>
-                                            <p className="text-xs text-slate-400 mt-1">Use the Log Expense form on the right to add shop expenses.</p>
+                                            <p className="text-xs text-slate-400 mt-1">Use the Log Cash Transaction form on the right to add shop expenses or float top-ups.</p>
                                         </div>
                                     )}
                                 </div>
 
                                 {activeDrawer.expenses?.length > 0 && (
-                                    <div className="p-4 bg-slate-50 border-t border-slate-100 flex justify-between items-center text-sm font-bold text-slate-700">
-                                        <span>Total Shift Outflow:</span>
-                                        <span className="text-rose-600 font-extrabold text-base">UGX {totalExpenses.toLocaleString()}</span>
+                                    <div className="p-4 bg-slate-50 dark:bg-slate-800/60 border-t border-slate-100 dark:border-slate-800 flex justify-between items-center text-sm font-bold text-slate-700 dark:text-slate-200">
+                                        <span>Total Shift Outflow (Expenses + Refunds):</span>
+                                        <span className="text-rose-600 dark:text-rose-400 font-extrabold text-base">UGX {totalExpenses.toLocaleString()}</span>
                                     </div>
                                 )}
                             </Card>
@@ -523,18 +531,18 @@ export default function Index({ auth, activeDrawer, accounts = [] }) {
                                 
                                 {/* Log Expense Form Card */}
                                 <Card className="space-y-4">
-                                    <div className="flex items-center gap-2.5 border-b border-slate-100 pb-3.5">
-                                        <div className="w-8 h-8 rounded-lg bg-slate-100 border border-slate-200 flex items-center justify-center text-slate-700">
+                                    <div className="flex items-center gap-2.5 border-b border-slate-100 dark:border-slate-800 pb-3.5">
+                                        <div className="w-8 h-8 rounded-lg bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex items-center justify-center text-slate-700 dark:text-slate-200">
                                             <Plus size={18} />
                                         </div>
-                                        <h3 className="text-base font-bold text-slate-900">Log Cash Transaction</h3>
+                                        <h3 className="text-base font-bold text-slate-900 dark:text-white">Log Cash Transaction</h3>
                                     </div>
                                     
                                     <form onSubmit={handleLogExpense} className="space-y-4">
                                         <div className="space-y-1.5">
-                                            <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">Transaction Type / Category *</label>
+                                            <label className="text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider">Transaction Type / Category *</label>
                                             <select 
-                                                className="w-full bg-white border border-slate-300 focus:border-rose-500 focus:ring-rose-500 rounded-xl px-3.5 py-2.5 text-sm font-semibold shadow-sm"
+                                                className="w-full bg-white dark:bg-slate-800 text-slate-900 dark:text-white border border-slate-300 dark:border-slate-700 focus:border-rose-500 focus:ring-rose-500 rounded-xl px-3.5 py-2.5 text-sm font-semibold shadow-sm"
                                                 value={expenseForm.data.category}
                                                 onChange={e => {
                                                     const cat = e.target.value;
@@ -580,7 +588,7 @@ export default function Index({ auth, activeDrawer, accounts = [] }) {
                                                     <option value="external">External / Owner Cash (Direct Injection)</option>
                                                 </select>
                                                 {expenseForm.errors.source_account_id && (
-                                                    <p className="text-xs text-rose-600 font-bold mt-1">{expenseForm.errors.source_account_id}</p>
+                                                    <p className="text-xs text-rose-600 dark:text-rose-400 font-bold mt-1">{expenseForm.errors.source_account_id}</p>
                                                 )}
                                                 <p className="text-[11px] text-emerald-700 dark:text-emerald-400 font-medium">
                                                     {expenseForm.data.source_account_id === 'external'
@@ -591,14 +599,14 @@ export default function Index({ auth, activeDrawer, accounts = [] }) {
                                         )}
 
                                         <div className="space-y-1.5">
-                                            <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">Amount (UGX) *</label>
+                                            <label className="text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider">Amount (UGX) *</label>
                                             <div className="relative">
                                                 <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400">UGX</span>
                                                 <input 
                                                     type="number" 
                                                     min="0" 
                                                     required
-                                                    className="w-full pl-12 pr-3.5 py-2.5 text-sm font-bold text-slate-900 bg-white border border-slate-300 focus:border-rose-500 focus:ring-rose-500 rounded-xl shadow-sm"
+                                                    className="w-full pl-12 pr-3.5 py-2.5 text-sm font-bold text-slate-900 dark:text-white bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 focus:border-rose-500 focus:ring-rose-500 rounded-xl shadow-sm"
                                                     value={expenseForm.data.amount}
                                                     onChange={e => expenseForm.setData('amount', e.target.value)}
                                                     placeholder="0"
@@ -607,10 +615,10 @@ export default function Index({ auth, activeDrawer, accounts = [] }) {
                                         </div>
 
                                         <div className="space-y-1.5">
-                                            <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">Description <span className="text-slate-400 font-normal">(Optional)</span></label>
+                                            <label className="text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider">Description <span className="text-slate-400 font-normal">(Optional)</span></label>
                                             <input 
                                                 type="text"
-                                                className="w-full bg-white border border-slate-300 focus:border-rose-500 focus:ring-rose-500 rounded-xl px-3.5 py-2.5 text-sm font-medium shadow-sm"
+                                                className="w-full bg-white dark:bg-slate-800 text-slate-900 dark:text-white border border-slate-300 dark:border-slate-700 focus:border-rose-500 focus:ring-rose-500 rounded-xl px-3.5 py-2.5 text-sm font-medium shadow-sm"
                                                 value={expenseForm.data.description}
                                                 onChange={e => expenseForm.setData('description', e.target.value)}
                                                 placeholder="e.g. Lunch or cleaning supplies"
@@ -620,7 +628,7 @@ export default function Index({ auth, activeDrawer, accounts = [] }) {
                                         <button 
                                             type="submit" 
                                             disabled={expenseForm.processing}
-                                            className="w-full bg-slate-900 hover:bg-slate-800 text-white rounded-xl py-3 text-sm font-bold flex items-center justify-center gap-2 shadow-md transition-all disabled:opacity-50"
+                                            className="w-full bg-slate-900 dark:bg-indigo-600 hover:bg-slate-800 dark:hover:bg-indigo-500 text-white rounded-xl py-3 text-sm font-bold flex items-center justify-center gap-2 shadow-md transition-all disabled:opacity-50"
                                         >
                                             <Receipt size={16} />
                                             {expenseForm.processing ? 'Saving...' : (expenseForm.data.category === 'Cash In' ? 'Save Cash In' : 'Save Expense')}
@@ -630,23 +638,56 @@ export default function Index({ auth, activeDrawer, accounts = [] }) {
 
                                 {/* Close Shift Form Card */}
                                 <Card id="close-shift-section" className="border-rose-200/80 dark:border-rose-900/40 space-y-4 scroll-mt-6">
-                                    <div className="flex items-center justify-between border-b border-slate-100 pb-3.5">
+                                    <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3.5">
                                         <div className="flex items-center gap-2.5">
-                                            <div className="w-8 h-8 rounded-lg bg-rose-50 border border-rose-100 flex items-center justify-center text-rose-600">
+                                            <div className="w-8 h-8 rounded-lg bg-rose-50 dark:bg-rose-900/30 border border-rose-100 dark:border-rose-800 flex items-center justify-center text-rose-600 dark:text-rose-400">
                                                 <XCircle size={18} />
                                             </div>
                                             <h3 className="text-base font-bold text-slate-900 dark:text-white">End & Close Shift</h3>
                                         </div>
-                                        <span className="text-xs font-bold text-rose-600 bg-rose-50 border border-rose-200 px-2.5 py-0.5 rounded-full">Final Audit</span>
+                                        <span className="text-xs font-bold text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-900/30 border border-rose-200 dark:border-rose-800 px-2.5 py-0.5 rounded-full">Final Audit</span>
                                     </div>
 
-                                    <p className="text-xs text-slate-500 leading-relaxed">
-                                        Count physical cash in your drawer and enter it below to reconcile and close this shift.
-                                    </p>
+                                    {/* Cash Reconciliation Formula Breakdown */}
+                                    <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700 text-xs space-y-1">
+                                        <div className="flex justify-between text-slate-600 dark:text-slate-400">
+                                            <span>Opening Float + Cash In:</span>
+                                            <span className="font-bold text-slate-900 dark:text-white">UGX {(startingCash + cashIns).toLocaleString()}</span>
+                                        </div>
+                                        <div className="flex justify-between text-emerald-600 dark:text-emerald-400">
+                                            <span>+ Cash Sales & Layaways:</span>
+                                            <span className="font-bold">+UGX {cashSales.toLocaleString()}</span>
+                                        </div>
+                                        {refundExpenses > 0 && (
+                                            <div className="flex justify-between text-rose-600 dark:text-rose-400">
+                                                <span>− Cash Refunds:</span>
+                                                <span className="font-bold">-UGX {refundExpenses.toLocaleString()}</span>
+                                            </div>
+                                        )}
+                                        {operatingExpenses > 0 && (
+                                            <div className="flex justify-between text-rose-600 dark:text-rose-400">
+                                                <span>− Shift Expenses:</span>
+                                                <span className="font-bold">-UGX {operatingExpenses.toLocaleString()}</span>
+                                            </div>
+                                        )}
+                                        <div className="pt-1.5 mt-1 border-t border-slate-200 dark:border-slate-700 flex justify-between font-extrabold text-indigo-700 dark:text-indigo-300">
+                                            <span>Expected Cash in Till:</span>
+                                            <span>UGX {expectedCash.toLocaleString()}</span>
+                                        </div>
+                                    </div>
 
                                     <form onSubmit={handleCloseShift} className="space-y-4">
                                         <div className="space-y-1.5">
-                                            <label className="text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider">Actual Cash Counted (UGX) *</label>
+                                            <div className="flex items-center justify-between">
+                                                <label className="text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider">Actual Cash Counted (UGX) *</label>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => closeForm.setData('actual_cash', String(Math.max(0, expectedCash)))}
+                                                    className="text-[11px] font-bold text-indigo-600 dark:text-indigo-400 hover:underline"
+                                                >
+                                                    Match Expected
+                                                </button>
+                                            </div>
                                             <div className="relative">
                                                 <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400">UGX</span>
                                                 <input 
@@ -755,13 +796,13 @@ export default function Index({ auth, activeDrawer, accounts = [] }) {
             </div>
 
             <Modal show={showConfirmClose} onClose={() => setShowConfirmClose(false)} maxWidth="sm">
-                <div className="p-6 text-center space-y-4">
-                    <div className="w-16 h-16 bg-rose-50 text-rose-600 rounded-full flex items-center justify-center mx-auto shadow-sm">
+                <div className="p-6 text-center space-y-4 dark:bg-slate-900">
+                    <div className="w-16 h-16 bg-rose-50 dark:bg-rose-900/30 text-rose-600 dark:text-rose-400 rounded-full flex items-center justify-center mx-auto shadow-sm">
                         <AlertTriangle size={32} />
                     </div>
                     <div>
-                        <h3 className="text-lg font-bold text-slate-900 mb-2">Close Shift?</h3>
-                        <p className="text-sm text-slate-500 leading-relaxed">
+                        <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-2">Close Shift?</h3>
+                        <p className="text-sm text-slate-500 dark:text-slate-400 leading-relaxed">
                             Are you sure you want to close this shift? Make sure you have correctly counted your physical cash. This action cannot be undone.
                         </p>
                     </div>
@@ -781,11 +822,11 @@ export default function Index({ auth, activeDrawer, accounts = [] }) {
                         </div>
                     )}
 
-                    <div className="flex gap-3 pt-4 border-t border-slate-100">
+                    <div className="flex gap-3 pt-4 border-t border-slate-100 dark:border-slate-800">
                         <button 
                             type="button"
                             onClick={() => setShowConfirmClose(false)}
-                            className="flex-1 px-4 py-2.5 rounded-xl border border-slate-200 text-slate-700 font-bold text-sm hover:bg-slate-50 transition-colors"
+                            className="flex-1 px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 font-bold text-sm hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
                         >
                             Cancel
                         </button>
