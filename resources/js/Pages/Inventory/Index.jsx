@@ -60,6 +60,7 @@ export default function Inventory({ auth, products, allProducts = [], categories
     const [selectedCategory, setSelectedCategory] = useState(filters.category_id || 'all');
     const [selectedBrand, setSelectedBrand] = useState(filters.brand_id || 'all');
     const [selectedProduct, setSelectedProduct] = useState(filters.product_id || 'all');
+    const [selectedType, setSelectedType] = useState(filters.type || 'all');
     const [stockStatus, setStockStatus] = useState(filters.stock_status || 'all');
     const [isInitialRender, setIsInitialRender] = useState(true);
 
@@ -67,6 +68,8 @@ export default function Inventory({ auth, products, allProducts = [], categories
     const [showViewModal, setShowViewModal] = useState(false);
     const [viewProduct, setViewProduct] = useState(null);
     const [imeisList, setImeisList] = useState([]);
+    const [imeiSearch, setImeiSearch] = useState('');
+    const [imeiStatusFilter, setImeiStatusFilter] = useState('all');
 
     // Label Preview State
     const [showLabelPreview, setShowLabelPreview] = useState(false);
@@ -87,13 +90,14 @@ export default function Inventory({ auth, products, allProducts = [], categories
             if (selectedCategory && selectedCategory !== 'all') params.category_id = selectedCategory;
             if (selectedBrand && selectedBrand !== 'all') params.brand_id = selectedBrand;
             if (selectedProduct && selectedProduct !== 'all') params.product_id = selectedProduct;
+            if (selectedType && selectedType !== 'all') params.type = selectedType;
             if (stockStatus && stockStatus !== 'all') params.stock_status = stockStatus;
 
-            router.get('/inventory', params, { preserveState: true, replace: true });
+            router.get('/inventory', params, { preserveState: true, preserveScroll: true, replace: true });
         }, 300);
 
         return () => clearTimeout(timer);
-    }, [searchQuery, selectedCategory, selectedBrand, selectedProduct, stockStatus]);
+    }, [searchQuery, selectedCategory, selectedBrand, selectedProduct, selectedType, stockStatus]);
 
     const handleAddProductSubmit = async () => {
         if (!newProduct.category_id || !newProduct.brand_id || !newProduct.model_name) {
@@ -380,49 +384,61 @@ export default function Inventory({ auth, products, allProducts = [], categories
 
             {summary && (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-6">
-                    <Card className="animate-slide-up relative overflow-hidden flex flex-col justify-between" style={{ animationDelay: '0.0s' }}>
+                    <Card
+                        onClick={() => setStockStatus('all')}
+                        className="animate-slide-up relative overflow-hidden flex flex-col justify-between cursor-pointer hover:border-blue-500/40 transition-all"
+                        style={{ animationDelay: '0.0s' }}
+                    >
                         <div className="flex justify-between items-start mb-4">
                             <div>
-                                <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Total Product Lines</p>
-                                <h3 className="text-3xl font-black text-slate-900">{summary.total_products || 0}</h3>
+                                <p className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">Total Product Lines</p>
+                                <h3 className="text-3xl font-black text-slate-900 dark:text-white">{summary.total_products || 0}</h3>
                             </div>
-                            <div className="w-12 h-12 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center">
+                            <div className="w-12 h-12 rounded-2xl bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 flex items-center justify-center">
                                 <Layers size={24} />
                             </div>
                         </div>
-                        <div className="flex items-center gap-2 text-sm text-slate-500">
+                        <div className="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
                             <Badge variant="primary">Database</Badge>
                             <span>SKUs/Models</span>
                         </div>
                     </Card>
 
-                    <Card className="animate-slide-up relative overflow-hidden flex flex-col justify-between" style={{ animationDelay: '0.1s' }}>
+                    <Card
+                        onClick={() => setStockStatus('in_stock')}
+                        className="animate-slide-up relative overflow-hidden flex flex-col justify-between cursor-pointer hover:border-indigo-500/40 transition-all"
+                        style={{ animationDelay: '0.1s' }}
+                    >
                         <div className="flex justify-between items-start mb-4">
                             <div>
-                                <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Total Units</p>
-                                <h3 className="text-3xl font-black text-slate-900">{summary.total_stock_units || 0}</h3>
+                                <p className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">Total Units</p>
+                                <h3 className="text-3xl font-black text-slate-900 dark:text-white">{summary.total_stock_units || 0}</h3>
                             </div>
-                            <div className="w-12 h-12 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center">
+                            <div className="w-12 h-12 rounded-2xl bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 flex items-center justify-center">
                                 <Package size={24} />
                             </div>
                         </div>
-                        <div className="flex items-center gap-2 text-sm text-slate-500">
+                        <div className="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
                             <Badge variant="success">In Stock</Badge>
                             <span>Physical Items</span>
                         </div>
                     </Card>
 
-                    <Card className="animate-slide-up relative overflow-hidden flex flex-col justify-between" style={{ animationDelay: '0.2s' }}>
+                    <Card
+                        onClick={() => setStockStatus('low_stock')}
+                        className="animate-slide-up relative overflow-hidden flex flex-col justify-between cursor-pointer hover:border-rose-500/40 transition-all"
+                        style={{ animationDelay: '0.2s' }}
+                    >
                         <div className="flex justify-between items-start mb-4">
                             <div>
-                                <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Low Stock Alerts</p>
-                                <h3 className="text-3xl font-black text-slate-900">{summary.low_stock_count || 0}</h3>
+                                <p className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">Low Stock Alerts</p>
+                                <h3 className="text-3xl font-black text-slate-900 dark:text-white">{summary.low_stock_count || 0}</h3>
                             </div>
-                            <div className="w-12 h-12 rounded-2xl bg-rose-50 text-rose-600 flex items-center justify-center">
+                            <div className="w-12 h-12 rounded-2xl bg-rose-50 dark:bg-rose-950/60 text-rose-600 dark:text-rose-400 flex items-center justify-center">
                                 <AlertTriangle size={24} />
                             </div>
                         </div>
-                        <div className="flex items-center gap-2 text-sm text-slate-500">
+                        <div className="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
                             <Badge variant="danger">Critical</Badge>
                             <span>Below 5 Units</span>
                         </div>
@@ -431,18 +447,18 @@ export default function Inventory({ auth, products, allProducts = [], categories
                     <Card className="animate-slide-up relative overflow-hidden flex flex-col justify-between" style={{ animationDelay: '0.3s' }}>
                         <div className="flex justify-between items-start mb-4">
                             <div>
-                                <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Inventory Value</p>
-                                <h3 className="text-3xl font-black text-slate-900">
+                                <p className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">Inventory Value</p>
+                                <h3 className="text-3xl font-black text-slate-900 dark:text-white">
                                     {new Intl.NumberFormat('en-US').format(summary.inventory_value || 0)}
                                 </h3>
                             </div>
-                            <div className="w-12 h-12 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center">
+                            <div className="w-12 h-12 rounded-2xl bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 flex items-center justify-center">
                                 <DollarSign size={24} />
                             </div>
                         </div>
-                        <div className="flex items-center gap-2 text-sm text-slate-500">
+                        <div className="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
                             <Badge variant="success">Capital</Badge>
-                            <span>Cost Price</span>
+                            <span>Cost Price (UGX)</span>
                         </div>
                     </Card>
                 </div>
@@ -555,7 +571,19 @@ export default function Inventory({ auth, products, allProducts = [], categories
                             </button>
                         )}
                     </div>
-                    <div className="md:w-56">
+                    <div className="md:w-44">
+                        <select 
+                            className="saas-input pl-4"
+                            value={selectedType} 
+                            onChange={(e) => setSelectedType(e.target.value)}
+                        >
+                            <option value="all">All Types</option>
+                            <option value="serialized">Serialized (Phones)</option>
+                            <option value="bulk">Bulk (Accessories)</option>
+                        </select>
+                    </div>
+
+                    <div className="md:w-48">
                         <select 
                             className="saas-input pl-4"
                             value={selectedCategory} 
@@ -572,37 +600,37 @@ export default function Inventory({ auth, products, allProducts = [], categories
                         </select>
                     </div>
 
-                    {selectedCategory !== 'all' && (
-                        <div className="md:w-56 flex items-center gap-2">
-                            <select 
-                                className="saas-input pl-4 w-full"
-                                value={selectedBrand} 
-                                onChange={(e) => {
-                                    setSelectedBrand(e.target.value);
-                                    setSelectedProduct('all');
-                                }}
-                            >
-                                <option value="all">All Brands</option>
-                                {allProducts
+                    <div className="md:w-48 flex items-center gap-2">
+                        <select 
+                            className="saas-input pl-4 w-full"
+                            value={selectedBrand} 
+                            onChange={(e) => {
+                                setSelectedBrand(e.target.value);
+                                setSelectedProduct('all');
+                            }}
+                        >
+                            <option value="all">All Brands</option>
+                            {(selectedCategory === 'all'
+                                ? brands
+                                : allProducts
                                     ?.filter(p => p.category_id == selectedCategory)
                                     .map(p => p.brand)
                                     .filter(Boolean)
                                     .filter((v, i, a) => a.findIndex(t => (t.id === v.id)) === i)
                                     .sort((a, b) => (a.name || '').localeCompare(b.name || ''))
-                                    .map(b => (
-                                        <option key={b.id} value={b.id}>{b.name}</option>
-                                    ))}
-                            </select>
-                            {selectedBrand !== 'all' && (
-                                <button title="Delete Selected Brand" className="p-2 shrink-0 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors" onClick={() => handleDeleteBrand(selectedBrand)}>
-                                    <Trash2 size={16} />
-                                </button>
-                            )}
-                        </div>
-                    )}
+                            )?.map(b => (
+                                <option key={b.id} value={b.id}>{b.name}</option>
+                            ))}
+                        </select>
+                        {selectedBrand !== 'all' && (
+                            <button title="Delete Selected Brand" className="p-2 shrink-0 text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/50 rounded-lg transition-colors" onClick={() => handleDeleteBrand(selectedBrand)}>
+                                <Trash2 size={16} />
+                            </button>
+                        )}
+                    </div>
 
-                    {selectedCategory !== 'all' && selectedBrand !== 'all' && (
-                        <div className="md:w-56">
+                    {selectedBrand !== 'all' && (
+                        <div className="md:w-48">
                             <select 
                                 className="saas-input pl-4"
                                 value={selectedProduct} 
@@ -610,7 +638,7 @@ export default function Inventory({ auth, products, allProducts = [], categories
                             >
                                 <option value="all">All Models</option>
                                 {allProducts
-                                    ?.filter(p => p.category_id == selectedCategory && p.brand_id == selectedBrand)
+                                    ?.filter(p => (selectedCategory === 'all' || p.category_id == selectedCategory) && p.brand_id == selectedBrand)
                                     .sort((a, b) => a.model_name.localeCompare(b.model_name))
                                     .map(p => (
                                         <option key={p.id} value={p.id}>{p.model_name}</option>
@@ -619,13 +647,14 @@ export default function Inventory({ auth, products, allProducts = [], categories
                         </div>
                     )}
 
-                    {(searchQuery || selectedCategory !== 'all' || selectedBrand !== 'all' || selectedProduct !== 'all' || stockStatus !== 'all') && (
+                    {(searchQuery || selectedCategory !== 'all' || selectedBrand !== 'all' || selectedProduct !== 'all' || selectedType !== 'all' || stockStatus !== 'all') && (
                         <div>
                             <Button variant="outline" onClick={() => { 
                                 setSearchQuery(''); 
                                 setSelectedCategory('all'); 
                                 setSelectedBrand('all');
                                 setSelectedProduct('all');
+                                setSelectedType('all');
                                 setStockStatus('all');
                             }}>
                                 Clear Filters
@@ -638,7 +667,7 @@ export default function Inventory({ auth, products, allProducts = [], categories
             {/* Inventory Table */}
             <div className="animate-slide-up" style={{ animationDelay: '0.2s' }}>
                 <DataTable 
-                    headers={['Brand & Model', 'Category', 'In Stock', { label: 'Actions', className: '!text-center' }]}
+                    headers={['Brand & Model', 'Category', 'In Stock', 'Pricing & Value', { label: 'Actions', className: '!text-center' }]}
                     isEmpty={!products.data || products.data.length === 0}
                     emptyState={
                         <div className="p-12 text-center flex flex-col items-center justify-center">
@@ -654,18 +683,19 @@ export default function Inventory({ auth, products, allProducts = [], categories
                                             ? 'No out-of-stock products found'
                                             : 'No products found'}
                             </h3>
-                            <p className="text-slate-500 max-w-sm">
-                                {stockStatus !== 'all' || searchQuery || selectedCategory !== 'all'
+                            <p className="text-slate-500 dark:text-slate-400 max-w-sm">
+                                {stockStatus !== 'all' || searchQuery || selectedCategory !== 'all' || selectedBrand !== 'all' || selectedType !== 'all'
                                     ? 'Try resetting or adjusting your active filters to view other inventory items.'
                                     : 'There are no products matching your search criteria, or your inventory is currently empty.'}
                             </p>
-                            {(searchQuery || selectedCategory !== 'all' || selectedBrand !== 'all' || selectedProduct !== 'all' || stockStatus !== 'all') && (
+                            {(searchQuery || selectedCategory !== 'all' || selectedBrand !== 'all' || selectedProduct !== 'all' || selectedType !== 'all' || stockStatus !== 'all') && (
                                 <div className="mt-4">
                                     <Button variant="outline" onClick={() => {
                                         setSearchQuery('');
                                         setSelectedCategory('all');
                                         setSelectedBrand('all');
                                         setSelectedProduct('all');
+                                        setSelectedType('all');
                                         setStockStatus('all');
                                     }}>
                                         Reset All Filters
@@ -675,7 +705,15 @@ export default function Inventory({ auth, products, allProducts = [], categories
                         </div>
                     }
                 >
-                    {products?.data && products.data.map((product) => (
+                    {products?.data && products.data.map((product) => {
+                        const qty = product.type === 'bulk' ? Number(product.quantity || 0) : Number(product.stock_count || 0);
+                        const stockBadgeVariant = qty <= 0 ? 'danger' : (qty < 5 ? 'warning' : 'success');
+                        const bulkCostVal = Math.max(0, qty) * Number(product.cost_price || 0);
+                        const serializedCostVal = Number(product.stock_cost_value || 0);
+                        const minP = Number(product.min_selling_price || 0);
+                        const maxP = Number(product.max_selling_price || 0);
+
+                        return (
                         <tr key={product.id}>
                             <td>
                                 <div className="flex items-center gap-3">
@@ -683,10 +721,10 @@ export default function Inventory({ auth, products, allProducts = [], categories
                                         {product.brand?.name ? product.brand.name.charAt(0) : 'P'}
                                     </div>
                                     <div>
-                                        <div className="font-bold text-slate-900 flex items-center gap-2 flex-wrap">
+                                        <div className="font-bold text-slate-900 dark:text-white flex items-center gap-2 flex-wrap">
                                             <span>{product.brand?.name} {product.model_name}</span>
                                             {product.storage_capacity && (
-                                                <span className="px-2 py-0.5 rounded-md text-[11px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200">
+                                                <span className="px-2 py-0.5 rounded-md text-[11px] font-bold bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800">
                                                     {product.storage_capacity}
                                                 </span>
                                             )}
@@ -701,55 +739,95 @@ export default function Inventory({ auth, products, allProducts = [], categories
                             <td>
                                 <div className="flex flex-col gap-1.5 items-start">
                                     {product.type === 'bulk' ? (
-                                        <Badge variant="success">Qty: {product.quantity || 0}</Badge>
+                                        <Badge variant={stockBadgeVariant}>Qty: {qty}</Badge>
                                     ) : (
                                         <>
-                                            <Badge variant="success">In Stock: {product.stock_count || 0}</Badge>
+                                            <Badge variant={stockBadgeVariant}>In Stock: {qty}</Badge>
                                             {(product.sold_count > 0 || product.defective_count > 0) && (
                                                 <div className="flex gap-2 text-[11px] font-medium">
-                                                    {product.sold_count > 0 && <span className="text-slate-500">Sold: {product.sold_count}</span>}
-                                                    {product.sold_count > 0 && product.defective_count > 0 && <span className="text-slate-300">|</span>}
-                                                    {product.defective_count > 0 && <span className="text-rose-500">Defective: {product.defective_count}</span>}
+                                                    {product.sold_count > 0 && <span className="text-slate-500 dark:text-slate-400">Sold: {product.sold_count}</span>}
+                                                    {product.sold_count > 0 && product.defective_count > 0 && <span className="text-slate-300 dark:text-slate-600">|</span>}
+                                                    {product.defective_count > 0 && <span className="text-rose-500 dark:text-rose-400">Defective: {product.defective_count}</span>}
                                                 </div>
                                             )}
                                         </>
                                     )}
                                 </div>
                             </td>
+                            <td>
+                                {product.type === 'bulk' ? (
+                                    <div className="text-xs space-y-0.5">
+                                        <div className="font-bold text-slate-900 dark:text-white">
+                                            UGX {Number(product.selling_price || 0).toLocaleString()}
+                                        </div>
+                                        <div className="text-slate-500 dark:text-slate-400">
+                                            Cost Val: {bulkCostVal.toLocaleString()} UGX
+                                        </div>
+                                    </div>
+                                ) : (
+                                    <div className="text-xs space-y-0.5">
+                                        {qty > 0 && minP > 0 ? (
+                                            <div className="font-bold text-slate-900 dark:text-white">
+                                                {minP === maxP
+                                                    ? `UGX ${minP.toLocaleString()}`
+                                                    : `UGX ${minP.toLocaleString()} – ${maxP.toLocaleString()}`}
+                                            </div>
+                                        ) : (
+                                            <div className="text-slate-400 italic">No active units</div>
+                                        )}
+                                        {serializedCostVal > 0 && (
+                                            <div className="text-slate-500 dark:text-slate-400">
+                                                Cost Val: {serializedCostVal.toLocaleString()} UGX
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
+                            </td>
                             <td className="text-center">
                                 <div className="flex justify-center gap-2 items-center">
-                                    <Button variant="outline" className="!py-1.5 !px-3 !text-xs text-rose-600 hover:!bg-rose-50 hover:!border-rose-200" onClick={() => { setProductId(product.id); setShowAddModal(true); }} icon={Plus}>
+                                    <Button variant="outline" className="!py-1.5 !px-3 !text-xs text-rose-600 dark:text-rose-400 hover:!bg-rose-50 dark:hover:!bg-rose-950/50 hover:!border-rose-200 dark:hover:!border-rose-800" onClick={() => { setProductId(product.id); setShowAddModal(true); }} icon={Plus}>
                                         Add Stock
                                     </Button>
-                                    <button title="Edit Product Model" className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors" onClick={() => handleEditProduct(product)}>
+                                    <button title="Edit Product Model" className="p-2 text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950/50 rounded-lg transition-colors" onClick={() => handleEditProduct(product)}>
                                         <Pencil size={16} />
                                     </button>
-                                    <button title="Delete Product Model" className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors" onClick={() => handleDeleteProductModel(product.id)}>
+                                    <button title="Delete Product Model" className="p-2 text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/50 rounded-lg transition-colors" onClick={() => handleDeleteProductModel(product.id)}>
                                         <Trash2 size={16} />
                                     </button>
-                                    <Button variant="secondary" className="!py-1.5 !px-3 !text-xs" onClick={() => handleViewStock(product)}>
+                                    <Button variant="secondary" className="!py-1.5 !px-3 !text-xs" onClick={() => { setImeiSearch(''); setImeiStatusFilter('all'); handleViewStock(product); }}>
                                         View Stock
                                     </Button>
                                 </div>
                             </td>
                         </tr>
-                    ))}
+                        );
+                    })}
                 </DataTable>
             </div>
 
             {/* Pagination Component */}
             {products.links && products.links.length > 3 && (
                 <div className="flex justify-center mt-6 animate-slide-up" style={{ animationDelay: '0.3s' }}>
-                    <nav className="inline-flex bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden">
+                    <nav className="inline-flex flex-wrap bg-white dark:bg-slate-900 rounded-xl shadow-sm border border-slate-200 dark:border-slate-800 overflow-hidden">
                         {products.links.map((link, k) => (
-                            <Link 
-                                key={k}
-                                href={link.url || '#'}
-                                className={`px-4 py-2 text-sm font-medium border-r border-slate-100 last:border-0 ${
-                                    link.active ? 'bg-indigo-50 text-indigo-600' : 'text-slate-600 hover:bg-slate-50'
-                                } ${link.url === null ? 'opacity-50 cursor-not-allowed pointer-events-none' : ''}`}
-                                dangerouslySetInnerHTML={{ __html: link.label }}
-                            />
+                            link.url ? (
+                                <Link 
+                                    key={k}
+                                    href={link.url}
+                                    preserveScroll
+                                    preserveState
+                                    className={`px-4 py-2 text-sm font-medium border-r border-slate-100 dark:border-slate-800 last:border-0 transition-colors ${
+                                        link.active ? 'bg-indigo-600 text-white font-bold' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800'
+                                    }`}
+                                    dangerouslySetInnerHTML={{ __html: link.label }}
+                                />
+                            ) : (
+                                <span
+                                    key={k}
+                                    className="px-4 py-2 text-sm font-medium border-r border-slate-100 dark:border-slate-800 last:border-0 text-slate-400 opacity-50 cursor-not-allowed"
+                                    dangerouslySetInnerHTML={{ __html: link.label }}
+                                />
+                            )
                         ))}
                     </nav>
                 </div>
@@ -965,35 +1043,35 @@ export default function Inventory({ auth, products, allProducts = [], categories
                                         </select>
                                     </div>
 
-                                    <div className="p-3.5 rounded-xl bg-amber-50/70 border border-amber-200/80 space-y-3">
+                                    <div className="p-3.5 rounded-xl bg-amber-50/70 dark:bg-amber-950/30 border border-amber-200/80 dark:border-amber-800/60 space-y-3">
                                         <div className="flex items-center justify-between">
-                                            <span className="text-xs font-bold text-amber-900 flex items-center gap-1.5">
-                                                <Wrench size={14} className="text-amber-600" />
-                                                Initial Repair / Refurbishment <span className="font-normal text-amber-700">(Optional)</span>
+                                            <span className="text-xs font-bold text-amber-900 dark:text-amber-300 flex items-center gap-1.5">
+                                                <Wrench size={14} className="text-amber-600 dark:text-amber-400" />
+                                                Initial Repair / Refurbishment <span className="font-normal text-amber-700 dark:text-amber-400/80">(Optional)</span>
                                             </span>
                                             {Number(refurbCost || 0) > 0 && (
-                                                <span className="text-[11px] font-bold text-amber-800 bg-amber-100 px-2 py-0.5 rounded-full">
+                                                <span className="text-[11px] font-bold text-amber-800 dark:text-amber-200 bg-amber-100 dark:bg-amber-900/60 px-2 py-0.5 rounded-full">
                                                     Total Cost: {(Number(costPrice || 0) + Number(refurbCost || 0)).toLocaleString()} UGX
                                                 </span>
                                             )}
                                         </div>
                                         <div className="grid grid-cols-2 gap-3">
                                             <div>
-                                                <label className="block text-[11px] font-semibold text-amber-900 mb-1">Repair Cost (UGX)</label>
+                                                <label className="block text-[11px] font-semibold text-amber-900 dark:text-amber-300 mb-1">Repair Cost (UGX)</label>
                                                 <input
                                                     type="number"
                                                     min="0"
-                                                    className="saas-input bg-white"
+                                                    className="saas-input"
                                                     placeholder="0"
                                                     value={refurbCost}
                                                     onChange={e => setRefurbCost(e.target.value)}
                                                 />
                                             </div>
                                             <div>
-                                                <label className="block text-[11px] font-semibold text-amber-900 mb-1">Repair Notes</label>
+                                                <label className="block text-[11px] font-semibold text-amber-900 dark:text-amber-300 mb-1">Repair Notes</label>
                                                 <input
                                                     type="text"
-                                                    className="saas-input bg-white"
+                                                    className="saas-input"
                                                     placeholder="e.g. New screen / battery"
                                                     value={refurbNotes}
                                                     onChange={e => setRefurbNotes(e.target.value)}
@@ -1002,9 +1080,9 @@ export default function Inventory({ auth, products, allProducts = [], categories
                                         </div>
                                         {Number(refurbCost || 0) > 0 && (
                                             <div>
-                                                <label className="block text-[11px] font-semibold text-amber-900 mb-1">Pay Repair From Wallet</label>
+                                                <label className="block text-[11px] font-semibold text-amber-900 dark:text-amber-300 mb-1">Pay Repair From Wallet</label>
                                                 <select
-                                                    className="saas-input pl-4 bg-white"
+                                                    className="saas-input pl-4"
                                                     value={refurbAccountId}
                                                     onChange={e => setRefurbAccountId(e.target.value)}
                                                 >
@@ -1032,46 +1110,73 @@ export default function Inventory({ auth, products, allProducts = [], categories
 
             {/* View Stock Modal */}
             {showViewModal && (
-                <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+                <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
                     <Card className="w-full max-w-6xl animate-slide-up flex flex-col max-h-[90vh]" noPadding>
-                        <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-white rounded-t-2xl shrink-0">
-                            <h3 className="text-lg font-bold text-slate-900">
+                        <div className="p-6 border-b border-slate-100 dark:border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white dark:bg-slate-900 rounded-t-2xl shrink-0">
+                            <h3 className="text-lg font-bold text-slate-900 dark:text-white">
                                 Stock for {viewProduct?.brand?.name} {viewProduct?.model_name}
                             </h3>
-                            <button className="text-slate-400 hover:text-slate-600 transition-colors" onClick={() => setShowViewModal(false)}>
-                                <span className="text-2xl leading-none">&times;</span>
-                            </button>
+                            <div className="flex items-center gap-3">
+                                {viewProduct?.type !== 'bulk' && (
+                                    <div className="flex items-center gap-2 flex-wrap">
+                                        <div className="relative">
+                                            <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                                            <input
+                                                type="text"
+                                                placeholder="Search IMEI, color..."
+                                                value={imeiSearch}
+                                                onChange={(e) => setImeiSearch(e.target.value)}
+                                                className="pl-8 pr-3 py-1.5 text-xs rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white"
+                                            />
+                                        </div>
+                                        <select
+                                            value={imeiStatusFilter}
+                                            onChange={(e) => setImeiStatusFilter(e.target.value)}
+                                            className="py-1.5 px-2.5 text-xs font-bold rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white"
+                                        >
+                                            <option value="all">All Statuses ({imeisList.length})</option>
+                                            <option value="In Stock">In Stock ({imeisList.filter(i => i.status === 'In Stock').length})</option>
+                                            <option value="Sold">Sold ({imeisList.filter(i => i.status === 'Sold').length})</option>
+                                            <option value="Defective">Defective ({imeisList.filter(i => i.status === 'Defective').length})</option>
+                                            <option value="Reserved">Reserved ({imeisList.filter(i => i.status === 'Reserved').length})</option>
+                                        </select>
+                                    </div>
+                                )}
+                                <button className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors" onClick={() => setShowViewModal(false)}>
+                                    <span className="text-2xl leading-none">&times;</span>
+                                </button>
+                            </div>
                         </div>
                         
                         {viewProduct?.type === 'bulk' ? (
                             <div className="p-6">
                                 <div className={`grid gap-4 mb-4 ${viewProduct.storage_capacity ? 'grid-cols-2 sm:grid-cols-4' : 'grid-cols-3'}`}>
                                     {viewProduct.storage_capacity && (
-                                        <div className="p-4 bg-indigo-50/70 rounded-xl border border-indigo-100">
-                                            <p className="text-xs text-indigo-600 font-bold uppercase tracking-wider mb-1">Storage Capacity</p>
-                                            <p className="font-extrabold text-slate-900 text-base">{viewProduct.storage_capacity}</p>
+                                        <div className="p-4 bg-indigo-50/70 dark:bg-indigo-950/40 rounded-xl border border-indigo-100 dark:border-indigo-900/60">
+                                            <p className="text-xs text-indigo-600 dark:text-indigo-400 font-bold uppercase tracking-wider mb-1">Storage Capacity</p>
+                                            <p className="font-extrabold text-slate-900 dark:text-white text-base">{viewProduct.storage_capacity}</p>
                                         </div>
                                     )}
-                                    <div className="p-4 bg-slate-50 rounded-xl">
-                                        <p className="text-sm text-slate-500 mb-1">SKU / Barcode</p>
-                                        <p className="font-bold text-slate-900">{viewProduct.sku || 'N/A'}</p>
+                                    <div className="p-4 bg-slate-50 dark:bg-slate-800/70 rounded-xl">
+                                        <p className="text-sm text-slate-500 dark:text-slate-400 mb-1">SKU / Barcode</p>
+                                        <p className="font-bold text-slate-900 dark:text-white">{viewProduct.sku || 'N/A'}</p>
                                     </div>
-                                    <div className="p-4 bg-slate-50 rounded-xl">
-                                        <p className="text-sm text-slate-500 mb-1">Current Quantity</p>
-                                        <p className="font-bold text-slate-900">{viewProduct.quantity || 0}</p>
+                                    <div className="p-4 bg-slate-50 dark:bg-slate-800/70 rounded-xl">
+                                        <p className="text-sm text-slate-500 dark:text-slate-400 mb-1">Current Quantity</p>
+                                        <p className="font-bold text-slate-900 dark:text-white">{viewProduct.quantity || 0}</p>
                                     </div>
-                                    <div className="p-4 bg-slate-50 rounded-xl">
-                                        <p className="text-sm text-slate-500 mb-1">Cost Price</p>
-                                        <p className="font-bold text-slate-900">{Number(viewProduct.cost_price || 0).toLocaleString()} UGX</p>
+                                    <div className="p-4 bg-slate-50 dark:bg-slate-800/70 rounded-xl">
+                                        <p className="text-sm text-slate-500 dark:text-slate-400 mb-1">Cost Price</p>
+                                        <p className="font-bold text-slate-900 dark:text-white">{Number(viewProduct.cost_price || 0).toLocaleString()} UGX</p>
                                     </div>
-                                    <div className="p-4 bg-slate-50 rounded-xl">
-                                        <p className="text-sm text-slate-500 mb-1">Selling Price</p>
-                                        <p className="font-bold text-slate-900">{Number(viewProduct.selling_price || 0).toLocaleString()} UGX</p>
+                                    <div className="p-4 bg-slate-50 dark:bg-slate-800/70 rounded-xl">
+                                        <p className="text-sm text-slate-500 dark:text-slate-400 mb-1">Selling Price</p>
+                                        <p className="font-bold text-slate-900 dark:text-white">{Number(viewProduct.selling_price || 0).toLocaleString()} UGX</p>
                                     </div>
                                 </div>
                                 <div className="mt-6 flex justify-end">
                                     <button 
-                                        className="btn btn-secondary px-4 py-2 rounded-xl text-sm font-bold flex items-center gap-2 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 transition-colors"
+                                        className="btn btn-secondary px-4 py-2 rounded-xl text-sm font-bold flex items-center gap-2 bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 transition-colors"
                                         onClick={() => {
                                             const qty = prompt("How many labels would you like to print?", "1");
                                             if (qty && !isNaN(qty) && parseInt(qty) > 0) {
@@ -1098,14 +1203,26 @@ export default function Inventory({ auth, products, allProducts = [], categories
                             </div>
                         ) : (
                             <div className="overflow-y-auto p-0 flex-auto min-h-0">
+                                {(() => {
+                                    const filteredImeis = imeisList.filter(item => {
+                                        if (imeiStatusFilter !== 'all' && item.status !== imeiStatusFilter) return false;
+                                        if (imeiSearch.trim()) {
+                                            const q = imeiSearch.toLowerCase();
+                                            return (item.imei || '').toLowerCase().includes(q)
+                                                || (item.color || '').toLowerCase().includes(q)
+                                                || (item.storage_capacity || '').toLowerCase().includes(q);
+                                        }
+                                        return true;
+                                    });
+                                    return (
                                 <DataTable 
                                     headers={['IMEI', 'Storage', 'Color', 'Condition', 'Status', 'Funded By', 'Cost Basis', 'Selling Price', { label: 'Actions', className: '!text-center' }]}
-                                    isEmpty={imeisList.length === 0}
-                                    emptyState={<div className="p-8 text-center text-slate-500">No stock available for this model.</div>}
+                                    isEmpty={filteredImeis.length === 0}
+                                    emptyState={<div className="p-8 text-center text-slate-500 dark:text-slate-400">No matching stock items found.</div>}
                                 >
-                                    {imeisList?.map(item => (
+                                    {filteredImeis.map(item => (
                                         <tr key={item.id}>
-                                            <td className="font-medium text-slate-700">{item.imei}</td>
+                                            <td className="font-medium text-slate-700 dark:text-slate-200 font-mono text-xs">{item.imei}</td>
                                             <td>{item.storage_capacity}</td>
                                             <td>{item.color}</td>
                                             <td>{item.condition}</td>
@@ -1116,7 +1233,7 @@ export default function Inventory({ auth, products, allProducts = [], categories
                                             </td>
                                             <td>
                                                 {item.partner_investor ? (
-                                                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-purple-50 text-purple-700 border border-purple-200">
+                                                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-purple-50 dark:bg-purple-950/60 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800">
                                                         {item.partner_investor.name}
                                                     </span>
                                                 ) : (
@@ -1124,26 +1241,26 @@ export default function Inventory({ auth, products, allProducts = [], categories
                                                 )}
                                             </td>
                                             <td>
-                                                <div className="font-semibold text-slate-800">{Number(item.cost_price).toLocaleString()} UGX</div>
+                                                <div className="font-semibold text-slate-800 dark:text-slate-200">{Number(item.cost_price).toLocaleString()} UGX</div>
                                                 {Number(item.refurbishment_cost || 0) > 0 && (
-                                                    <div className="text-[11px] text-amber-700 font-medium mt-0.5" title={item.refurbishment_notes || ''}>
+                                                    <div className="text-[11px] text-amber-700 dark:text-amber-400 font-medium mt-0.5" title={item.refurbishment_notes || ''}>
                                                         Buy {Number(item.initial_cost_price ?? item.cost_price).toLocaleString()} + 🛠️ {Number(item.refurbishment_cost).toLocaleString()}
                                                     </div>
                                                 )}
                                             </td>
-                                            <td className="font-semibold">{Number(item.selling_price).toLocaleString()} UGX</td>
+                                            <td className="font-semibold text-slate-900 dark:text-white">{Number(item.selling_price).toLocaleString()} UGX</td>
                                             <td className="text-center">
                                                 <div className="flex justify-center gap-1">
                                                     {item.status !== 'Sold' && (
                                                         <button
-                                                            className="p-2 text-slate-400 hover:text-amber-600 hover:bg-amber-50 rounded-lg transition-colors"
+                                                            className="p-2 text-slate-400 hover:text-amber-600 dark:hover:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-950/50 rounded-lg transition-colors"
                                                             title="Add Repair / Refurbishment Cost"
                                                             onClick={() => openRefurbModal(item)}
                                                         >
                                                             <Wrench size={16} />
                                                         </button>
                                                     )}
-                                                    <button className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors" title="Print Label" onClick={() => {
+                                                    <button className="p-2 text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950/50 rounded-lg transition-colors" title="Print Label" onClick={() => {
                                                         const brandName = viewProduct.brand ? viewProduct.brand.name + ' ' : '';
                                                         setPreviewLabelData({
                                                             type: 'imei',
@@ -1161,10 +1278,10 @@ export default function Inventory({ auth, products, allProducts = [], categories
                                                     }}>
                                                         <Printer size={16} />
                                                     </button>
-                                                    <button className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors" title="Edit" onClick={() => handleEditStockItem(item)}>
+                                                    <button className="p-2 text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950/50 rounded-lg transition-colors" title="Edit" onClick={() => handleEditStockItem(item)}>
                                                         <Pencil size={16} />
                                                     </button>
-                                                    <button className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors" title="Delete" onClick={() => handleDeleteStockItem(item.id)}>
+                                                    <button className="p-2 text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/50 rounded-lg transition-colors" title="Delete" onClick={() => handleDeleteStockItem(item.id)}>
                                                         <Trash2 size={16} />
                                                     </button>
                                                 </div>
@@ -1172,6 +1289,8 @@ export default function Inventory({ auth, products, allProducts = [], categories
                                         </tr>
                                     ))}
                                 </DataTable>
+                                    );
+                                })()}
                             </div>
                         )}
                     </Card>

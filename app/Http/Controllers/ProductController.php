@@ -9,11 +9,18 @@ use App\Models\DeviceImei;
 use App\Models\PaymentAccount;
 use App\Services\TreasuryService;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
 
 class ProductController extends Controller
 {
+    private function clearInventoryCaches(): void
+    {
+        Cache::forget('global_low_stock_count');
+        Cache::forget('global_defective_count');
+    }
+
     public function index(Request $request)
     {
         $query = Product::with(['category', 'brand'])
@@ -26,7 +33,16 @@ class ProductController extends Controller
             }])
             ->withCount(['deviceImeis as sold_count' => function ($q) {
                 $q->where('status', 'Sold');
-            }]);
+            }])
+            ->withMin(['deviceImeis as min_selling_price' => function ($q) {
+                $q->where('status', 'In Stock');
+            }], 'selling_price')
+            ->withMax(['deviceImeis as max_selling_price' => function ($q) {
+                $q->where('status', 'In Stock');
+            }], 'selling_price')
+            ->withSum(['deviceImeis as stock_cost_value' => function ($q) {
+                $q->where('status', 'In Stock');
+            }], 'cost_price');
 
         if ($request->filled('search')) {
             $search = trim($request->input('search'));
@@ -60,6 +76,16 @@ class ProductController extends Controller
 
         if ($request->filled('product_id') && $request->input('product_id') !== 'all') {
             $query->where('products.id', $request->input('product_id'));
+        }
+
+        if ($request->filled('type') && $request->input('type') !== 'all') {
+            if ($request->input('type') === 'bulk') {
+                $query->where('products.type', 'bulk');
+            } else {
+                $query->where(function ($t) {
+                    $t->whereNull('products.type')->orWhere('products.type', '!=', 'bulk');
+                });
+            }
         }
 
         if ($request->filled('stock_status') && $request->input('stock_status') !== 'all') {
@@ -124,7 +150,7 @@ class ProductController extends Controller
         $allProducts = Product::with('brand:id,name')->select('id', 'brand_id', 'category_id', 'model_name', 'type')->orderBy('model_name')->get();
         
         $totalProducts = Product::count();
-        $bulkStock = Product::where('type', 'bulk')->sum('quantity');
+        $bulkStock = Product::where('type', 'bulk')->where('quantity', '>', 0)->sum('quantity');
         $serializedStock = \App\Models\DeviceImei::where('status', 'In Stock')->count();
         $totalStockUnits = $bulkStock + $serializedStock;
         
@@ -153,7 +179,7 @@ class ProductController extends Controller
 
         $outOfStockCount = max(0, $totalProducts - $inStockCount);
         
-        $bulkValue = Product::where('type', 'bulk')->sum(\Illuminate\Support\Facades\DB::raw('quantity * cost_price'));
+        $bulkValue = Product::where('type', 'bulk')->where('quantity', '>', 0)->sum(\Illuminate\Support\Facades\DB::raw('quantity * cost_price'));
         $serializedValue = \App\Models\DeviceImei::where('status', 'In Stock')->sum('cost_price');
         $totalInventoryValue = $bulkValue + $serializedValue;
 
@@ -162,7 +188,7 @@ class ProductController extends Controller
             'allProducts' => $allProducts,
             'categories' => $categories,
             'brands' => $brands,
-            'filters' => $request->only(['search', 'category_id', 'brand_id', 'product_id', 'stock_status']),
+            'filters' => $request->only(['search', 'category_id', 'brand_id', 'product_id', 'stock_status', 'type']),
             'summary' => [
                 'total_products' => $totalProducts,
                 'total_stock_units' => $totalStockUnits,
@@ -207,6 +233,7 @@ class ProductController extends Controller
         }
 
         $product = Product::create($validated);
+        $this->clearInventoryCaches();
         
         return response()->json(['success' => true, 'product' => $product]);
     }
@@ -230,6 +257,7 @@ class ProductController extends Controller
         }
 
         $product->update($validated);
+        $this->clearInventoryCaches();
         
         return response()->json(['success' => true, 'product' => $product]);
     }
@@ -238,6 +266,7 @@ class ProductController extends Controller
     {
         try {
             $product->delete();
+            $this->clearInventoryCaches();
             return response()->json(['success' => true]);
         } catch (\Exception $e) {
             return response()->json(['error' => 'Cannot delete product, it might be in use.'], 400);
@@ -299,6 +328,7 @@ class ProductController extends Controller
             if (isset($validated['cost_price'])) $product->cost_price = $validated['cost_price'];
             if (isset($validated['selling_price'])) $product->selling_price = $validated['selling_price'];
             $product->save();
+            $this->clearInventoryCaches();
 
             return response()->json(['success' => true, 'product' => $product]);
         }
@@ -362,6 +392,8 @@ class ProductController extends Controller
             return response()->json(['message' => $e->getMessage()], 422);
         }
 
+        $this->clearInventoryCaches();
+
         return response()->json(['success' => true, 'device' => $device]);
     }
 
@@ -393,6 +425,7 @@ class ProductController extends Controller
         }
 
         $deviceImei->update($validated);
+        $this->clearInventoryCaches();
 
         return response()->json(['success' => true, 'device' => $deviceImei->load('partnerInvestor')]);
     }
@@ -464,6 +497,8 @@ class ProductController extends Controller
             return response()->json(['message' => $e->getMessage()], 422);
         }
 
+        $this->clearInventoryCaches();
+
         return response()->json([
             'success' => true,
             'message' => 'Refurbishment cost capitalized into device cost basis.',
@@ -497,6 +532,7 @@ class ProductController extends Controller
         // we might want to check that first or rely on foreign key constraints.
         try {
             $deviceImei->delete();
+            $this->clearInventoryCaches();
             return response()->json(['success' => true]);
         } catch (\Exception $e) {
             return response()->json(['error' => 'Cannot delete stock item. It may be linked to a past sale.'], 400);
