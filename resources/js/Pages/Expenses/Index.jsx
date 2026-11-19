@@ -3,44 +3,41 @@ import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import { Head, useForm, router, Link } from '@inertiajs/react';
 import {
     Receipt, Plus, Pencil, Trash2, Download, Search, Filter,
-    TrendingDown, DollarSign, Calendar, Tag, ChevronDown, X,
-    AlertTriangle, ShoppingBag, ArrowUpCircle
+    TrendingDown, DollarSign, Calendar, Tag, X,
+    AlertTriangle, ShoppingBag, Lock, Wallet
 } from 'lucide-react';
 import PageHeader from '@/Components/SaaS/PageHeader';
 import Card from '@/Components/SaaS/Card';
-import Badge from '@/Components/SaaS/Badge';
-import Button from '@/Components/SaaS/Button';
 import Modal from '@/Components/Modal';
 import toast from 'react-hot-toast';
 
-const CATEGORIES = [
-    'Cash In', 'Shop Supplies', 'Meals / Food', 'Transport',
-    'Utilities', 'Refund', 'Refund (Past Shift)', 'Other'
-];
+const PROTECTED_CATEGORIES = ['Dealer Settlement', 'Supplier Payment', 'Refund', 'Refund (Past Shift)'];
+const EDITABLE_OUTFLOW_CATEGORIES = ['Shop Supplies', 'Meals / Food', 'Transport', 'Utilities', 'Other'];
 
 const categoryColor = (cat) => {
-    if (cat === 'Cash In') return 'bg-emerald-50 text-emerald-700 border-emerald-200';
-    if (cat?.includes('Refund')) return 'bg-rose-50 text-rose-700 border-rose-200';
-    return 'bg-slate-100 text-slate-600 border-slate-200';
+    if (cat === 'Cash In') return 'bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800';
+    if (cat?.includes('Refund')) return 'bg-rose-50 dark:bg-rose-900/30 text-rose-700 dark:text-rose-300 border-rose-200 dark:border-rose-800';
+    if (cat === 'Dealer Settlement' || cat === 'Supplier Payment') return 'bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 border-indigo-200 dark:border-indigo-800';
+    return 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700';
 };
 
 export default function Index({ auth, expenses, summary, filters, cashiers, categories, is_admin_or_manager, accounts = [] }) {
-    const [showAddModal, setShowAddModal]     = useState(false);
-    const [showEditModal, setShowEditModal]   = useState(false);
+    const [showAddModal, setShowAddModal]       = useState(false);
+    const [showEditModal, setShowEditModal]     = useState(false);
     const [showDeleteModal, setShowDeleteModal] = useState(false);
-    const [selected, setSelected]             = useState(null);
+    const [selected, setSelected]               = useState(null);
 
     // Identify counter till (Main Cash Register) vs funding accounts (Shop Safe, Bank, MTN, Airtel)
-    const tillAccount = accounts.find(a => a.name === 'Main Cash Register') 
+    const tillAccount = accounts.find(a => a.name === 'Main Cash Register')
                      || accounts.find(a => (a.provider === 'Cash' || a.type === 'cash') && !a.name.toLowerCase().includes('safe'));
     const fundingAccounts = accounts.filter(a => a.id !== tillAccount?.id && Number(a.current_balance) > 0);
 
     // Search / filter state
-    const [search, setSearch]       = useState(filters?.search || '');
-    const [category, setCategory]   = useState(filters?.category || 'all');
-    const [cashierId, setCashierId] = useState(filters?.cashier_id || 'all');
-    const [dateFrom, setDateFrom]   = useState(filters?.date_from || '');
-    const [dateTo, setDateTo]       = useState(filters?.date_to || '');
+    const [search, setSearch]         = useState(filters?.search || '');
+    const [category, setCategory]     = useState(filters?.category || 'all');
+    const [cashierId, setCashierId]   = useState(filters?.cashier_id || 'all');
+    const [dateFrom, setDateFrom]     = useState(filters?.date_from || '');
+    const [dateTo, setDateTo]         = useState(filters?.date_to || '');
     const [dateFilter, setDateFilter] = useState(filters?.date_filter || '');
 
     // Add form
@@ -53,11 +50,15 @@ export default function Index({ auth, expenses, summary, filters, cashiers, cate
     useEffect(() => {
         if (isFirstRun.current) { isFirstRun.current = false; return; }
         const isSearchChange = search !== (filters?.search || '');
-        const delay = isSearchChange ? 400 : 0;
+        const delay = isSearchChange ? 350 : 0;
         const timer = setTimeout(() => {
             router.get(route('expenses.index'), {
-                search, category, cashier_id: cashierId,
-                date_from: dateFrom, date_to: dateTo, date_filter: dateFilter
+                search: search || undefined,
+                category: category !== 'all' ? category : undefined,
+                cashier_id: cashierId !== 'all' ? cashierId : undefined,
+                date_from: dateFrom || undefined,
+                date_to: dateTo || undefined,
+                date_filter: dateFilter || undefined,
             }, { preserveState: true, preserveScroll: true, replace: true });
         }, delay);
         return () => clearTimeout(timer);
@@ -68,19 +69,38 @@ export default function Index({ auth, expenses, summary, filters, cashiers, cate
         setDateFrom(''); setDateTo(''); setDateFilter('');
     };
 
+    const isProtected = (exp) => PROTECTED_CATEGORIES.includes(exp?.category);
+
+    const isToday = (dateStr) => {
+        if (!dateStr) return false;
+        const d = new Date(dateStr);
+        const now = new Date();
+        return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth() && d.getDate() === now.getDate();
+    };
+
+    const canEditExpense = (exp) => is_admin_or_manager && !isProtected(exp);
+
+    const canDeleteExpense = (exp) => {
+        if (isProtected(exp)) return false;
+        if (is_admin_or_manager) return true;
+        return Number(exp.user_id) === Number(auth?.user?.id) && isToday(exp.expense_date) && exp.category !== 'Cash In';
+    };
+
     const handleAdd = (e) => {
         e.preventDefault();
         addForm.post('/expenses', {
-            onSuccess: () => { 
-                toast.success(addForm.data.category === 'Cash In' ? 'Cash In float added successfully!' : 'Expense logged!'); 
-                setShowAddModal(false); 
-                addForm.reset(); 
+            preserveScroll: true,
+            onSuccess: () => {
+                toast.success(addForm.data.category === 'Cash In' ? 'Cash In float added successfully!' : 'Expense logged!');
+                setShowAddModal(false);
+                addForm.reset();
             },
             onError: (err) => toast.error(Object.values(err)[0] || 'Failed to log expense.')
         });
     };
 
     const openEdit = (expense) => {
+        editForm.clearErrors();
         setSelected(expense);
         editForm.setData({ amount: expense.amount, category: expense.category, description: expense.description || '' });
         setShowEditModal(true);
@@ -88,7 +108,9 @@ export default function Index({ auth, expenses, summary, filters, cashiers, cate
 
     const handleEdit = (e) => {
         e.preventDefault();
+        if (!selected) return;
         editForm.put(`/api/expenses/${selected.id}`, {
+            preserveScroll: true,
             onSuccess: () => { toast.success('Expense updated!'); setShowEditModal(false); },
             onError: (err) => toast.error(Object.values(err)[0] || 'Failed to update.')
         });
@@ -97,22 +119,30 @@ export default function Index({ auth, expenses, summary, filters, cashiers, cate
     const openDelete = (expense) => { setSelected(expense); setShowDeleteModal(true); };
 
     const handleDelete = () => {
+        if (!selected) return;
         router.delete(`/api/expenses/${selected.id}`, {
+            preserveScroll: true,
             onSuccess: () => { toast.success('Expense deleted.'); setShowDeleteModal(false); },
-            onError: () => toast.error('Could not delete this expense.')
+            onError: (err) => toast.error(Object.values(err)[0] || 'Could not delete this expense.')
         });
     };
 
     const hasFilters = search || category !== 'all' || cashierId !== 'all' || dateFrom || dateTo || dateFilter;
-
     const fmt = (n) => Number(n || 0).toLocaleString();
+
+    const exportParams = new URLSearchParams();
+    if (search) exportParams.set('search', search);
+    if (category && category !== 'all') exportParams.set('category', category);
+    if (cashierId && cashierId !== 'all') exportParams.set('cashier_id', cashierId);
+    if (dateFilter) exportParams.set('date_filter', dateFilter);
+    if (dateFrom) exportParams.set('date_from', dateFrom);
+    if (dateTo) exportParams.set('date_to', dateTo);
 
     return (
         <AuthenticatedLayout user={auth.user}>
             <Head title="Expense Management" />
 
-            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
-
+            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
                 {/* Header */}
                 <PageHeader
                     title="Expense Management"
@@ -124,7 +154,7 @@ export default function Index({ auth, expenses, summary, filters, cashiers, cate
                         <div className="flex items-center gap-2.5">
                             {is_admin_or_manager && (
                                 <a
-                                    href={`/api/expenses/export?${new URLSearchParams({ category, cashier_id: cashierId, date_from: dateFrom, date_to: dateTo }).toString()}`}
+                                    href={`/api/expenses/export?${exportParams.toString()}`}
                                     className="saas-btn saas-btn-success"
                                 >
                                     <Download size={16} />
@@ -132,7 +162,8 @@ export default function Index({ auth, expenses, summary, filters, cashiers, cate
                                 </a>
                             )}
                             <button
-                                onClick={() => setShowAddModal(true)}
+                                type="button"
+                                onClick={() => { addForm.clearErrors(); setShowAddModal(true); }}
                                 className="saas-btn saas-btn-primary"
                             >
                                 <Plus size={16} />
@@ -144,12 +175,15 @@ export default function Index({ auth, expenses, summary, filters, cashiers, cate
 
                 {/* KPI Summary Cards */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
-                    <Card className="relative overflow-hidden group">
+                    <Card
+                        className={`relative overflow-hidden group cursor-pointer transition-all ${dateFilter === 'today' ? 'ring-2 ring-rose-500' : 'hover:ring-2 hover:ring-rose-400/50'}`}
+                        onClick={() => { setDateFilter(dateFilter === 'today' ? '' : 'today'); setDateFrom(''); setDateTo(''); }}
+                    >
                         <div className="flex justify-between items-start mb-2">
                             <div>
-                                <h6 className="text-slate-500 font-semibold text-xs uppercase tracking-wider mb-1">Today's Expenses</h6>
+                                <h6 className="text-slate-500 dark:text-slate-400 font-semibold text-xs uppercase tracking-wider mb-1">Today's Expenses</h6>
                                 <div className="flex items-baseline gap-1">
-                                    <h3 className="text-2xl font-bold text-rose-600">{fmt(summary.today_total)}</h3>
+                                    <h3 className="text-2xl font-bold text-rose-600 dark:text-rose-400">{fmt(summary.today_total)}</h3>
                                     <span className="text-xs text-rose-500 font-medium">UGX</span>
                                 </div>
                             </div>
@@ -157,15 +191,15 @@ export default function Index({ auth, expenses, summary, filters, cashiers, cate
                                 <TrendingDown size={20} />
                             </div>
                         </div>
-                        <div className="text-xs text-slate-500 font-medium">Outflows logged today</div>
+                        <div className="text-xs text-slate-500 dark:text-slate-400 font-medium">Outflows logged today</div>
                     </Card>
 
                     <Card className="relative overflow-hidden group">
                         <div className="flex justify-between items-start mb-2">
                             <div>
-                                <h6 className="text-slate-500 font-semibold text-xs uppercase tracking-wider mb-1">Operating Expenses</h6>
+                                <h6 className="text-slate-500 dark:text-slate-400 font-semibold text-xs uppercase tracking-wider mb-1">Operating Expenses</h6>
                                 <div className="flex items-baseline gap-1">
-                                    <h3 className="text-2xl font-bold text-orange-600">{fmt(summary.operating)}</h3>
+                                    <h3 className="text-2xl font-bold text-orange-600 dark:text-orange-400">{fmt(summary.operating)}</h3>
                                     <span className="text-xs text-orange-500 font-medium">UGX</span>
                                 </div>
                             </div>
@@ -173,15 +207,18 @@ export default function Index({ auth, expenses, summary, filters, cashiers, cate
                                 <ShoppingBag size={20} />
                             </div>
                         </div>
-                        <div className="text-xs text-slate-500 font-medium">In current filter view</div>
+                        <div className="text-xs text-slate-500 dark:text-slate-400 font-medium">Excludes refunds & settlements</div>
                     </Card>
 
-                    <Card className="relative overflow-hidden group">
+                    <Card
+                        className={`relative overflow-hidden group cursor-pointer transition-all ${category === 'Refund' ? 'ring-2 ring-red-500' : 'hover:ring-2 hover:ring-red-400/50'}`}
+                        onClick={() => setCategory(category === 'Refund' ? 'all' : 'Refund')}
+                    >
                         <div className="flex justify-between items-start mb-2">
                             <div>
-                                <h6 className="text-slate-500 font-semibold text-xs uppercase tracking-wider mb-1">Refunds Paid</h6>
+                                <h6 className="text-slate-500 dark:text-slate-400 font-semibold text-xs uppercase tracking-wider mb-1">Refunds Paid</h6>
                                 <div className="flex items-baseline gap-1">
-                                    <h3 className="text-2xl font-bold text-red-600">{fmt(summary.refunds)}</h3>
+                                    <h3 className="text-2xl font-bold text-red-600 dark:text-red-400">{fmt(summary.refunds)}</h3>
                                     <span className="text-xs text-red-500 font-medium">UGX</span>
                                 </div>
                             </div>
@@ -189,49 +226,58 @@ export default function Index({ auth, expenses, summary, filters, cashiers, cate
                                 <DollarSign size={20} />
                             </div>
                         </div>
-                        <div className="text-xs text-slate-500 font-medium">Customer refunds in view</div>
+                        <div className="text-xs text-slate-500 dark:text-slate-400 font-medium">Customer refunds in view</div>
                     </Card>
 
                     <Card className="relative overflow-hidden group">
                         <div className="flex justify-between items-start mb-2">
                             <div>
-                                <h6 className="text-slate-500 font-semibold text-xs uppercase tracking-wider mb-1">Top Category (Month)</h6>
+                                <h6 className="text-slate-500 dark:text-slate-400 font-semibold text-xs uppercase tracking-wider mb-1">Top Category (Month)</h6>
                                 <div className="flex items-baseline gap-1">
-                                    <h3 className="text-lg font-bold text-indigo-600 truncate max-w-[140px]">{summary.top_category || '—'}</h3>
+                                    <h3 className="text-lg font-bold text-indigo-600 dark:text-indigo-400 truncate max-w-[140px]">{summary.top_category || '—'}</h3>
                                 </div>
                             </div>
                             <div className="w-10 h-10 rounded-xl flex items-center justify-center bg-gradient-to-br from-indigo-500 to-blue-600 text-white shadow-md group-hover:scale-105 transition-transform">
                                 <Tag size={20} />
                             </div>
                         </div>
-                        <div className="text-xs text-slate-500 font-medium">
+                        <div className="text-xs text-slate-500 dark:text-slate-400 font-medium">
                             {summary.top_category ? `UGX ${fmt(summary.top_category_amt)} spent` : 'No data this month'}
                         </div>
                     </Card>
                 </div>
 
                 {/* Filters */}
-                <div className="bg-white rounded-2xl border border-slate-200/80 shadow-sm p-4 space-y-3">
+                <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-sm p-4 space-y-3">
                     <div className="flex items-center justify-between">
                         <div className="flex items-center gap-2">
-                            <Filter size={16} className="text-slate-500" />
-                            <span className="text-sm font-bold text-slate-700">Filters</span>
+                            <Filter size={16} className="text-slate-500 dark:text-slate-400" />
+                            <span className="text-sm font-bold text-slate-700 dark:text-slate-200">Filters</span>
                             {hasFilters && (
-                                <span className="text-xs bg-rose-100 text-rose-600 font-bold px-2 py-0.5 rounded-full">Active</span>
+                                <span className="text-xs bg-rose-100 dark:bg-rose-900/40 text-rose-600 dark:text-rose-300 font-bold px-2 py-0.5 rounded-full">Active</span>
                             )}
                         </div>
+                        {hasFilters && (
+                            <button
+                                type="button"
+                                onClick={clearFilters}
+                                className="py-1.5 px-3 bg-rose-500 hover:bg-rose-600 text-white rounded-xl text-xs font-bold transition-colors shadow-sm flex items-center gap-1.5"
+                            >
+                                <X size={13} /> Clear Filters
+                            </button>
+                        )}
                     </div>
 
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-3">
                         {/* Search */}
-                        <div className="relative lg:col-span-1">
+                        <div className="relative lg:col-span-2">
                             <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
                             <input
                                 type="text"
-                                placeholder="Search description..."
+                                placeholder="Search description or category..."
                                 value={search}
                                 onChange={e => setSearch(e.target.value)}
-                                className="w-full pl-9 pr-3 py-2 text-sm border border-slate-200 rounded-xl focus:border-rose-400 focus:ring-rose-400 bg-slate-50"
+                                className="w-full pl-9 pr-3 py-2 text-xs sm:text-sm border border-slate-200 dark:border-slate-700 rounded-xl focus:border-rose-400 focus:ring-rose-400 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white"
                             />
                         </div>
 
@@ -239,7 +285,7 @@ export default function Index({ auth, expenses, summary, filters, cashiers, cate
                         <select
                             value={category}
                             onChange={e => setCategory(e.target.value)}
-                            className="py-2 px-3 text-sm border border-slate-200 rounded-xl bg-slate-50 focus:border-rose-400 focus:ring-rose-400 font-medium"
+                            className="py-2 px-3 text-xs sm:text-sm border border-slate-200 dark:border-slate-700 rounded-xl bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:border-rose-400 focus:ring-rose-400 font-medium"
                         >
                             <option value="all">All Categories</option>
                             {categories.map(c => <option key={c} value={c}>{c}</option>)}
@@ -250,7 +296,7 @@ export default function Index({ auth, expenses, summary, filters, cashiers, cate
                             <select
                                 value={cashierId}
                                 onChange={e => setCashierId(e.target.value)}
-                                className="py-2 px-3 text-sm border border-slate-200 rounded-xl bg-slate-50 focus:border-rose-400 focus:ring-rose-400 font-medium"
+                                className="py-2 px-3 text-xs sm:text-sm border border-slate-200 dark:border-slate-700 rounded-xl bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:border-rose-400 focus:ring-rose-400 font-medium"
                             >
                                 <option value="all">All Staff</option>
                                 {cashiers.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
@@ -261,7 +307,7 @@ export default function Index({ auth, expenses, summary, filters, cashiers, cate
                         <select
                             value={dateFilter}
                             onChange={e => { setDateFilter(e.target.value); setDateFrom(''); setDateTo(''); }}
-                            className="py-2 px-3 text-sm border border-slate-200 rounded-xl bg-slate-50 focus:border-rose-400 focus:ring-rose-400 font-medium"
+                            className="py-2 px-3 text-xs sm:text-sm border border-slate-200 dark:border-slate-700 rounded-xl bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:border-rose-400 focus:ring-rose-400 font-medium"
                         >
                             <option value="">All Dates</option>
                             <option value="today">Today</option>
@@ -270,129 +316,211 @@ export default function Index({ auth, expenses, summary, filters, cashiers, cate
                             <option value="this_month">This Month</option>
                         </select>
 
-                        {hasFilters && (
-                            <button
-                                onClick={clearFilters}
-                                className="py-2 px-4 bg-rose-500 hover:bg-rose-600 text-white rounded-xl text-sm font-bold transition-colors shadow-sm flex items-center justify-center gap-2"
-                            >
-                                <X size={14} />
-                                Clear Filters
-                            </button>
-                        )}
+                        {/* Custom Date Range */}
+                        <div className="flex items-center gap-1.5">
+                            <input
+                                type="date"
+                                value={dateFrom}
+                                onChange={e => { setDateFrom(e.target.value); setDateFilter(''); }}
+                                title="From date"
+                                className="w-full py-2 px-2 text-xs border border-slate-200 dark:border-slate-700 rounded-xl bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white"
+                            />
+                            <input
+                                type="date"
+                                value={dateTo}
+                                onChange={e => { setDateTo(e.target.value); setDateFilter(''); }}
+                                title="To date"
+                                className="w-full py-2 px-2 text-xs border border-slate-200 dark:border-slate-700 rounded-xl bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white"
+                            />
+                        </div>
                     </div>
                 </div>
 
                 {/* Expenses Table */}
-                <div className="bg-white rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden">
-                    <div className="p-5 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
+                <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-sm overflow-hidden">
+                    <div className="p-5 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between bg-slate-50/50 dark:bg-slate-800/40">
                         <div className="flex items-center gap-2.5">
-                            <div className="w-8 h-8 rounded-lg bg-rose-50 border border-rose-100 flex items-center justify-center text-rose-500">
+                            <div className="w-8 h-8 rounded-lg bg-rose-50 dark:bg-rose-900/30 border border-rose-100 dark:border-rose-800 flex items-center justify-center text-rose-500">
                                 <Receipt size={18} />
                             </div>
-                            <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider">Expense Log</h3>
+                            <h3 className="text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider">Expense Log</h3>
                         </div>
-                        <span className="text-xs font-bold text-slate-500 bg-white border border-slate-200 px-3 py-1 rounded-full shadow-sm">
+                        <span className="text-xs font-bold text-slate-600 dark:text-slate-300 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-3 py-1 rounded-full shadow-sm">
                             {expenses.total} Entries
                         </span>
                     </div>
 
                     {expenses.data.length > 0 ? (
-                        <div className="overflow-x-auto">
-                            <table className="w-full text-left text-sm border-collapse">
-                                <thead>
-                                    <tr className="bg-slate-50/70 border-b border-slate-100 text-xs font-semibold text-slate-500 uppercase tracking-wider">
-                                        <th className="px-5 py-3.5">Date</th>
-                                        <th className="px-5 py-3.5">Cashier</th>
-                                        <th className="px-5 py-3.5">Drawer</th>
-                                        <th className="px-5 py-3.5">Category</th>
-                                        <th className="px-5 py-3.5">Description</th>
-                                        <th className="px-5 py-3.5 text-right">Amount</th>
-                                        <th className="px-5 py-3.5 text-center">Actions</th>
-                                    </tr>
-                                </thead>
-                                <tbody className="divide-y divide-slate-100 text-sm">
-                                    {expenses.data.map((expense) => (
-                                        <tr key={expense.id} className="hover:bg-slate-50/60 transition-colors">
-                                            <td className="px-5 py-3.5">
-                                                <div className="flex items-center gap-2">
-                                                    <Calendar size={13} className="text-slate-400 shrink-0" />
-                                                    <span className="text-xs text-slate-600 font-medium">
-                                                        {new Date(expense.expense_date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}
+                        <>
+                            {/* Desktop Table */}
+                            <div className="hidden md:block overflow-x-auto">
+                                <table className="w-full text-left text-sm border-collapse">
+                                    <thead>
+                                        <tr className="bg-slate-50/70 dark:bg-slate-800/60 border-b border-slate-100 dark:border-slate-800 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+                                            <th className="px-5 py-3.5">Date</th>
+                                            <th className="px-5 py-3.5">Staff</th>
+                                            <th className="px-5 py-3.5">Account / Drawer</th>
+                                            <th className="px-5 py-3.5">Category</th>
+                                            <th className="px-5 py-3.5">Description</th>
+                                            <th className="px-5 py-3.5 text-right">Amount</th>
+                                            <th className="px-5 py-3.5 text-center">Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-sm">
+                                        {expenses.data.map((expense) => (
+                                            <tr key={expense.id} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/50 transition-colors">
+                                                <td className="px-5 py-3.5">
+                                                    <div className="flex items-center gap-2">
+                                                        <Calendar size={13} className="text-slate-400 shrink-0" />
+                                                        <span className="text-xs text-slate-600 dark:text-slate-300 font-medium">
+                                                            {new Date(expense.expense_date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}
+                                                        </span>
+                                                    </div>
+                                                </td>
+                                                <td className="px-5 py-3.5">
+                                                    <span className="font-semibold text-slate-800 dark:text-slate-200 text-xs">{expense.user?.name || '—'}</span>
+                                                </td>
+                                                <td className="px-5 py-3.5">
+                                                    <div className="flex flex-wrap items-center gap-1">
+                                                        {expense.payment_account?.name && (
+                                                            <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-slate-700 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-md">
+                                                                <Wallet size={11} className="text-slate-400" />
+                                                                {expense.payment_account.name}
+                                                            </span>
+                                                        )}
+                                                        {expense.cash_drawer_id && (
+                                                            <span className="text-[11px] font-mono text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded-md">
+                                                                #{expense.cash_drawer_id}
+                                                            </span>
+                                                        )}
+                                                        {!expense.payment_account?.name && !expense.cash_drawer_id && (
+                                                            <span className="text-xs text-slate-400">—</span>
+                                                        )}
+                                                    </div>
+                                                </td>
+                                                <td className="px-5 py-3.5">
+                                                    <span className={`inline-block text-xs font-bold px-2.5 py-0.5 rounded-md border ${categoryColor(expense.category)}`}>
+                                                        {expense.category}
                                                     </span>
-                                                </div>
-                                            </td>
-                                            <td className="px-5 py-3.5">
-                                                <span className="font-semibold text-slate-800 text-xs">{expense.user?.name || '—'}</span>
-                                            </td>
-                                            <td className="px-5 py-3.5">
-                                                {expense.cash_drawer_id ? (
-                                                    <span className="text-xs font-mono text-slate-500 bg-slate-100 px-2 py-0.5 rounded-md">#{expense.cash_drawer_id}</span>
-                                                ) : (
-                                                    <span className="text-xs text-slate-400">—</span>
-                                                )}
-                                            </td>
-                                            <td className="px-5 py-3.5">
-                                                <span className={`inline-block text-xs font-bold px-2.5 py-0.5 rounded-md border ${categoryColor(expense.category)}`}>
+                                                </td>
+                                                <td className="px-5 py-3.5 text-xs text-slate-500 dark:text-slate-400 max-w-[220px] truncate" title={expense.description || ''}>
+                                                    {expense.description || <span className="italic text-slate-400">No description</span>}
+                                                </td>
+                                                <td className="px-5 py-3.5 text-right">
+                                                    <span className={`font-extrabold text-sm font-mono ${expense.category === 'Cash In' ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
+                                                        {expense.category === 'Cash In' ? '+' : '–'}UGX {fmt(expense.amount)}
+                                                    </span>
+                                                </td>
+                                                <td className="px-5 py-3.5 text-center">
+                                                    {isProtected(expense) ? (
+                                                        <span
+                                                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-700"
+                                                            title="Managed from its source module (Dealers, Suppliers, or Receipts)"
+                                                        >
+                                                            <Lock size={10} /> System
+                                                        </span>
+                                                    ) : (
+                                                        <div className="flex items-center justify-center gap-1.5">
+                                                            {canEditExpense(expense) && (
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => openEdit(expense)}
+                                                                    className="p-1.5 rounded-lg bg-indigo-50 dark:bg-indigo-900/30 hover:bg-indigo-100 dark:hover:bg-indigo-900/50 text-indigo-600 dark:text-indigo-300 border border-indigo-100 dark:border-indigo-800 transition-colors"
+                                                                    title="Edit"
+                                                                >
+                                                                    <Pencil size={13} />
+                                                                </button>
+                                                            )}
+                                                            {canDeleteExpense(expense) && (
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => openDelete(expense)}
+                                                                    className="p-1.5 rounded-lg bg-rose-50 dark:bg-rose-900/30 hover:bg-rose-100 dark:hover:bg-rose-900/50 text-rose-600 dark:text-rose-300 border border-rose-100 dark:border-rose-800 transition-colors"
+                                                                    title="Delete"
+                                                                >
+                                                                    <Trash2 size={13} />
+                                                                </button>
+                                                            )}
+                                                        </div>
+                                                    )}
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+
+                            {/* Mobile Cards View */}
+                            <div className="md:hidden divide-y divide-slate-100 dark:divide-slate-800">
+                                {expenses.data.map((expense) => (
+                                    <div key={expense.id} className="p-4 space-y-2 bg-white dark:bg-slate-900">
+                                        <div className="flex items-start justify-between gap-2">
+                                            <div>
+                                                <span className={`inline-block text-[11px] font-bold px-2 py-0.5 rounded-md border ${categoryColor(expense.category)}`}>
                                                     {expense.category}
                                                 </span>
-                                            </td>
-                                            <td className="px-5 py-3.5 text-xs text-slate-500 max-w-[200px] truncate">
-                                                {expense.description || <span className="italic text-slate-300">No description</span>}
-                                            </td>
-                                            <td className="px-5 py-3.5 text-right">
-                                                <span className={`font-extrabold text-sm font-mono ${expense.category === 'Cash In' ? 'text-emerald-600' : 'text-rose-600'}`}>
-                                                    {expense.category === 'Cash In' ? '+' : '–'}UGX {fmt(expense.amount)}
+                                                <p className="text-xs text-slate-600 dark:text-slate-300 mt-1">
+                                                    {expense.description || <span className="italic text-slate-400">No description</span>}
+                                                </p>
+                                            </div>
+                                            <span className={`font-extrabold text-sm font-mono shrink-0 ${expense.category === 'Cash In' ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
+                                                {expense.category === 'Cash In' ? '+' : '–'}UGX {fmt(expense.amount)}
+                                            </span>
+                                        </div>
+                                        <div className="flex items-center justify-between text-[11px] text-slate-500 dark:text-slate-400">
+                                            <span>
+                                                {new Date(expense.expense_date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })} • {expense.user?.name || '—'}
+                                                {expense.payment_account?.name ? ` • ${expense.payment_account.name}` : ''}
+                                            </span>
+                                            {isProtected(expense) ? (
+                                                <span className="inline-flex items-center gap-1 text-[10px] font-bold text-slate-400">
+                                                    <Lock size={10} /> System
                                                 </span>
-                                            </td>
-                                            <td className="px-5 py-3.5 text-center">
-                                                <div className="flex items-center justify-center gap-1.5">
-                                                    {is_admin_or_manager && (
-                                                        <button
-                                                            onClick={() => openEdit(expense)}
-                                                            className="p-1.5 rounded-lg bg-indigo-50 hover:bg-indigo-100 text-indigo-600 border border-indigo-100 transition-colors"
-                                                            title="Edit"
-                                                        >
+                                            ) : (
+                                                <div className="flex items-center gap-1.5">
+                                                    {canEditExpense(expense) && (
+                                                        <button type="button" onClick={() => openEdit(expense)} className="p-1.5 rounded-lg bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-300">
                                                             <Pencil size={13} />
                                                         </button>
                                                     )}
-                                                    <button
-                                                        onClick={() => openDelete(expense)}
-                                                        className="p-1.5 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-100 transition-colors"
-                                                        title="Delete"
-                                                    >
-                                                        <Trash2 size={13} />
-                                                    </button>
+                                                    {canDeleteExpense(expense) && (
+                                                        <button type="button" onClick={() => openDelete(expense)} className="p-1.5 rounded-lg bg-rose-50 dark:bg-rose-900/30 text-rose-600 dark:text-rose-300">
+                                                            <Trash2 size={13} />
+                                                        </button>
+                                                    )}
                                                 </div>
-                                            </td>
-                                        </tr>
-                                    ))}
-                                </tbody>
-                            </table>
-                        </div>
+                                            )}
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        </>
                     ) : (
                         <div className="py-20 flex flex-col items-center justify-center text-slate-400">
-                            <Receipt size={48} className="mb-3 text-slate-300" />
-                            <p className="text-base font-semibold text-slate-700">No expenses found</p>
+                            <Receipt size={48} className="mb-3 text-slate-300 dark:text-slate-600" />
+                            <p className="text-base font-semibold text-slate-700 dark:text-slate-300">No expenses found</p>
                             <p className="text-xs text-slate-400 mt-1">Try adjusting your filters or log a new expense.</p>
                         </div>
                     )}
 
                     {/* Pagination */}
                     {expenses.links && expenses.links.length > 3 && (
-                        <div className="px-5 py-4 border-t border-slate-100 bg-slate-50/50 flex items-center justify-between">
-                            <span className="text-xs text-slate-500">
+                        <div className="px-5 py-4 border-t border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/40 flex flex-wrap items-center justify-between gap-3">
+                            <span className="text-xs text-slate-500 dark:text-slate-400">
                                 Showing {expenses.from}–{expenses.to} of {expenses.total}
                             </span>
-                            <div className="flex items-center gap-1.5">
+                            <div className="flex flex-wrap items-center gap-1.5">
                                 {expenses.links.map((link, k) => (
                                     <Link
                                         key={k}
                                         href={link.url || '#'}
+                                        preserveScroll
+                                        preserveState
                                         className={`px-3 py-1.5 rounded-lg text-xs font-semibold ${
                                             link.active
                                                 ? 'bg-rose-500 text-white shadow-sm'
-                                                : 'text-slate-600 hover:bg-slate-100 bg-white border border-slate-200'
-                                        } ${!link.url && 'opacity-40 cursor-not-allowed'}`}
+                                                : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700'
+                                        } ${!link.url && 'opacity-40 cursor-not-allowed pointer-events-none'}`}
                                         dangerouslySetInnerHTML={{ __html: link.label }}
                                     />
                                 ))}
@@ -404,20 +532,20 @@ export default function Index({ auth, expenses, summary, filters, cashiers, cate
 
             {/* ── Add Expense Modal ──────────────────────────── */}
             <Modal show={showAddModal} onClose={() => setShowAddModal(false)} maxWidth="sm">
-                <div className="p-6 space-y-5">
+                <div className="p-6 space-y-5 dark:bg-slate-900">
                     <div className="flex items-center justify-between">
                         <div>
-                            <h3 className="text-lg font-bold text-slate-900">Log New Expense</h3>
-                            <p className="text-xs text-slate-500 mt-0.5">Record a cash outflow for today's shift</p>
+                            <h3 className="text-lg font-bold text-slate-900 dark:text-white">Log New Expense</h3>
+                            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Record a cash outflow or float addition</p>
                         </div>
-                        <button onClick={() => setShowAddModal(false)} className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-400 transition-colors">
+                        <button type="button" onClick={() => setShowAddModal(false)} className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400 transition-colors">
                             <X size={18} />
                         </button>
                     </div>
 
                     <form onSubmit={handleAdd} className="space-y-4">
                         <div className="space-y-1.5">
-                            <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">Category *</label>
+                            <label className="text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider">Category *</label>
                             <select
                                 value={addForm.data.category}
                                 onChange={e => {
@@ -425,18 +553,18 @@ export default function Index({ auth, expenses, summary, filters, cashiers, cate
                                     addForm.setData(data => ({
                                         ...data,
                                         category: cat,
-                                        source_account_id: cat === 'Cash In' && !data.source_account_id 
-                                            ? (fundingAccounts[0]?.id ? String(fundingAccounts[0].id) : 'external') 
+                                        source_account_id: cat === 'Cash In' && !data.source_account_id
+                                            ? (fundingAccounts[0]?.id ? String(fundingAccounts[0].id) : 'external')
                                             : data.source_account_id
                                     }));
                                 }}
-                                className="w-full border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm font-semibold bg-slate-50 focus:border-rose-400 focus:ring-rose-400"
+                                className="w-full border border-slate-200 dark:border-slate-700 rounded-xl px-3.5 py-2.5 text-sm font-semibold bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:border-rose-400 focus:ring-rose-400"
                             >
                                 <optgroup label="Additions">
                                     <option value="Cash In">Cash In (Float Addition)</option>
                                 </optgroup>
                                 <optgroup label="Expenses / Outflows">
-                                    {CATEGORIES.filter(c => c !== 'Cash In' && !c.includes('Refund')).map(c => (
+                                    {EDITABLE_OUTFLOW_CATEGORIES.map(c => (
                                         <option key={c} value={c}>{c}</option>
                                     ))}
                                 </optgroup>
@@ -446,12 +574,12 @@ export default function Index({ auth, expenses, summary, filters, cashiers, cate
 
                         {/* Float Source Selector when Cash In is chosen */}
                         {addForm.data.category === 'Cash In' && (
-                            <div className="space-y-1.5 p-3 rounded-xl bg-emerald-50 border border-emerald-200">
-                                <label className="text-xs font-bold text-emerald-800 uppercase tracking-wider flex items-center justify-between">
+                            <div className="space-y-1.5 p-3 rounded-xl bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800">
+                                <label className="text-xs font-bold text-emerald-800 dark:text-emerald-300 uppercase tracking-wider flex items-center justify-between">
                                     <span>Float Source (Where is money from?) *</span>
                                 </label>
                                 <select
-                                    className="w-full bg-white border border-emerald-300 focus:border-emerald-500 focus:ring-emerald-500 rounded-xl px-3 py-2 text-xs font-bold text-slate-900 shadow-sm"
+                                    className="w-full bg-white dark:bg-slate-900 border border-emerald-300 dark:border-emerald-700 focus:border-emerald-500 focus:ring-emerald-500 rounded-xl px-3 py-2 text-xs font-bold text-slate-900 dark:text-white shadow-sm"
                                     value={addForm.data.source_account_id}
                                     onChange={e => addForm.setData('source_account_id', e.target.value)}
                                     required
@@ -464,9 +592,9 @@ export default function Index({ auth, expenses, summary, filters, cashiers, cate
                                     <option value="external">External / Owner Cash (Direct Injection)</option>
                                 </select>
                                 {addForm.errors.source_account_id && (
-                                    <p className="text-xs text-rose-600 font-bold mt-1">{addForm.errors.source_account_id}</p>
+                                    <p className="text-xs text-rose-600 dark:text-rose-400 font-bold mt-1">{addForm.errors.source_account_id}</p>
                                 )}
-                                <p className="text-[11px] text-emerald-700 font-medium">
+                                <p className="text-[11px] text-emerald-700 dark:text-emerald-400 font-medium">
                                     {addForm.data.source_account_id === 'external'
                                         ? 'Direct addition to Cash without deducting any account.'
                                         : `Transfers UGX ${Number(addForm.data.amount || 0).toLocaleString()} from ${accounts.find(a => String(a.id) === String(addForm.data.source_account_id))?.name || 'account'} to Main Cash Register.`}
@@ -477,11 +605,9 @@ export default function Index({ auth, expenses, summary, filters, cashiers, cate
                         {/* Paid From Account Selector for Regular Expenses */}
                         {addForm.data.category !== 'Cash In' && accounts.length > 0 && (
                             <div className="space-y-1.5">
-                                <label className="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center justify-between">
-                                    <span>Paid From Account *</span>
-                                </label>
+                                <label className="text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider">Paid From Account *</label>
                                 <select
-                                    className="w-full border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm font-semibold bg-slate-50 focus:border-rose-400 focus:ring-rose-400"
+                                    className="w-full border border-slate-200 dark:border-slate-700 rounded-xl px-3.5 py-2.5 text-sm font-semibold bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:border-rose-400 focus:ring-rose-400"
                                     value={addForm.data.payment_account_id || (tillAccount?.id || '')}
                                     onChange={e => addForm.setData('payment_account_id', e.target.value)}
                                 >
@@ -496,36 +622,36 @@ export default function Index({ auth, expenses, summary, filters, cashiers, cate
                         )}
 
                         <div className="space-y-1.5">
-                            <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">Amount (UGX) *</label>
+                            <label className="text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider">Amount (UGX) *</label>
                             <div className="relative">
                                 <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400">UGX</span>
                                 <input
                                     type="number"
-                                    min="0"
+                                    min="1"
                                     step="any"
                                     required
                                     value={addForm.data.amount}
                                     onChange={e => addForm.setData('amount', e.target.value)}
                                     placeholder="0"
-                                    className="w-full pl-12 pr-3.5 py-2.5 text-sm font-bold text-slate-900 border border-slate-200 rounded-xl bg-slate-50 focus:border-rose-400 focus:ring-rose-400 shadow-sm"
+                                    className="w-full pl-12 pr-3.5 py-2.5 text-sm font-bold text-slate-900 dark:text-white border border-slate-200 dark:border-slate-700 rounded-xl bg-slate-50 dark:bg-slate-800 focus:border-rose-400 focus:ring-rose-400 shadow-sm"
                                 />
                             </div>
                             {addForm.errors.amount && <p className="text-xs text-rose-500">{addForm.errors.amount}</p>}
                         </div>
 
                         <div className="space-y-1.5">
-                            <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">Description <span className="text-slate-400 font-normal">(Optional)</span></label>
+                            <label className="text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider">Description <span className="text-slate-400 font-normal">(Optional)</span></label>
                             <input
                                 type="text"
                                 value={addForm.data.description}
                                 onChange={e => addForm.setData('description', e.target.value)}
                                 placeholder="e.g. Lunch for staff, cleaning supplies..."
-                                className="w-full border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm bg-slate-50 focus:border-rose-400 focus:ring-rose-400"
+                                className="w-full border border-slate-200 dark:border-slate-700 rounded-xl px-3.5 py-2.5 text-sm bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:border-rose-400 focus:ring-rose-400"
                             />
                         </div>
 
                         {addForm.errors.drawer && (
-                            <div className="flex items-start gap-2 p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-800">
+                            <div className="flex items-start gap-2 p-3 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 rounded-xl text-xs text-amber-800 dark:text-amber-200">
                                 <AlertTriangle size={14} className="shrink-0 mt-0.5" />
                                 {addForm.errors.drawer}
                             </div>
@@ -533,7 +659,7 @@ export default function Index({ auth, expenses, summary, filters, cashiers, cate
 
                         <div className="flex gap-3 pt-2">
                             <button type="button" onClick={() => setShowAddModal(false)}
-                                className="flex-1 py-2.5 rounded-xl border border-slate-200 text-slate-700 font-bold text-sm hover:bg-slate-50 transition-colors">
+                                className="flex-1 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 font-bold text-sm hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors">
                                 Cancel
                             </button>
                             <button type="submit" disabled={addForm.processing}
@@ -548,57 +674,64 @@ export default function Index({ auth, expenses, summary, filters, cashiers, cate
 
             {/* ── Edit Expense Modal ─────────────────────────── */}
             <Modal show={showEditModal} onClose={() => setShowEditModal(false)} maxWidth="sm">
-                <div className="p-6 space-y-5">
+                <div className="p-6 space-y-5 dark:bg-slate-900">
                     <div className="flex items-center justify-between">
                         <div>
-                            <h3 className="text-lg font-bold text-slate-900">Edit Expense</h3>
-                            <p className="text-xs text-slate-500 mt-0.5">Modify this expense entry</p>
+                            <h3 className="text-lg font-bold text-slate-900 dark:text-white">Edit Expense</h3>
+                            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Modify this entry and sync account balance</p>
                         </div>
-                        <button onClick={() => setShowEditModal(false)} className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-400 transition-colors">
+                        <button type="button" onClick={() => setShowEditModal(false)} className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400 transition-colors">
                             <X size={18} />
                         </button>
                     </div>
 
                     <form onSubmit={handleEdit} className="space-y-4">
                         <div className="space-y-1.5">
-                            <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">Category *</label>
+                            <label className="text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider">Category *</label>
                             <select
                                 value={editForm.data.category}
                                 onChange={e => editForm.setData('category', e.target.value)}
-                                className="w-full border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm font-semibold bg-slate-50 focus:border-rose-400 focus:ring-rose-400"
+                                disabled={selected?.category === 'Cash In'}
+                                className="w-full border border-slate-200 dark:border-slate-700 rounded-xl px-3.5 py-2.5 text-sm font-semibold bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:border-rose-400 focus:ring-rose-400 disabled:opacity-60"
                             >
-                                {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+                                {selected?.category === 'Cash In' ? (
+                                    <option value="Cash In">Cash In</option>
+                                ) : (
+                                    EDITABLE_OUTFLOW_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)
+                                )}
                             </select>
+                            {editForm.errors.category && <p className="text-xs text-rose-500">{editForm.errors.category}</p>}
                         </div>
 
                         <div className="space-y-1.5">
-                            <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">Amount (UGX) *</label>
+                            <label className="text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider">Amount (UGX) *</label>
                             <div className="relative">
                                 <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400">UGX</span>
                                 <input
                                     type="number"
-                                    min="0"
+                                    min="1"
                                     required
                                     value={editForm.data.amount}
                                     onChange={e => editForm.setData('amount', e.target.value)}
-                                    className="w-full pl-12 pr-3.5 py-2.5 text-sm font-bold text-slate-900 border border-slate-200 rounded-xl bg-slate-50 focus:border-rose-400 focus:ring-rose-400 shadow-sm"
+                                    className="w-full pl-12 pr-3.5 py-2.5 text-sm font-bold text-slate-900 dark:text-white border border-slate-200 dark:border-slate-700 rounded-xl bg-slate-50 dark:bg-slate-800 focus:border-rose-400 focus:ring-rose-400 shadow-sm"
                                 />
                             </div>
+                            {editForm.errors.amount && <p className="text-xs text-rose-500">{editForm.errors.amount}</p>}
                         </div>
 
                         <div className="space-y-1.5">
-                            <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">Description</label>
+                            <label className="text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider">Description</label>
                             <input
                                 type="text"
                                 value={editForm.data.description}
                                 onChange={e => editForm.setData('description', e.target.value)}
-                                className="w-full border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm bg-slate-50 focus:border-rose-400 focus:ring-rose-400"
+                                className="w-full border border-slate-200 dark:border-slate-700 rounded-xl px-3.5 py-2.5 text-sm bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:border-rose-400 focus:ring-rose-400"
                             />
                         </div>
 
                         <div className="flex gap-3 pt-2">
                             <button type="button" onClick={() => setShowEditModal(false)}
-                                className="flex-1 py-2.5 rounded-xl border border-slate-200 text-slate-700 font-bold text-sm hover:bg-slate-50 transition-colors">
+                                className="flex-1 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 font-bold text-sm hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors">
                                 Cancel
                             </button>
                             <button type="submit" disabled={editForm.processing}
@@ -613,24 +746,23 @@ export default function Index({ auth, expenses, summary, filters, cashiers, cate
 
             {/* ── Delete Confirm Modal ───────────────────────── */}
             <Modal show={showDeleteModal} onClose={() => setShowDeleteModal(false)} maxWidth="sm">
-                <div className="p-6 text-center space-y-4">
-                    <div className="w-14 h-14 bg-rose-50 text-rose-500 rounded-full flex items-center justify-center mx-auto">
+                <div className="p-6 text-center space-y-4 dark:bg-slate-900">
+                    <div className="w-14 h-14 bg-rose-50 dark:bg-rose-900/30 text-rose-500 rounded-full flex items-center justify-center mx-auto">
                         <AlertTriangle size={28} />
                     </div>
                     <div>
-                        <h3 className="text-lg font-bold text-slate-900">Delete Expense?</h3>
-                        <p className="text-sm text-slate-500 mt-1">
+                        <h3 className="text-lg font-bold text-slate-900 dark:text-white">Delete Expense?</h3>
+                        <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
                             This will permanently remove the expense of{' '}
-                            <strong>UGX {fmt(selected?.amount)}</strong> ({selected?.category}).
-                            This cannot be undone.
+                            <strong className="text-slate-900 dark:text-white">UGX {fmt(selected?.amount)}</strong> ({selected?.category}) and reverse its account balance impact.
                         </p>
                     </div>
                     <div className="flex gap-3 pt-2">
-                        <button onClick={() => setShowDeleteModal(false)}
-                            className="flex-1 py-2.5 rounded-xl border border-slate-200 text-slate-700 font-bold text-sm hover:bg-slate-50 transition-colors">
+                        <button type="button" onClick={() => setShowDeleteModal(false)}
+                            className="flex-1 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 font-bold text-sm hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors">
                             Cancel
                         </button>
-                        <button onClick={handleDelete}
+                        <button type="button" onClick={handleDelete}
                             className="flex-1 py-2.5 rounded-xl bg-rose-500 hover:bg-rose-600 text-white font-bold text-sm shadow-md transition-colors flex items-center justify-center gap-2">
                             <Trash2 size={15} />
                             Yes, Delete
@@ -638,7 +770,6 @@ export default function Index({ auth, expenses, summary, filters, cashiers, cate
                     </div>
                 </div>
             </Modal>
-
         </AuthenticatedLayout>
     );
 }

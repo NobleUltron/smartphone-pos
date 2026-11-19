@@ -11,17 +11,26 @@ use App\Models\AccountTransaction;
 use App\Models\AccountTransfer;
 use App\Services\TreasuryService;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
 use Carbon\Carbon;
 use Inertia\Inertia;
 
 class ExpenseController extends Controller
 {
+    private const PROTECTED_CATEGORIES = [
+        'Dealer Settlement',
+        'Supplier Payment',
+        'Refund',
+        'Refund (Past Shift)',
+    ];
+
     public function index(Request $request)
     {
         $user = Auth::user();
         $isAdminOrManager = in_array(strtolower($user->role), ['admin', 'manager']);
 
-        $query = Expense::with(['user', 'cashDrawer', 'recordedBy'])
+        $query = Expense::with(['user', 'cashDrawer', 'recordedBy', 'paymentAccount'])
             ->orderBy('expense_date', 'desc')
             ->orderBy('created_at', 'desc');
 
@@ -30,10 +39,13 @@ class ExpenseController extends Controller
             $query->where('user_id', $user->id);
         }
 
-        // Search by description
+        // Search by description or category
         if ($request->filled('search')) {
-            $search = '%' . strtolower($request->input('search')) . '%';
-            $query->whereRaw('LOWER(description) LIKE ?', [$search]);
+            $search = '%' . strtolower(trim($request->input('search'))) . '%';
+            $query->where(function ($q) use ($search) {
+                $q->whereRaw('LOWER(COALESCE(description, \'\')) LIKE ?', [$search])
+                  ->orWhereRaw('LOWER(category) LIKE ?', [$search]);
+            });
         }
 
         // Filter by category
@@ -51,8 +63,8 @@ class ExpenseController extends Controller
             match ($request->input('date_filter')) {
                 'today'     => $query->whereDate('expense_date', Carbon::today()),
                 'yesterday' => $query->whereDate('expense_date', Carbon::yesterday()),
-                'this_week' => $query->whereBetween('expense_date', [Carbon::now()->startOfWeek(), Carbon::now()->endOfWeek()]),
-                'this_month'=> $query->whereMonth('expense_date', Carbon::now()->month)->whereYear('expense_date', Carbon::now()->year),
+                'this_week' => $query->whereBetween('expense_date', [Carbon::now()->startOfWeek()->toDateString(), Carbon::now()->endOfWeek()->toDateString()]),
+                'this_month'=> $query->whereBetween('expense_date', [Carbon::now()->startOfMonth()->toDateString(), Carbon::now()->endOfMonth()->toDateString()]),
                 default     => null,
             };
         } elseif ($request->filled('date_from') && $request->filled('date_to')) {
@@ -72,16 +84,18 @@ class ExpenseController extends Controller
             $baseScope->where('user_id', $user->id);
         }
 
-        $todayTotal       = (clone $baseScope)->whereDate('expense_date', Carbon::today())->where('category', '!=', 'Cash In')->sum('amount');
-        $totalFiltered    = (clone $summaryQuery)->where('category', '!=', 'Cash In')->sum('amount');
-        $totalCashIns     = (clone $summaryQuery)->where('category', 'Cash In')->sum('amount');
-        $totalRefunds     = (clone $summaryQuery)->whereIn('category', ['Refund', 'Refund (Past Shift)'])->sum('amount');
-        $totalOperating   = (clone $summaryQuery)->whereNotIn('category', ['Cash In', 'Refund', 'Refund (Past Shift)'])->sum('amount');
+        $nonOperating = array_merge(['Cash In'], self::PROTECTED_CATEGORIES);
+
+        $todayTotal     = (float) (clone $baseScope)->whereDate('expense_date', Carbon::today())->where('category', '!=', 'Cash In')->sum('amount');
+        $totalFiltered  = (float) (clone $summaryQuery)->where('category', '!=', 'Cash In')->sum('amount');
+        $totalCashIns   = (float) (clone $summaryQuery)->where('category', 'Cash In')->sum('amount');
+        $totalRefunds   = (float) (clone $summaryQuery)->whereIn('category', ['Refund', 'Refund (Past Shift)'])->sum('amount');
+        $totalOperating = (float) (clone $summaryQuery)->whereNotIn('category', $nonOperating)->sum('amount');
 
         $topCategory = (clone $baseScope)->selectRaw('category, sum(amount) as total')
             ->whereDate('expense_date', '>=', Carbon::now()->startOfMonth())
+            ->whereNotIn('category', $nonOperating)
             ->groupBy('category')
-            ->where('category', '!=', 'Cash In')
             ->orderByDesc('total')
             ->first();
 
@@ -90,7 +104,7 @@ class ExpenseController extends Controller
             ? User::select('id', 'name')->orderBy('name')->get()
             : [];
 
-        $accounts = PaymentAccount::where('is_active', true)->get(['id', 'name', 'type', 'current_balance', 'provider']);
+        $accounts = PaymentAccount::where('is_active', true)->orderBy('name')->get(['id', 'name', 'type', 'current_balance', 'provider']);
 
         return Inertia::render('Expenses/Index', [
             'expenses'  => $expenses,
@@ -102,12 +116,12 @@ class ExpenseController extends Controller
                 'refunds'          => $totalRefunds,
                 'operating'        => $totalOperating,
                 'top_category'     => $topCategory?->category,
-                'top_category_amt' => $topCategory?->total ?? 0,
+                'top_category_amt' => (float) ($topCategory?->total ?? 0),
             ],
             'filters'   => $request->only(['search', 'category', 'cashier_id', 'date_from', 'date_to', 'date_filter']),
             'categories' => [
                 'Cash In', 'Shop Supplies', 'Meals / Food', 'Transport', 'Utilities',
-                'Refund', 'Refund (Past Shift)', 'Other'
+                'Refund', 'Refund (Past Shift)', 'Dealer Settlement', 'Supplier Payment', 'Other'
             ],
             'is_admin_or_manager' => $isAdminOrManager,
             'accounts'            => $accounts,
@@ -123,107 +137,125 @@ class ExpenseController extends Controller
             'source_account_id' => 'nullable|string',
         ]);
 
+        if (in_array($request->category, self::PROTECTED_CATEGORIES, true)) {
+            return back()->withErrors(['category' => "System category '{$request->category}' cannot be logged manually."]);
+        }
+
         $user = Auth::user();
         $isAdminOrManager = in_array(strtolower($user->role), ['admin', 'manager']);
+        $amount = floatval($request->amount);
 
-        $activeDrawer = CashDrawer::where('user_id', $user->id)
-            ->where('status', 'open')
-            ->first();
+        DB::transaction(function () use ($request, $user, $isAdminOrManager, $amount) {
+            $activeDrawer = CashDrawer::where('user_id', $user->id)
+                ->where('status', 'open')
+                ->lockForUpdate()
+                ->first();
 
-        $paymentAccountId = $request->input('payment_account_id');
-        $selectedAccount = $paymentAccountId ? PaymentAccount::find($paymentAccountId) : null;
-        if (!$selectedAccount) {
-            $selectedAccount = TreasuryService::getTillAccount();
-        }
+            $paymentAccountId = $request->input('payment_account_id');
+            $tillAccount = TreasuryService::getTillAccount();
+            $selectedAccount = $paymentAccountId
+                ? PaymentAccount::where('id', (int) $paymentAccountId)->lockForUpdate()->first()
+                : ($tillAccount ? PaymentAccount::where('id', $tillAccount->id)->lockForUpdate()->first() : null);
 
-        $isTill = ($selectedAccount->type === 'cash' && stripos($selectedAccount->name, 'Safe') === false);
+            if (!$selectedAccount && $tillAccount) {
+                $selectedAccount = PaymentAccount::where('id', $tillAccount->id)->lockForUpdate()->first();
+            }
 
-        // Cashiers must have an open drawer for till expenses; admins can log without one
-        if ($isTill && !$isAdminOrManager && !$activeDrawer) {
-            return back()->withErrors(['drawer' => 'You must have an open shift to log an expense from the cash till.']);
-        }
+            $isTill = $selectedAccount && ($selectedAccount->type === 'cash' && stripos($selectedAccount->name, 'Safe') === false);
 
-        if ($isTill && $activeDrawer && $request->category !== 'Cash In') {
-            $availableCash = $activeDrawer->calculateExpectedCash();
-            if ($request->amount > $availableCash) {
-                return back()->withErrors([
-                    'amount' => 'Insufficient cash in active drawer shift! Available cash is ' . number_format(max(0, $availableCash)) . ' UGX. Please add starting cash float or use Mobile Money / Bank Transfer.'
+            // Cashiers must have an open drawer for till expenses; admins can log without one
+            if ($isTill && !$isAdminOrManager && !$activeDrawer) {
+                throw ValidationException::withMessages([
+                    'drawer' => 'You must have an open shift to log an expense from the cash till.',
                 ]);
             }
-        } elseif (!$isTill && $request->category !== 'Cash In') {
-            if ($selectedAccount->current_balance < floatval($request->amount)) {
-                return back()->withErrors([
-                    'amount' => "Insufficient balance in {$selectedAccount->name}! Available balance is UGX " . number_format($selectedAccount->current_balance) . "."
-                ]);
-            }
-        }
 
-        $sourceAccount = null;
-        $tillAccount = TreasuryService::getTillAccount();
-        if ($request->category === 'Cash In' && $request->filled('source_account_id') && is_numeric($request->source_account_id)) {
-            $sourceAccount = PaymentAccount::find($request->source_account_id);
-            if ($sourceAccount && (int)$sourceAccount->id !== (int)$tillAccount?->id) {
-                if ($sourceAccount->current_balance < floatval($request->amount)) {
-                    return back()->withErrors([
-                        'source_account_id' => "Insufficient balance in {$sourceAccount->name}! Available balance is UGX " . number_format($sourceAccount->current_balance) . "."
+            if ($isTill && $activeDrawer && $request->category !== 'Cash In') {
+                $availableCash = $activeDrawer->calculateExpectedCash();
+                if ($amount > $availableCash) {
+                    throw ValidationException::withMessages([
+                        'amount' => 'Insufficient cash in active drawer shift! Available cash is ' . number_format(max(0, $availableCash)) . ' UGX. Please add starting cash float or use Mobile Money / Bank Transfer.',
+                    ]);
+                }
+            } elseif (!$isTill && $selectedAccount && $request->category !== 'Cash In') {
+                if ($selectedAccount->current_balance < $amount) {
+                    throw ValidationException::withMessages([
+                        'amount' => "Insufficient balance in {$selectedAccount->name}! Available balance is UGX " . number_format($selectedAccount->current_balance) . ".",
                     ]);
                 }
             }
-        }
 
-        // Build description with source account reference if selected
-        $finalDescription = $request->description;
-        if ($request->category === 'Cash In' && $sourceAccount && (int)$sourceAccount->id !== (int)$tillAccount?->id) {
-            $prefix = "From {$sourceAccount->name}";
-            $finalDescription = $request->description ? "{$prefix} - {$request->description}" : $prefix;
-        }
+            $sourceAccount = null;
+            if ($request->category === 'Cash In' && $request->filled('source_account_id') && is_numeric($request->source_account_id)) {
+                $sourceAccount = PaymentAccount::where('id', (int) $request->source_account_id)->lockForUpdate()->first();
+                if ($sourceAccount && (int) $sourceAccount->id !== (int) $tillAccount?->id) {
+                    if ($sourceAccount->current_balance < $amount) {
+                        throw ValidationException::withMessages([
+                            'source_account_id' => "Insufficient balance in {$sourceAccount->name}! Available balance is UGX " . number_format($sourceAccount->current_balance) . ".",
+                        ]);
+                    }
+                }
+            }
 
-        $expense = Expense::create([
-            'cash_drawer_id'     => $isTill ? $activeDrawer?->id : null,
-            'payment_account_id' => $request->category === 'Cash In' ? $tillAccount?->id : ($selectedAccount?->id ?? $tillAccount?->id),
-            'user_id'            => $user->id,
-            'recorded_by'        => $user->id,
-            'amount'             => $request->amount,
-            'category'           => $request->category,
-            'description'        => $finalDescription,
-            'expense_date'       => Carbon::today(),
-        ]);
+            // Build description with source account reference if selected
+            $finalDescription = $request->description;
+            if ($request->category === 'Cash In' && $sourceAccount && (int) $sourceAccount->id !== (int) $tillAccount?->id) {
+                $prefix = "From {$sourceAccount->name}";
+                $finalDescription = $request->description ? "{$prefix} - {$request->description}" : $prefix;
+            }
 
-        // Sync with Treasury Service
-        if ($request->category === 'Cash In') {
-            if ($sourceAccount && (int)$sourceAccount->id !== (int)$tillAccount?->id) {
-                // Inter-account transfer: Source Account (e.g. Shop Safe / Bank / MoMo) -> Main Cash Register Till
-                $notes = "Shift #" . ($activeDrawer ? $activeDrawer->id : 'N/A') . " Float Addition" . ($request->description ? " ({$request->description})" : '');
-                TreasuryService::transfer(
-                    (int) $sourceAccount->id,
-                    (int) $tillAccount->id,
-                    floatval($request->amount),
-                    $notes,
-                    $user->id
-                );
+            $expense = Expense::create([
+                'cash_drawer_id'     => $isTill ? $activeDrawer?->id : null,
+                'payment_account_id' => $request->category === 'Cash In' ? $tillAccount?->id : ($selectedAccount?->id ?? $tillAccount?->id),
+                'user_id'            => $user->id,
+                'recorded_by'        => $user->id,
+                'amount'             => $amount,
+                'category'           => $request->category,
+                'description'        => $finalDescription,
+                'expense_date'       => Carbon::today(),
+            ]);
+
+            // Sync with Treasury Service
+            if ($request->category === 'Cash In') {
+                if ($sourceAccount && $tillAccount && (int) $sourceAccount->id !== (int) $tillAccount->id) {
+                    $notes = "Shift #" . ($activeDrawer ? $activeDrawer->id : 'N/A') . " Float Addition" . ($request->description ? " ({$request->description})" : '');
+                    TreasuryService::transfer(
+                        (int) $sourceAccount->id,
+                        (int) $tillAccount->id,
+                        $amount,
+                        $notes,
+                        $user->id
+                    );
+                } else {
+                    TreasuryService::recordInflow(
+                        'Cash',
+                        $amount,
+                        'Cash In Float',
+                        $expense,
+                        $finalDescription ?: 'Drawer float addition',
+                        'EXP-' . $expense->id,
+                        $user->id
+                    );
+                }
             } else {
-                // External cash injection / direct inflow into cash
-                TreasuryService::recordInflow(
-                    'Cash',
-                    floatval($request->amount),
-                    'Cash In Float',
+                TreasuryService::recordOutflow(
+                    $selectedAccount,
+                    $amount,
+                    'Expense',
                     $expense,
-                    $finalDescription ?: 'Drawer float addition',
+                    "Expense: {$request->category}" . ($request->description ? " - {$request->description}" : ''),
                     'EXP-' . $expense->id,
                     $user->id
                 );
             }
-        } else {
-            TreasuryService::recordOutflow(
-                $selectedAccount,
-                floatval($request->amount),
-                'Expense',
-                $expense,
-                "Expense: {$request->category}" . ($request->description ? " - {$request->description}" : ''),
-                'EXP-' . $expense->id,
-                $user->id
+
+            \App\Models\ActivityLog::log(
+                $request->category === 'Cash In' ? 'cash_in_logged' : 'expense_created',
+                'Expenses',
+                ($request->category === 'Cash In' ? 'Logged Cash In float' : "Logged Expense ({$request->category})") . " of UGX " . number_format($amount),
+                ['expense_id' => $expense->id, 'category' => $request->category, 'amount' => $amount]
             );
-        }
+        });
 
         return back()->with('success', $request->category === 'Cash In' ? 'Cash In float added successfully.' : 'Expense logged successfully.');
     }
@@ -235,9 +267,8 @@ class ExpenseController extends Controller
             abort(403, 'Only managers can edit expenses.');
         }
 
-        $protectedCategories = ['Dealer Settlement', 'Supplier Payment', 'Refund', 'Refund (Past Shift)'];
-        if (in_array($expense->category, $protectedCategories)) {
-            return back()->with('error', "System-generated '{$expense->category}' entries must be managed from their source module (Dealers, Suppliers, or Receipts).");
+        if (in_array($expense->category, self::PROTECTED_CATEGORIES, true)) {
+            return back()->withErrors(['category' => "System-generated '{$expense->category}' entries must be managed from their source module (Dealers, Suppliers, or Receipts)."]);
         }
 
         $request->validate([
@@ -246,38 +277,64 @@ class ExpenseController extends Controller
             'description' => 'nullable|string|max:500',
         ]);
 
-        $oldAmount = (float) $expense->amount;
-        $newAmount = (float) $request->amount;
-        $diff = $newAmount - $oldAmount;
+        if (in_array($request->category, self::PROTECTED_CATEGORIES, true)) {
+            return back()->withErrors(['category' => "Cannot change an expense into protected system category '{$request->category}'."]);
+        }
 
-        $expense->update([
-            'amount'      => $newAmount,
-            'category'    => $request->category,
-            'description' => $request->description,
-            'recorded_by' => $user->id,
-        ]);
+        // Prevent flipping between Cash In (inflow) and regular Expense (outflow)
+        $wasCashIn = $expense->category === 'Cash In';
+        $isCashIn = $request->category === 'Cash In';
+        if ($wasCashIn !== $isCashIn) {
+            return back()->withErrors(['category' => 'Cannot switch between Cash In (inflow) and Expense (outflow). Delete and re-log the entry instead.']);
+        }
 
-        // Sync with AccountTransaction
-        $trx = AccountTransaction::where('reference_type', Expense::class)
-            ->where('reference_id', $expense->id)
-            ->first();
+        DB::transaction(function () use ($request, $expense, $user) {
+            $lockedExpense = Expense::where('id', $expense->id)->lockForUpdate()->firstOrFail();
+            $oldAmount = (float) $lockedExpense->amount;
+            $newAmount = floatval($request->amount);
+            $diff = $newAmount - $oldAmount;
 
-        if ($trx) {
-            $account = $trx->account;
-            if ($account) {
-                if ($trx->type === 'inflow') {
-                    $account->increment('current_balance', $diff);
-                } elseif ($trx->type === 'outflow') {
-                    $account->decrement('current_balance', $diff);
+            $trx = AccountTransaction::where('reference_type', Expense::class)
+                ->where('reference_id', $lockedExpense->id)
+                ->lockForUpdate()
+                ->first();
+
+            if ($trx) {
+                $account = PaymentAccount::where('id', $trx->payment_account_id)->lockForUpdate()->first();
+                if ($account) {
+                    if ($trx->type === 'outflow' && $diff > 0 && $account->current_balance < $diff) {
+                        throw ValidationException::withMessages([
+                            'amount' => "Insufficient balance in {$account->name} to increase expense by UGX " . number_format($diff) . ".",
+                        ]);
+                    }
+                    if ($trx->type === 'inflow') {
+                        $account->increment('current_balance', $diff);
+                    } elseif ($trx->type === 'outflow') {
+                        $account->decrement('current_balance', $diff);
+                    }
                 }
+
+                $trx->update([
+                    'amount' => $newAmount,
+                    'category' => $request->category === 'Cash In' ? 'Cash In Float' : 'Expense',
+                    'description' => $request->description ?: "Expense: {$request->category}",
+                ]);
             }
 
-            $trx->update([
-                'amount' => $newAmount,
-                'category' => $request->category === 'Cash In' ? 'Cash In Float' : $request->category,
-                'description' => $request->description ?: "Expense: {$request->category}",
+            $lockedExpense->update([
+                'amount'      => $newAmount,
+                'category'    => $request->category,
+                'description' => $request->description,
+                'recorded_by' => $user->id,
             ]);
-        }
+
+            \App\Models\ActivityLog::log(
+                'expense_updated',
+                'Expenses',
+                "Updated Expense #{$lockedExpense->id} ({$request->category}) from UGX " . number_format($oldAmount) . " to UGX " . number_format($newAmount),
+                ['expense_id' => $lockedExpense->id, 'old_amount' => $oldAmount, 'new_amount' => $newAmount]
+            );
+        });
 
         return back()->with('success', 'Expense updated successfully.');
     }
@@ -287,66 +344,79 @@ class ExpenseController extends Controller
         $user = Auth::user();
         $isAdminOrManager = in_array(strtolower($user->role), ['admin', 'manager']);
 
-        $protectedCategories = ['Dealer Settlement', 'Supplier Payment', 'Refund', 'Refund (Past Shift)'];
-        if (in_array($expense->category, $protectedCategories)) {
-            return back()->with('error', "System-generated '{$expense->category}' entries cannot be deleted directly here. Reverse them in their source module.");
+        if (in_array($expense->category, self::PROTECTED_CATEGORIES, true)) {
+            return back()->withErrors(['error' => "System-generated '{$expense->category}' entries cannot be deleted directly here. Reverse them in their source module."]);
         }
 
         // Cashiers can only delete their own same-day expenses that aren't system-generated
         if (!$isAdminOrManager) {
             $systemCategories = ['Refund', 'Refund (Past Shift)', 'Cash In'];
-            if ((int)$expense->user_id !== (int)$user->id
+            if ((int) $expense->user_id !== (int) $user->id
                 || Carbon::parse($expense->expense_date)->toDateString() !== Carbon::today()->toDateString()
-                || in_array($expense->category, $systemCategories)) {
+                || in_array($expense->category, $systemCategories, true)) {
                 abort(403, 'You cannot delete this expense.');
             }
         }
 
-        // Reverse linked AccountTransaction before deleting expense
-        $trx = AccountTransaction::where('reference_type', Expense::class)
-            ->where('reference_id', $expense->id)
-            ->first();
+        DB::transaction(function () use ($expense) {
+            $lockedExpense = Expense::where('id', $expense->id)->lockForUpdate()->firstOrFail();
 
-        if ($trx) {
-            $account = $trx->account;
-            if ($account) {
-                if ($trx->type === 'inflow') {
-                    $account->decrement('current_balance', $trx->amount);
-                } elseif ($trx->type === 'outflow') {
-                    $account->increment('current_balance', $trx->amount);
-                }
-            }
-            $trx->delete();
-        }
-
-        // If it was a Cash In funded by an inter-account transfer, reverse the transfer
-        if ($expense->category === 'Cash In' && str_starts_with($expense->description ?? '', 'From ')) {
-            $tillAccount = TreasuryService::getTillAccount();
-            $transfer = AccountTransfer::where('to_account_id', $tillAccount?->id)
-                ->where('amount', $expense->amount)
-                ->whereDate('created_at', $expense->expense_date ?? $expense->created_at)
+            // Reverse linked AccountTransaction before deleting expense
+            $trx = AccountTransaction::where('reference_type', Expense::class)
+                ->where('reference_id', $lockedExpense->id)
+                ->lockForUpdate()
                 ->first();
 
-            if ($transfer) {
-                $txs = AccountTransaction::where('reference_type', AccountTransfer::class)
-                    ->where('reference_id', $transfer->id)
-                    ->get();
-                foreach ($txs as $t) {
-                    $acct = $t->account;
-                    if ($acct) {
-                        if ($t->type === 'transfer_in') {
-                            $acct->decrement('current_balance', $t->amount);
-                        } elseif ($t->type === 'transfer_out') {
-                            $acct->increment('current_balance', $t->amount);
-                        }
+            if ($trx) {
+                $account = PaymentAccount::where('id', $trx->payment_account_id)->lockForUpdate()->first();
+                if ($account) {
+                    if ($trx->type === 'inflow') {
+                        $account->decrement('current_balance', $trx->amount);
+                    } elseif ($trx->type === 'outflow') {
+                        $account->increment('current_balance', $trx->amount);
                     }
-                    $t->delete();
                 }
-                $transfer->delete();
+                $trx->delete();
             }
-        }
 
-        $expense->delete();
+            // If it was a Cash In funded by an inter-account transfer, reverse the transfer
+            if ($lockedExpense->category === 'Cash In' && str_starts_with($lockedExpense->description ?? '', 'From ')) {
+                $tillAccount = TreasuryService::getTillAccount();
+                $transfer = AccountTransfer::where('to_account_id', $tillAccount?->id)
+                    ->where('amount', $lockedExpense->amount)
+                    ->whereDate('created_at', $lockedExpense->expense_date ?? $lockedExpense->created_at)
+                    ->lockForUpdate()
+                    ->first();
+
+                if ($transfer) {
+                    $txs = AccountTransaction::where('reference_type', AccountTransfer::class)
+                        ->where('reference_id', $transfer->id)
+                        ->lockForUpdate()
+                        ->get();
+                    foreach ($txs as $t) {
+                        $acct = PaymentAccount::where('id', $t->payment_account_id)->lockForUpdate()->first();
+                        if ($acct) {
+                            if ($t->type === 'transfer_in') {
+                                $acct->decrement('current_balance', $t->amount);
+                            } elseif ($t->type === 'transfer_out') {
+                                $acct->increment('current_balance', $t->amount);
+                            }
+                        }
+                        $t->delete();
+                    }
+                    $transfer->delete();
+                }
+            }
+
+            \App\Models\ActivityLog::log(
+                'expense_deleted',
+                'Expenses',
+                "Deleted Expense #{$lockedExpense->id} ({$lockedExpense->category}) of UGX " . number_format($lockedExpense->amount),
+                ['expense_id' => $lockedExpense->id, 'category' => $lockedExpense->category, 'amount' => (float) $lockedExpense->amount]
+            );
+
+            $lockedExpense->delete();
+        });
 
         return back()->with('success', 'Expense deleted.');
     }
@@ -358,20 +428,37 @@ class ExpenseController extends Controller
             abort(403);
         }
 
-        $query = Expense::with(['user', 'cashDrawer'])
+        $query = Expense::with(['user', 'cashDrawer', 'paymentAccount'])
             ->orderBy('expense_date', 'desc');
 
+        if ($request->filled('search')) {
+            $search = '%' . strtolower(trim($request->input('search'))) . '%';
+            $query->where(function ($q) use ($search) {
+                $q->whereRaw('LOWER(COALESCE(description, \'\')) LIKE ?', [$search])
+                  ->orWhereRaw('LOWER(category) LIKE ?', [$search]);
+            });
+        }
         if ($request->filled('category') && $request->input('category') !== 'all') {
             $query->where('category', $request->input('category'));
         }
         if ($request->filled('cashier_id') && $request->input('cashier_id') !== 'all') {
             $query->where('user_id', $request->input('cashier_id'));
         }
-        if ($request->filled('date_from')) {
-            $query->whereDate('expense_date', '>=', $request->input('date_from'));
-        }
-        if ($request->filled('date_to')) {
-            $query->whereDate('expense_date', '<=', $request->input('date_to'));
+        if ($request->filled('date_filter')) {
+            match ($request->input('date_filter')) {
+                'today'     => $query->whereDate('expense_date', Carbon::today()),
+                'yesterday' => $query->whereDate('expense_date', Carbon::yesterday()),
+                'this_week' => $query->whereBetween('expense_date', [Carbon::now()->startOfWeek()->toDateString(), Carbon::now()->endOfWeek()->toDateString()]),
+                'this_month'=> $query->whereBetween('expense_date', [Carbon::now()->startOfMonth()->toDateString(), Carbon::now()->endOfMonth()->toDateString()]),
+                default     => null,
+            };
+        } else {
+            if ($request->filled('date_from')) {
+                $query->whereDate('expense_date', '>=', $request->input('date_from'));
+            }
+            if ($request->filled('date_to')) {
+                $query->whereDate('expense_date', '<=', $request->input('date_to'));
+            }
         }
 
         $expenses = $query->get();
