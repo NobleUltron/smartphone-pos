@@ -1,6 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
+import toast from 'react-hot-toast';
 import { Head, Link, router, useForm } from '@inertiajs/react';
-import { Receipt, Eye, Printer, Search, DollarSign, TrendingUp, Tag, Sparkles, FileSpreadsheet, Store } from 'lucide-react';
+import { Receipt, Eye, Printer, Search, DollarSign, TrendingUp, Tag, FileSpreadsheet, Store, X } from 'lucide-react';
 import Barcode from 'react-barcode';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import Card from '@/Components/SaaS/Card';
@@ -11,6 +12,7 @@ import PageHeader from '@/Components/SaaS/PageHeader';
 export default function ReceiptsIndex({ auth, sales, summary, filters, settings }) {
     const [search, setSearch] = useState(filters?.search || '');
     const [paymentMethod, setPaymentMethod] = useState(filters?.payment_method || 'all');
+    const [paymentStatus, setPaymentStatus] = useState(filters?.payment_status || 'all');
     const [dateFilter, setDateFilter] = useState(filters?.date_filter || 'all');
     const [selectedSale, setSelectedSale] = useState(null);
     const [showPreviewModal, setShowPreviewModal] = useState(false);
@@ -23,7 +25,16 @@ export default function ReceiptsIndex({ auth, sales, summary, filters, settings 
         notes: ''
     });
 
+    const getRefundableAmount = (sale) => {
+        if (!sale) return 0;
+        if (sale.payment_status === 'Partial') {
+            return sale.layaway_payments?.reduce((sum, p) => sum + Number(p.amount_paid || 0), 0) || 0;
+        }
+        return Number(sale.final_amount || 0);
+    };
+
     const openRefundModal = (sale) => {
+        refundForm.clearErrors();
         setSelectedRefundSale(sale);
         refundForm.setData({
             restock_action: 'restock',
@@ -35,19 +46,25 @@ export default function ReceiptsIndex({ auth, sales, summary, filters, settings 
 
     const handleRefundSubmit = (e) => {
         e.preventDefault();
+        if (!selectedRefundSale) return;
         refundForm.post(`/api/receipts/${selectedRefundSale.id}/refund`, {
+            preserveScroll: true,
             onSuccess: () => {
+                toast.success(`Receipt #${selectedRefundSale.id} refunded successfully.`);
                 setShowRefundModal(false);
                 setSelectedRefundSale(null);
+            },
+            onError: (err) => {
+                toast.error(err.drawer_validation || err.refund_method || err.restock_action || 'Refund failed');
             }
         });
     };
 
-    const [isInitialRender, setIsInitialRender] = useState(true);
+    const isInitialRender = useRef(true);
 
     useEffect(() => {
-        if (isInitialRender) {
-            setIsInitialRender(false);
+        if (isInitialRender.current) {
+            isInitialRender.current = false;
             return;
         }
 
@@ -55,17 +72,19 @@ export default function ReceiptsIndex({ auth, sales, summary, filters, settings 
             const params = {};
             if (search) params.search = search;
             if (paymentMethod && paymentMethod !== 'all') params.payment_method = paymentMethod;
+            if (paymentStatus && paymentStatus !== 'all') params.payment_status = paymentStatus;
             if (dateFilter && dateFilter !== 'all') params.date_filter = dateFilter;
 
-            router.get('/receipts', params, { preserveState: true, replace: true });
+            router.get('/receipts', params, { preserveState: true, preserveScroll: true, replace: true });
         }, 300);
 
         return () => clearTimeout(timer);
-    }, [search, paymentMethod, dateFilter]);
+    }, [search, paymentMethod, paymentStatus, dateFilter]);
 
     const handleResetFilters = () => {
         setSearch('');
         setPaymentMethod('all');
+        setPaymentStatus('all');
         setDateFilter('all');
     };
 
@@ -95,18 +114,22 @@ export default function ReceiptsIndex({ auth, sales, summary, filters, settings 
             />
 
             {/* Summary Metric Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-                <Card className="animate-slide-up relative overflow-hidden flex flex-col justify-between" style={{ animationDelay: '0.0s' }}>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+                <Card
+                    className="animate-slide-up relative overflow-hidden flex flex-col justify-between cursor-pointer hover:ring-2 hover:ring-indigo-400/50 transition-all"
+                    style={{ animationDelay: '0.0s' }}
+                    onClick={() => setPaymentStatus('all')}
+                >
                     <div className="flex justify-between items-start mb-4">
                         <div>
-                            <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Receipts Issued</p>
-                            <h3 className="text-3xl font-black text-slate-900">{summary?.total_receipts || 0}</h3>
+                            <p className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">Receipts Issued</p>
+                            <h3 className="text-3xl font-black text-slate-900 dark:text-white">{summary?.total_receipts || 0}</h3>
                         </div>
-                        <div className="w-12 h-12 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center">
+                        <div className="w-12 h-12 rounded-2xl bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 flex items-center justify-center">
                             <Receipt size={24} />
                         </div>
                     </div>
-                    <div className="flex items-center gap-2 text-sm text-slate-500">
+                    <div className="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
                         <Badge variant="success">Processed</Badge>
                         <span>Sales</span>
                     </div>
@@ -115,30 +138,34 @@ export default function ReceiptsIndex({ auth, sales, summary, filters, settings 
                 <Card className="animate-slide-up relative overflow-hidden flex flex-col justify-between" style={{ animationDelay: '0.1s' }}>
                     <div className="flex justify-between items-start mb-4">
                         <div>
-                            <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Net Revenue</p>
-                            <h3 className="text-3xl font-black text-slate-900">{Number(summary?.total_revenue || 0).toLocaleString()} <span className="text-lg text-slate-500 font-normal">UGX</span></h3>
+                            <p className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">Net Revenue</p>
+                            <h3 className="text-2xl sm:text-3xl font-black text-slate-900 dark:text-white">{Number(summary?.total_revenue || 0).toLocaleString()} <span className="text-base text-slate-500 dark:text-slate-400 font-normal">UGX</span></h3>
                         </div>
-                        <div className="w-12 h-12 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center">
+                        <div className="w-12 h-12 rounded-2xl bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 flex items-center justify-center">
                             <TrendingUp size={24} />
                         </div>
                     </div>
-                    <div className="flex items-center gap-2 text-sm text-slate-500">
+                    <div className="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
                         <Badge variant="success">Revenue</Badge>
                         <span>Realized</span>
                     </div>
                 </Card>
 
-                <Card className="animate-slide-up relative overflow-hidden flex flex-col justify-between" style={{ animationDelay: '0.2s' }}>
+                <Card
+                    className={`animate-slide-up relative overflow-hidden flex flex-col justify-between cursor-pointer transition-all ${paymentStatus === 'Refunded' ? 'ring-2 ring-rose-500' : 'hover:ring-2 hover:ring-rose-400/50'}`}
+                    style={{ animationDelay: '0.2s' }}
+                    onClick={() => setPaymentStatus(paymentStatus === 'Refunded' ? 'all' : 'Refunded')}
+                >
                     <div className="flex justify-between items-start mb-4">
                         <div>
-                            <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Refunded / Scrapped</p>
-                            <h3 className="text-3xl font-black text-slate-900">{Number(summary?.total_refunded || 0).toLocaleString()} <span className="text-lg text-slate-500 font-normal">UGX</span></h3>
+                            <p className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">Refunded / Scrapped</p>
+                            <h3 className="text-2xl sm:text-3xl font-black text-slate-900 dark:text-white">{Number(summary?.total_refunded || 0).toLocaleString()} <span className="text-base text-slate-500 dark:text-slate-400 font-normal">UGX</span></h3>
                         </div>
-                        <div className="w-12 h-12 rounded-2xl bg-rose-50 text-rose-600 flex items-center justify-center">
+                        <div className="w-12 h-12 rounded-2xl bg-rose-50 dark:bg-rose-900/30 text-rose-600 dark:text-rose-400 flex items-center justify-center">
                             <Tag size={24} />
                         </div>
                     </div>
-                    <div className="flex items-center gap-2 text-sm text-slate-500">
+                    <div className="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
                         <Badge variant="danger">Returns</Badge>
                         <span>{summary?.refunded_count || 0} Sales</span>
                     </div>
@@ -147,14 +174,14 @@ export default function ReceiptsIndex({ auth, sales, summary, filters, settings 
                 <Card className="animate-slide-up relative overflow-hidden flex flex-col justify-between" style={{ animationDelay: '0.3s' }}>
                     <div className="flex justify-between items-start mb-4">
                         <div>
-                            <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Avg Sale Value</p>
-                            <h3 className="text-3xl font-black text-slate-900">{Number(summary?.avg_sale_value || 0).toLocaleString()} <span className="text-lg text-slate-500 font-normal">UGX</span></h3>
+                            <p className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">Avg Sale Value</p>
+                            <h3 className="text-2xl sm:text-3xl font-black text-slate-900 dark:text-white">{Math.round(Number(summary?.avg_sale_value || 0)).toLocaleString()} <span className="text-base text-slate-500 dark:text-slate-400 font-normal">UGX</span></h3>
                         </div>
-                        <div className="w-12 h-12 rounded-2xl bg-cyan-50 text-cyan-600 flex items-center justify-center">
+                        <div className="w-12 h-12 rounded-2xl bg-cyan-50 dark:bg-cyan-900/30 text-cyan-600 dark:text-cyan-400 flex items-center justify-center">
                             <DollarSign size={24} />
                         </div>
                     </div>
-                    <div className="flex items-center gap-2 text-sm text-slate-500">
+                    <div className="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
                         <Badge variant="info">Average</Badge>
                         <span>Value</span>
                     </div>
@@ -164,8 +191,8 @@ export default function ReceiptsIndex({ auth, sales, summary, filters, settings 
             <div className="animate-slide-up" style={{ animationDelay: '0.4s' }}>
                 <Card noPadding className="overflow-hidden">
                     {/* Search & Filter Bar */}
-                    <div className="p-6 border-b border-slate-100 bg-white">
-                        <div className="flex flex-col md:flex-row gap-4">
+                    <div className="p-6 border-b border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900">
+                        <div className="flex flex-col lg:flex-row gap-3">
                             <div className="flex-1 relative">
                                 <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
                                     <Search size={18} />
@@ -173,39 +200,53 @@ export default function ReceiptsIndex({ auth, sales, summary, filters, settings 
                                 <input 
                                     type="text" 
                                     className="saas-input !pl-10" 
-                                    placeholder="Search Receipt #, Customer, Phone..." 
+                                    placeholder="Search Receipt #, IMEI, Customer, Dealer..." 
                                     value={search} 
                                     onChange={(e) => setSearch(e.target.value)} 
                                 />
                             </div>
-                            <div className="w-full md:w-48">
-                                <select 
-                                    className="saas-input"
-                                    value={paymentMethod} 
-                                    onChange={(e) => setPaymentMethod(e.target.value)}
-                                >
-                                    <option value="all">All Payments</option>
-                                    <option value="Cash">Cash</option>
-                                    <option value="MTN MoMo">MTN MoMo</option>
-                                    <option value="Airtel Money">Airtel Money</option>
-                                    <option value="Bank Transfer">Bank Transfer</option>
-                                    <option value="Layaway">Layaway</option>
-                                </select>
+                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 lg:flex">
+                                <div className="lg:w-40">
+                                    <select 
+                                        className="saas-input"
+                                        value={paymentMethod} 
+                                        onChange={(e) => setPaymentMethod(e.target.value)}
+                                    >
+                                        <option value="all">All Payments</option>
+                                        <option value="Cash">Cash</option>
+                                        <option value="MTN MoMo">MTN MoMo</option>
+                                        <option value="Airtel Money">Airtel Money</option>
+                                        <option value="Bank Transfer">Bank Transfer</option>
+                                        <option value="Layaway">Layaway</option>
+                                    </select>
+                                </div>
+                                <div className="lg:w-36">
+                                    <select 
+                                        className="saas-input"
+                                        value={paymentStatus} 
+                                        onChange={(e) => setPaymentStatus(e.target.value)}
+                                    >
+                                        <option value="all">All Statuses</option>
+                                        <option value="Paid">Paid</option>
+                                        <option value="Partial">Partial</option>
+                                        <option value="Refunded">Refunded</option>
+                                    </select>
+                                </div>
+                                <div className="lg:w-40">
+                                    <select 
+                                        className="saas-input"
+                                        value={dateFilter} 
+                                        onChange={(e) => setDateFilter(e.target.value)}
+                                    >
+                                        <option value="all">All Dates</option>
+                                        <option value="today">Today</option>
+                                        <option value="yesterday">Yesterday</option>
+                                        <option value="this_week">This Week</option>
+                                        <option value="this_month">This Month</option>
+                                    </select>
+                                </div>
                             </div>
-                            <div className="w-full md:w-48">
-                                <select 
-                                    className="saas-input"
-                                    value={dateFilter} 
-                                    onChange={(e) => setDateFilter(e.target.value)}
-                                >
-                                    <option value="all">All Dates</option>
-                                    <option value="today">Today</option>
-                                    <option value="yesterday">Yesterday</option>
-                                    <option value="this_week">This Week</option>
-                                    <option value="this_month">This Month</option>
-                                </select>
-                            </div>
-                            {(search || paymentMethod !== 'all' || dateFilter !== 'all') && (
+                            {(search || paymentMethod !== 'all' || paymentStatus !== 'all' || dateFilter !== 'all') && (
                                 <Button variant="secondary" onClick={handleResetFilters}>
                                     Clear
                                 </Button>
@@ -213,8 +254,8 @@ export default function ReceiptsIndex({ auth, sales, summary, filters, settings 
                         </div>
                     </div>
 
-                    {/* Receipts Table */}
-                    <div className="overflow-x-auto">
+                    {/* Desktop Receipts Table */}
+                    <div className="hidden md:block overflow-x-auto">
                         <table className="saas-table w-full whitespace-nowrap">
                             <thead>
                                 <tr>
@@ -231,25 +272,25 @@ export default function ReceiptsIndex({ auth, sales, summary, filters, settings 
                             <tbody>
                                 {sales?.data?.length > 0 ? sales.data.map(sale => (
                                     <tr key={sale.id}>
-                                        <td className="font-mono font-bold text-slate-900">#{sale.id}</td>
-                                        <td className="text-slate-500">
+                                        <td className="font-mono font-bold text-slate-900 dark:text-white">#{sale.id}</td>
+                                        <td className="text-slate-500 dark:text-slate-400">
                                             {new Date(sale.sale_date || sale.created_at).toLocaleString([], { month: 'short', day: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
                                         </td>
                                         <td>
                                             {sale.customer ? (
                                                 <div>
-                                                    <div className="font-bold text-slate-900">{sale.customer.name}</div>
-                                                    <div className="text-sm text-slate-500">{sale.customer.phone}</div>
+                                                    <div className="font-bold text-slate-900 dark:text-white">{sale.customer.name}</div>
+                                                    <div className="text-sm text-slate-500 dark:text-slate-400">{sale.customer.phone}</div>
                                                 </div>
                                             ) : sale.dealer_item && sale.dealer_item.length > 0 && sale.dealer_item[0].dealer ? (
                                                 <div>
-                                                    <div className="font-bold text-slate-900">{sale.dealer_item[0].dealer.name} <span className="text-[10px] font-bold text-indigo-500 uppercase ml-1">Dealer</span></div>
-                                                    <div className="text-sm text-slate-500">{sale.dealer_item[0].dealer.phone}</div>
+                                                    <div className="font-bold text-slate-900 dark:text-white">{sale.dealer_item[0].dealer.name} <span className="text-[10px] font-bold text-indigo-500 dark:text-indigo-400 uppercase ml-1">Dealer</span></div>
+                                                    <div className="text-sm text-slate-500 dark:text-slate-400">{sale.dealer_item[0].dealer.phone}</div>
                                                 </div>
-                                            ) : <span className="text-slate-500 italic">Walk-in</span>}
+                                            ) : <span className="text-slate-500 dark:text-slate-400 italic">Walk-in</span>}
                                         </td>
                                         <td>
-                                            <div className="text-sm max-w-xs truncate">
+                                            <div className="text-sm max-w-xs truncate text-slate-700 dark:text-slate-300">
                                                 {sale.repair ? (
                                                     <span className="block truncate">
                                                         • Repair: {sale.repair.device_model}
@@ -272,8 +313,11 @@ export default function ReceiptsIndex({ auth, sales, summary, filters, settings 
                                             </div>
                                         </td>
                                         <td>
-                                            <div className="flex items-center gap-2">
+                                            <div className="flex items-center gap-1.5">
                                                 <Badge variant="neutral">{sale.payment_method}</Badge>
+                                                {sale.payment_status === 'Partial' && (
+                                                    <Badge variant="warning">Partial</Badge>
+                                                )}
                                                 {sale.payment_status === 'Refunded' && (
                                                     <Badge variant="danger">Refunded</Badge>
                                                 )}
@@ -287,9 +331,9 @@ export default function ReceiptsIndex({ auth, sales, summary, filters, settings 
                                                 </div>
                                             ) : (
                                                 <div className="flex flex-col items-end">
-                                                    <span className="font-bold text-slate-900">{Number(sale.final_amount).toLocaleString()} UGX</span>
-                                                    {sale.payment_method === 'Layaway' && (
-                                                        <span className="text-[11px] font-bold text-emerald-600">
+                                                    <span className="font-bold text-slate-900 dark:text-white">{Number(sale.final_amount).toLocaleString()} UGX</span>
+                                                    {(sale.payment_method === 'Layaway' || sale.payment_status === 'Partial') && (
+                                                        <span className="text-[11px] font-bold text-emerald-600 dark:text-emerald-400">
                                                             Paid: {Number(sale.layaway_payments?.reduce((s, p) => s + Number(p.amount_paid), 0) || 0).toLocaleString()} UGX
                                                         </span>
                                                     )}
@@ -301,18 +345,18 @@ export default function ReceiptsIndex({ auth, sales, summary, filters, settings 
                                                 </div>
                                             )}
                                         </td>
-                                        <td className="text-slate-500">
+                                        <td className="text-slate-500 dark:text-slate-400">
                                             <div className="flex items-center gap-2">
                                                 {sale.user ? (
-                                                    <div className="w-6 h-6 rounded-full border border-slate-200 overflow-hidden bg-slate-100 flex-shrink-0">
+                                                    <div className="w-6 h-6 rounded-full border border-slate-200 dark:border-slate-700 overflow-hidden bg-slate-100 dark:bg-slate-800 flex-shrink-0">
                                                         <img 
                                                             src={sale.user.profile_photo_url} 
                                                             alt={sale.user.name}
-                                                            className="w-6 h-6 rounded-full object-cover shadow-sm border border-slate-200"
+                                                            className="w-6 h-6 rounded-full object-cover shadow-sm"
                                                         />
                                                     </div>
                                                 ) : (
-                                                    <div className="w-6 h-6 rounded-full bg-slate-100 flex items-center justify-center text-[10px] font-bold text-slate-400">
+                                                    <div className="w-6 h-6 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-[10px] font-bold text-slate-400">
                                                         S
                                                     </div>
                                                 )}
@@ -322,7 +366,8 @@ export default function ReceiptsIndex({ auth, sales, summary, filters, settings 
                                         <td className="text-center">
                                             <div className="flex items-center justify-center gap-2">
                                                 <button 
-                                                    className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors" 
+                                                    type="button"
+                                                    className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 rounded-lg transition-colors" 
                                                     title="Preview"
                                                     onClick={() => openPreview(sale)}
                                                 >
@@ -332,14 +377,15 @@ export default function ReceiptsIndex({ auth, sales, summary, filters, settings 
                                                     href={`/pos/receipt/${sale.id}`} 
                                                     target="_blank" 
                                                     rel="noopener noreferrer"
-                                                    className="p-2 text-slate-400 hover:text-pink-600 hover:bg-pink-50 rounded-lg transition-colors"
+                                                    className="p-2 text-slate-400 hover:text-pink-600 hover:bg-pink-50 dark:hover:bg-pink-900/30 rounded-lg transition-colors"
                                                     title="Thermal Print"
                                                 >
                                                     <Printer size={16} />
                                                 </a>
                                                 {sale.payment_status !== 'Refunded' && (
                                                     <button 
-                                                        className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"
+                                                        type="button"
+                                                        className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-900/30 rounded-lg transition-colors"
                                                         title="Refund"
                                                         onClick={() => openRefundModal(sale)}
                                                     >
@@ -351,7 +397,7 @@ export default function ReceiptsIndex({ auth, sales, summary, filters, settings 
                                     </tr>
                                 )) : (
                                     <tr>
-                                        <td colSpan="8" className="text-center py-12 text-slate-500">
+                                        <td colSpan="8" className="text-center py-12 text-slate-500 dark:text-slate-400">
                                             No receipts found matching your criteria.
                                         </td>
                                     </tr>
@@ -359,17 +405,83 @@ export default function ReceiptsIndex({ auth, sales, summary, filters, settings 
                             </tbody>
                         </table>
                     </div>
+
+                    {/* Mobile Receipts Card List */}
+                    <div className="md:hidden divide-y divide-slate-100 dark:divide-slate-800">
+                        {sales?.data?.length > 0 ? sales.data.map(sale => (
+                            <div key={sale.id} className="p-4 space-y-2.5 bg-white dark:bg-slate-900">
+                                <div className="flex items-start justify-between gap-2">
+                                    <div>
+                                        <div className="flex items-center gap-2">
+                                            <span className="font-mono font-extrabold text-slate-900 dark:text-white text-sm">#{sale.id}</span>
+                                            <Badge variant="neutral">{sale.payment_method}</Badge>
+                                            {sale.payment_status === 'Partial' && <Badge variant="warning">Partial</Badge>}
+                                            {sale.payment_status === 'Refunded' && <Badge variant="danger">Refunded</Badge>}
+                                        </div>
+                                        <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                                            {new Date(sale.sale_date || sale.created_at).toLocaleString([], { month: 'short', day: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                                        </p>
+                                    </div>
+                                    <div className="text-right">
+                                        {sale.payment_status === 'Refunded' ? (
+                                            <span className="text-xs font-bold text-rose-500 line-through">{Number(sale.final_amount).toLocaleString()} UGX</span>
+                                        ) : (
+                                            <span className="font-extrabold text-slate-900 dark:text-white text-sm">{Number(sale.final_amount).toLocaleString()} UGX</span>
+                                        )}
+                                    </div>
+                                </div>
+                                <div className="text-xs text-slate-600 dark:text-slate-300">
+                                    <span className="font-semibold">
+                                        {sale.customer?.name || (sale.dealer_item?.[0]?.dealer?.name ? `${sale.dealer_item[0].dealer.name} (Dealer)` : 'Walk-in')}
+                                    </span>
+                                    {sale.user?.name && <span className="text-slate-400"> • Cashier: {sale.user.name}</span>}
+                                </div>
+                                <div className="flex items-center gap-2 pt-1">
+                                    <button
+                                        type="button"
+                                        onClick={() => openPreview(sale)}
+                                        className="flex-1 py-1.5 rounded-lg text-xs font-bold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 flex items-center justify-center gap-1"
+                                    >
+                                        <Eye size={14} /> Preview
+                                    </button>
+                                    <a
+                                        href={`/pos/receipt/${sale.id}`}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="flex-1 py-1.5 rounded-lg text-xs font-bold bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 flex items-center justify-center gap-1"
+                                    >
+                                        <Printer size={14} /> Print
+                                    </a>
+                                    {sale.payment_status !== 'Refunded' && (
+                                        <button
+                                            type="button"
+                                            onClick={() => openRefundModal(sale)}
+                                            className="px-3 py-1.5 rounded-lg text-xs font-bold bg-rose-50 dark:bg-rose-900/30 text-rose-600 dark:text-rose-400 flex items-center justify-center gap-1"
+                                        >
+                                            <DollarSign size={14} /> Refund
+                                        </button>
+                                    )}
+                                </div>
+                            </div>
+                        )) : (
+                            <div className="p-10 text-center text-sm text-slate-500 dark:text-slate-400">
+                                No receipts found matching your criteria.
+                            </div>
+                        )}
+                    </div>
                     
                     {/* Pagination Component */}
                     {sales.links && sales.links.length > 3 && (
-                        <div className="flex justify-center mt-6 p-6 border-t border-slate-100 bg-white">
-                            <nav className="inline-flex bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden">
+                        <div className="flex justify-center p-6 border-t border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900">
+                            <nav className="inline-flex flex-wrap bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden">
                                 {sales.links.map((link, k) => (
                                     <Link 
                                         key={k}
                                         href={link.url || '#'}
-                                        className={`px-4 py-2 text-sm font-medium border-r border-slate-100 last:border-0 ${
-                                            link.active ? 'bg-indigo-50 text-indigo-600' : 'text-slate-600 hover:bg-slate-50'
+                                        preserveScroll
+                                        preserveState
+                                        className={`px-4 py-2 text-sm font-medium border-r border-slate-200 dark:border-slate-700 last:border-0 ${
+                                            link.active ? 'bg-indigo-50 dark:bg-indigo-900/40 text-indigo-600 dark:text-indigo-300 font-bold' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700'
                                         } ${link.url === null ? 'opacity-50 cursor-not-allowed pointer-events-none' : ''}`}
                                         dangerouslySetInnerHTML={{ __html: link.label }}
                                     />
@@ -635,20 +747,20 @@ export default function ReceiptsIndex({ auth, sales, summary, filters, settings 
 
             {/* Direct Receipt Refund Modal */}
             {showRefundModal && selectedRefundSale && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm animate-fade-in">
-                    <div className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden">
-                        <div className="px-6 py-4 border-b border-rose-100 bg-rose-50 flex items-center justify-between">
-                            <h3 className="font-bold text-rose-700 flex items-center gap-2">
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fade-in">
+                    <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-xl w-full max-w-md overflow-hidden">
+                        <div className="px-6 py-4 border-b border-rose-100 dark:border-rose-900/60 bg-rose-50 dark:bg-rose-950/40 flex items-center justify-between">
+                            <h3 className="font-bold text-rose-700 dark:text-rose-300 flex items-center gap-2">
                                 <DollarSign size={20} /> Process Refund #{selectedRefundSale.id}
                             </h3>
-                            <button onClick={() => setShowRefundModal(false)} className="text-rose-400 hover:text-rose-600 transition-colors">
-                                &times;
+                            <button type="button" onClick={() => setShowRefundModal(false)} className="text-rose-400 hover:text-rose-600 dark:hover:text-rose-200 transition-colors">
+                                <X size={18} />
                             </button>
                         </div>
                         <form onSubmit={handleRefundSubmit}>
                             <div className="p-6">
                                 {refundForm.errors.drawer_validation && (
-                                    <div className="bg-rose-50 text-rose-800 p-4 rounded-xl text-sm mb-6 border border-rose-100 flex items-start gap-2">
+                                    <div className="bg-rose-50 dark:bg-rose-950/50 text-rose-800 dark:text-rose-200 p-4 rounded-xl text-sm mb-6 border border-rose-200 dark:border-rose-800 flex items-start gap-2">
                                         <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="mt-0.5 flex-shrink-0">
                                             <path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/>
                                             <path d="M12 9v4"/>
@@ -660,8 +772,14 @@ export default function ReceiptsIndex({ auth, sales, summary, filters, settings 
                                         </div>
                                     </div>
                                 )}
-                                <div className="bg-amber-50 text-amber-800 p-4 rounded-xl text-sm mb-6 border border-amber-100">
-                                    <strong>Refund Amount:</strong> {(selectedRefundSale.payment_method === 'Layaway' ? Number(selectedRefundSale.amount_paid || 0) : Number(selectedRefundSale.final_amount)).toLocaleString()} UGX<br/><br/>
+                                <div className="bg-amber-50 dark:bg-amber-950/40 text-amber-800 dark:text-amber-200 p-4 rounded-xl text-sm mb-6 border border-amber-200 dark:border-amber-800">
+                                    <strong>Refund Amount:</strong> {getRefundableAmount(selectedRefundSale).toLocaleString()} UGX
+                                    {selectedRefundSale.payment_status === 'Partial' && (
+                                        <span className="block text-xs mt-1 opacity-80">
+                                            (Total installments collected on partial layaway)
+                                        </span>
+                                    )}
+                                    <br/>
                                     This will mark receipt <strong>#{selectedRefundSale.id}</strong> as Refunded and adjust Net Revenue metrics accordingly.
                                 </div>
 
@@ -703,7 +821,7 @@ export default function ReceiptsIndex({ auth, sales, summary, filters, settings 
                                     </div>
                                 </div>
                             </div>
-                            <div className="px-6 py-4 border-t border-slate-100 bg-slate-50 flex gap-3 justify-end">
+                            <div className="px-6 py-4 border-t border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/50 flex gap-3 justify-end">
                                 <Button variant="secondary" type="button" onClick={() => setShowRefundModal(false)}>Cancel</Button>
                                 <Button variant="danger" type="submit" isLoading={refundForm.processing}>
                                     Confirm Refund

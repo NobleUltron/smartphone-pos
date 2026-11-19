@@ -14,7 +14,7 @@ class ReceiptHistoryController extends Controller
         $query = Sale::with(['saleItems.deviceImei.product.brand', 'saleItems.product.brand', 'customer', 'user', 'layawayPayments', 'repair', 'dealerItem.dealer'])
             ->orderBy('created_at', 'desc');
 
-        // Search Filter (Receipt #, Customer Name, Phone, Cashier)
+        // Search Filter (Receipt #, Customer Name/Phone, Cashier, Device IMEI, Dealer Name/Phone)
         if ($request->filled('search')) {
             $rawSearch = trim($request->input('search'));
             $search = '%' . strtolower($rawSearch) . '%';
@@ -22,13 +22,18 @@ class ReceiptHistoryController extends Controller
 
             $query->where(function ($q) use ($search, $cleanId) {
                 if (!empty($cleanId)) {
-                    $q->orWhere('id', $cleanId);
+                    $q->orWhere('id', (int) $cleanId);
                 }
                 $q->orWhereHas('customer', function ($cq) use ($search) {
                     $cq->whereRaw('LOWER(name) LIKE ?', [$search])
                        ->orWhereRaw('LOWER(phone) LIKE ?', [$search]);
                 })->orWhereHas('user', function ($uq) use ($search) {
                     $uq->whereRaw('LOWER(name) LIKE ?', [$search]);
+                })->orWhereHas('saleItems.deviceImei', function ($iq) use ($search) {
+                    $iq->whereRaw('LOWER(imei) LIKE ?', [$search]);
+                })->orWhereHas('dealerItem.dealer', function ($dq) use ($search) {
+                    $dq->whereRaw('LOWER(name) LIKE ?', [$search])
+                       ->orWhereRaw('LOWER(phone) LIKE ?', [$search]);
                 });
             });
         }
@@ -38,20 +43,31 @@ class ReceiptHistoryController extends Controller
             $query->where('payment_method', $request->input('payment_method'));
         }
 
-        // Date Filter
-        if ($request->filled('date_filter')) {
+        // Payment Status Filter
+        if ($request->filled('payment_status') && $request->input('payment_status') !== 'all') {
+            $query->where('payment_status', $request->input('payment_status'));
+        }
+
+        // Date Filter (COALESCE handles sales where sale_date is NULL)
+        if ($request->filled('date_filter') && $request->input('date_filter') !== 'all') {
             switch ($request->input('date_filter')) {
                 case 'today':
-                    $query->whereDate('sale_date', Carbon::today());
+                    $query->whereRaw('DATE(COALESCE(sale_date, created_at)) = ?', [Carbon::today()->toDateString()]);
                     break;
                 case 'yesterday':
-                    $query->whereDate('sale_date', Carbon::yesterday());
+                    $query->whereRaw('DATE(COALESCE(sale_date, created_at)) = ?', [Carbon::yesterday()->toDateString()]);
                     break;
                 case 'this_week':
-                    $query->whereBetween('sale_date', [Carbon::now()->startOfWeek(), Carbon::now()->endOfWeek()]);
+                    $query->whereRaw('COALESCE(sale_date, created_at) BETWEEN ? AND ?', [
+                        Carbon::now()->startOfWeek()->toDateTimeString(),
+                        Carbon::now()->endOfWeek()->toDateTimeString(),
+                    ]);
                     break;
                 case 'this_month':
-                    $query->whereMonth('sale_date', Carbon::now()->month)->whereYear('sale_date', Carbon::now()->year);
+                    $query->whereRaw('COALESCE(sale_date, created_at) BETWEEN ? AND ?', [
+                        Carbon::now()->startOfMonth()->toDateTimeString(),
+                        Carbon::now()->endOfMonth()->toDateTimeString(),
+                    ]);
                     break;
             }
         }
@@ -59,11 +75,12 @@ class ReceiptHistoryController extends Controller
         // Clone query for calculating overall filtered summary stats
         $summaryQuery = clone $query;
         $totalReceipts = $summaryQuery->count();
-        $totalRevenue = (clone $summaryQuery)->where('payment_status', '!=', 'Refunded')->sum('final_amount');
-        $totalRefunded = (clone $summaryQuery)->where('payment_status', 'Refunded')->sum('final_amount');
+        $totalRevenue = (float) (clone $summaryQuery)->where('payment_status', '!=', 'Refunded')->sum('final_amount');
+        $totalRefunded = (float) (clone $summaryQuery)->where('payment_status', 'Refunded')->sum('final_amount');
         $refundedCount = (clone $summaryQuery)->where('payment_status', 'Refunded')->count();
-        $totalDiscounts = $summaryQuery->sum('discount');
-        $avgSaleValue = ($totalReceipts - $refundedCount) > 0 ? $totalRevenue / ($totalReceipts - $refundedCount) : 0;
+        $totalDiscounts = (float) (clone $summaryQuery)->where('payment_status', '!=', 'Refunded')->sum('discount');
+        $validCount = max(0, $totalReceipts - $refundedCount);
+        $avgSaleValue = $validCount > 0 ? round($totalRevenue / $validCount) : 0;
 
         $sales = $query->paginate(10)->withQueryString();
 
@@ -88,7 +105,7 @@ class ReceiptHistoryController extends Controller
                 'total_discounts' => $totalDiscounts,
                 'avg_sale_value' => $avgSaleValue,
             ],
-            'filters' => $request->only(['search', 'payment_method', 'date_filter']),
+            'filters' => $request->only(['search', 'payment_method', 'payment_status', 'date_filter']),
         ]);
     }
 
@@ -100,43 +117,47 @@ class ReceiptHistoryController extends Controller
             'notes' => 'nullable|string',
         ]);
 
-        if ($sale->payment_status === 'Refunded') {
-            return redirect()->back()->with('error', "Receipt #{$sale->id} has already been refunded.");
-        }
+        \Illuminate\Support\Facades\DB::transaction(function () use ($sale, $validated) {
+            $lockedSale = Sale::where('id', $sale->id)->lockForUpdate()->firstOrFail();
 
-        // 1. Calculate actual amount to refund BEFORE updating the status
-        // (if layaway, only refund what was paid)
-        $refundAmount = $sale->payment_status === 'Partial'
-            ? (float) $sale->layawayPayments()->sum('amount_paid')
-            : (float) $sale->final_amount;
-
-        $defaultMethod = ($sale->payment_method && $sale->payment_method !== 'Layaway') ? $sale->payment_method : 'Cash';
-        $refundMethod = $validated['refund_method'] ?? $defaultMethod;
-
-        // Strict Drawer Validation only when refunding physical Cash from Till
-        $activeDrawer = null;
-        if ($refundAmount > 0 && $refundMethod === 'Cash') {
-            $activeDrawer = \App\Models\CashDrawer::where('user_id', auth()->id())
-                ->where('status', 'open')
-                ->first();
-
-            if (!$activeDrawer) {
+            if ($lockedSale->payment_status === 'Refunded') {
                 throw \Illuminate\Validation\ValidationException::withMessages([
-                    'drawer_validation' => "You must have an open shift (active cash drawer) to process a Cash refund."
+                    'drawer_validation' => "Receipt #{$lockedSale->id} has already been refunded."
                 ]);
             }
 
-            $expectedCash = $activeDrawer->calculateExpectedCash();
-            if ($expectedCash < $refundAmount) {
-                throw \Illuminate\Validation\ValidationException::withMessages([
-                    'drawer_validation' => "Strict Drawer Validation Failed: Your cash drawer does not have enough expected cash (" . number_format($expectedCash) . " UGX) to process a refund of " . number_format($refundAmount) . " UGX. Please request a 'Cash In' float addition from management first."
-                ]);
-            }
-        }
+            // 1. Calculate actual amount to refund BEFORE updating the status
+            // (if layaway / partial, only refund what was actually paid)
+            $refundAmount = $lockedSale->payment_status === 'Partial'
+                ? (float) $lockedSale->layawayPayments()->sum('amount_paid')
+                : (float) $lockedSale->final_amount;
 
-        \Illuminate\Support\Facades\DB::transaction(function () use ($sale, $validated, $refundAmount, $refundMethod, $activeDrawer) {
+            $defaultMethod = ($lockedSale->payment_method && $lockedSale->payment_method !== 'Layaway') ? $lockedSale->payment_method : 'Cash';
+            $refundMethod = $validated['refund_method'] ?? $defaultMethod;
+
+            // Strict Drawer Validation only when refunding physical Cash from Till
+            $activeDrawer = null;
+            if ($refundAmount > 0 && $refundMethod === 'Cash') {
+                $activeDrawer = \App\Models\CashDrawer::where('user_id', auth()->id())
+                    ->where('status', 'open')
+                    ->first();
+
+                if (!$activeDrawer) {
+                    throw \Illuminate\Validation\ValidationException::withMessages([
+                        'drawer_validation' => "You must have an open shift (active cash drawer) to process a Cash refund."
+                    ]);
+                }
+
+                $expectedCash = $activeDrawer->calculateExpectedCash();
+                if ($expectedCash < $refundAmount) {
+                    throw \Illuminate\Validation\ValidationException::withMessages([
+                        'drawer_validation' => "Strict Drawer Validation Failed: Your cash drawer does not have enough expected cash (" . number_format($expectedCash) . " UGX) to process a refund of " . number_format($refundAmount) . " UGX. Please request a 'Cash In' float addition from management first."
+                    ]);
+                }
+            }
+
             // 2. Mark sale status as Refunded
-            $sale->update(['payment_status' => 'Refunded']);
+            $lockedSale->update(['payment_status' => 'Refunded']);
 
             // 3. Log Expense & Treasury outflow on the chosen refund channel
             if ($refundAmount > 0) {
@@ -144,7 +165,7 @@ class ReceiptHistoryController extends Controller
                     ? \App\Services\TreasuryService::getTillAccount()
                     : \App\Models\PaymentAccount::getForMethod($refundMethod);
 
-                $isCurrentShift = $activeDrawer && $sale->cash_drawer_id === $activeDrawer->id;
+                $isCurrentShift = $activeDrawer && $lockedSale->cash_drawer_id === $activeDrawer->id;
                 $refundCategory = $refundMethod === 'Cash'
                     ? ($isCurrentShift ? 'Refund' : 'Refund (Past Shift)')
                     : 'Refund';
@@ -156,7 +177,7 @@ class ReceiptHistoryController extends Controller
                     'category' => $refundCategory,
                     'amount' => $refundAmount,
                     'expense_date' => now(),
-                    'description' => "Receipt Refund ({$refundMethod}) for Sale #{$sale->id}" . (!empty($validated['notes']) ? " - " . $validated['notes'] : ''),
+                    'description' => "Receipt Refund ({$refundMethod}) for Sale #{$lockedSale->id}" . (!empty($validated['notes']) ? " - " . $validated['notes'] : ''),
                     'recorded_by' => auth()->id(),
                 ]);
 
@@ -164,15 +185,15 @@ class ReceiptHistoryController extends Controller
                     $refundAccount,
                     floatval($refundAmount),
                     'Refund',
-                    $sale,
-                    "POS Refund ({$refundMethod}) for Sale #{$sale->id}" . (!empty($validated['notes']) ? " - {$validated['notes']}" : ''),
-                    'REF-' . $sale->id,
+                    $lockedSale,
+                    "POS Refund ({$refundMethod}) for Sale #{$lockedSale->id}" . (!empty($validated['notes']) ? " - {$validated['notes']}" : ''),
+                    'REF-' . $lockedSale->id,
                     auth()->id()
                 );
             }
 
             // 4. Update device inventory statuses & revert inward dealer consignments
-            $items = $sale->saleItems()->with(['deviceImei', 'product'])->get();
+            $items = $lockedSale->saleItems()->with(['deviceImei', 'product'])->get();
             $targetStatus = $validated['restock_action'] === 'restock' ? 'In Stock' : 'Defective';
 
             foreach ($items as $item) {
@@ -182,7 +203,7 @@ class ReceiptHistoryController extends Controller
                     // Revert linked inward dealer consignment item if present
                     $dealerItem = \App\Models\DealerItem::where('direction', 'inward')
                         ->where('device_imei_id', $item->device_imei_id)
-                        ->where('sale_id', $sale->id)
+                        ->where('sale_id', $lockedSale->id)
                         ->first();
                     if ($dealerItem) {
                         $newQtySold = max(0, (int) $dealerItem->quantity_sold - 1);
@@ -198,7 +219,7 @@ class ReceiptHistoryController extends Controller
                     \App\Models\WarrantyClaim::create([
                         'sale_item_id' => $item->id,
                         'device_imei_id' => $item->device_imei_id,
-                        'customer_id' => $sale->customer_id,
+                        'customer_id' => $lockedSale->customer_id,
                         'claim_type' => 'Refund',
                         'issue_description' => $validated['notes'] ?? 'Direct Receipt Refund processed by cashier/manager.',
                         'status' => 'Completed',
@@ -214,7 +235,7 @@ class ReceiptHistoryController extends Controller
                     // Revert inward bulk dealer consignment item linked to this sale
                     $dealerItems = \App\Models\DealerItem::where('direction', 'inward')
                         ->where('product_id', $item->product_id)
-                        ->where('sale_id', $sale->id)
+                        ->where('sale_id', $lockedSale->id)
                         ->where('quantity_sold', '>', 0)
                         ->get();
                     $remainingToRevert = $qtyToRestore;
@@ -232,7 +253,23 @@ class ReceiptHistoryController extends Controller
                     }
                 }
             }
+
+            \App\Models\ActivityLog::log(
+                'receipt_refund',
+                'Receipts',
+                "Refunded Receipt #{$lockedSale->id} for UGX " . number_format($refundAmount) . " via {$refundMethod} (Items: {$targetStatus})",
+                [
+                    'sale_id' => $lockedSale->id,
+                    'refund_amount' => $refundAmount,
+                    'refund_method' => $refundMethod,
+                    'restock_action' => $validated['restock_action'],
+                    'notes' => $validated['notes'] ?? null,
+                ]
+            );
         });
+
+        \Illuminate\Support\Facades\Cache::forget('global_low_stock_count');
+        \Illuminate\Support\Facades\Cache::forget('inventory_stats');
 
         return redirect()->back()->with('success', "Receipt #{$sale->id} has been refunded successfully.");
     }
