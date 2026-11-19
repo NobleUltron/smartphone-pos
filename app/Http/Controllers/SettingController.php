@@ -151,11 +151,12 @@ class SettingController extends Controller
 
         if ($request->hasFile('store_logo')) {
             $request->validate([
-                'store_logo' => 'image|mimes:jpeg,png,jpg,webp,svg|max:10240',
+                'store_logo' => 'image|mimes:jpeg,png,jpg,webp|max:2048',
             ]);
             $file = $request->file('store_logo');
-            $path = $file->store('logos', 'public');
-            Setting::set('store_logo', '/storage/' . $path);
+            $mime = $file->getMimeType() ?: 'image/png';
+            $base64 = base64_encode(file_get_contents($file->getRealPath()));
+            Setting::set('store_logo', "data:{$mime};base64,{$base64}");
         }
         unset($validated['store_logo']);
 

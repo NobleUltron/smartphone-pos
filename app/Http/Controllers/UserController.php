@@ -94,6 +94,13 @@ class UserController extends Controller
             'next_of_kin_phone' => $validated['next_of_kin_phone'] ?? null,
         ]);
 
+        \App\Models\ActivityLog::log(
+            'staff_created',
+            'Users',
+            "Created staff account for {$user->name} ({$user->role})",
+            ['staff_id' => $user->id, 'role' => $user->role]
+        );
+
         return response()->json(['success' => true, 'user' => $user]);
     }
 
@@ -116,6 +123,15 @@ class UserController extends Controller
             'password' => ['nullable', 'confirmed', Rules\Password::defaults()],
         ]);
 
+        if ((int) $user->id === (int) auth()->id()) {
+            if ($validated['role'] !== 'admin') {
+                return response()->json(['message' => 'You cannot demote your own administrator role.'], 422);
+            }
+            if (($validated['status'] ?? 'active') !== 'active') {
+                return response()->json(['message' => 'You cannot deactivate your own administrator account.'], 422);
+            }
+        }
+
         $updateData = [
             'name' => $validated['name'],
             'email' => $validated['email'],
@@ -137,27 +153,47 @@ class UserController extends Controller
 
         $user->update($updateData);
 
+        \App\Models\ActivityLog::log(
+            'staff_updated',
+            'Users',
+            "Updated staff account for {$user->name} (Role: {$user->role}, Status: {$user->status})",
+            ['staff_id' => $user->id, 'role' => $user->role, 'status' => $user->status]
+        );
+
         return response()->json(['success' => true, 'user' => $user]);
     }
 
     public function destroy(User $user)
     {
         $this->authorizeAdmin();
-        if ($user->id === auth()->id()) {
+        if ((int) $user->id === (int) auth()->id()) {
             return response()->json(['error' => 'You cannot delete yourself.'], 403);
         }
 
         $hasHistory = \App\Models\Sale::where('user_id', $user->id)->exists()
             || \App\Models\CashDrawer::where('user_id', $user->id)->exists()
-            || \App\Models\Repair::where('user_id', $user->id)->exists();
+            || \App\Models\Repair::where('user_id', $user->id)->exists()
+            || \App\Models\Expense::where('user_id', $user->id)->exists()
+            || \App\Models\Invoice::where('user_id', $user->id)->exists()
+            || \App\Models\Quotation::where('user_id', $user->id)->exists();
 
         if ($hasHistory) {
             return response()->json([
-                'error' => 'Cannot delete staff member with recorded sales, repairs, or cash drawer shifts. Suspend the account instead.'
+                'error' => 'Cannot delete staff member with recorded sales, repairs, expenses, invoices, or cash drawer shifts. Suspend the account instead.'
             ], 422);
         }
 
+        $name = $user->name;
+        $id = $user->id;
         $user->delete();
+
+        \App\Models\ActivityLog::log(
+            'staff_deleted',
+            'Users',
+            "Deleted staff account {$name}",
+            ['staff_id' => $id]
+        );
+
         return response()->json(['success' => true]);
     }
 }

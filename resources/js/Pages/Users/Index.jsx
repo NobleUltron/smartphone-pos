@@ -1,8 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import toast from 'react-hot-toast';
 import { Head, Link, router } from '@inertiajs/react';
 import axios from 'axios';
-import { Users, Pencil, Trash2, Search, Plus, ShieldCheck, Mail, Lock, UserSquare, Wrench, RotateCcw, Filter } from 'lucide-react';
+import { Users, Pencil, Trash2, Search, Plus, ShieldCheck, Mail, Lock, UserSquare, Wrench, RotateCcw, AlertTriangle, X } from 'lucide-react';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import PageHeader from '@/Components/SaaS/PageHeader';
 import Card from '@/Components/SaaS/Card';
@@ -13,6 +13,8 @@ import Modal from '@/Components/Modal';
 export default function UsersIndex({ auth, users = {}, filters = {}, summary }) {
     const [showModal, setShowModal] = useState(false);
     const [isEditing, setIsEditing] = useState(false);
+    const [deletingUser, setDeletingUser] = useState(null);
+    const [isDeleting, setIsDeleting] = useState(false);
     const [formData, setFormData] = useState({ 
         id: null, name: '', email: '', role: 'cashier', 
         phone: '', address: '', emergency_contact_name: '', emergency_contact_phone: '',
@@ -25,11 +27,11 @@ export default function UsersIndex({ auth, users = {}, filters = {}, summary }) 
     const [searchQuery, setSearchQuery] = useState(filters.search || '');
     const [roleFilter, setRoleFilter] = useState(filters.role || 'all');
     const [statusFilter, setStatusFilter] = useState(filters.status || 'all');
-    const [isInitialRender, setIsInitialRender] = useState(true);
+    const isInitialRender = useRef(true);
 
     useEffect(() => {
-        if (isInitialRender) {
-            setIsInitialRender(false);
+        if (isInitialRender.current) {
+            isInitialRender.current = false;
             return;
         }
 
@@ -39,7 +41,7 @@ export default function UsersIndex({ auth, users = {}, filters = {}, summary }) 
             if (roleFilter !== 'all') params.role = roleFilter;
             if (statusFilter !== 'all') params.status = statusFilter;
 
-            router.get('/users', params, { preserveState: true, replace: true });
+            router.get('/users', params, { preserveState: true, preserveScroll: true, replace: true });
         }, 300);
 
         return () => clearTimeout(timer);
@@ -49,7 +51,7 @@ export default function UsersIndex({ auth, users = {}, filters = {}, summary }) 
         setSearchQuery('');
         setRoleFilter('all');
         setStatusFilter('all');
-        router.get('/users', {}, { preserveState: true, replace: true });
+        router.get('/users', {}, { preserveState: true, preserveScroll: true, replace: true });
     };
 
     const handleSubmit = async (e) => {
@@ -68,9 +70,10 @@ export default function UsersIndex({ auth, users = {}, filters = {}, summary }) 
                 toast.success("Staff account created successfully");
             }
             setShowModal(false);
-            router.reload();
+            router.reload({ preserveScroll: true });
         } catch (error) {
-            toast.error(error.response?.data?.message || "Error saving user");
+            const firstErr = error.response?.data?.errors ? Object.values(error.response.data.errors)[0]?.[0] : null;
+            toast.error(firstErr || error.response?.data?.message || "Error saving user");
         }
         setLoading(false);
     };
@@ -97,16 +100,22 @@ export default function UsersIndex({ auth, users = {}, filters = {}, summary }) 
         setShowModal(true);
     };
 
-    const handleDelete = async (user) => {
-        if (!confirm(`Are you sure you want to delete ${user.name}?`)) return;
+    const confirmDelete = async () => {
+        if (!deletingUser) return;
+        setIsDeleting(true);
         try {
-            await axios.delete(`/api/users/${user.id}`);
+            await axios.delete(`/api/users/${deletingUser.id}`);
             toast.success("Staff account deleted successfully");
-            router.reload();
+            setDeletingUser(null);
+            router.reload({ preserveScroll: true });
         } catch (error) {
             toast.error(error.response?.data?.error || "Error deleting user");
+        } finally {
+            setIsDeleting(false);
         }
     };
+
+    const isEditingSelf = isEditing && Number(formData.id) === Number(auth?.user?.id);
 
     const getRoleBadge = (role) => {
         switch (role) {
@@ -146,49 +155,61 @@ export default function UsersIndex({ auth, users = {}, filters = {}, summary }) 
 
             {summary && (
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
-                    <Card className="animate-slide-up relative overflow-hidden flex flex-col justify-between" style={{ animationDelay: '0.0s' }}>
+                    <Card
+                        className="animate-slide-up relative overflow-hidden flex flex-col justify-between cursor-pointer hover:ring-2 hover:ring-blue-400/50 transition-all"
+                        style={{ animationDelay: '0.0s' }}
+                        onClick={() => setRoleFilter('all')}
+                    >
                         <div className="flex justify-between items-start mb-4">
                             <div>
-                                <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Total Staff</p>
+                                <p className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">Total Staff</p>
                                 <h3 className="text-3xl font-black text-slate-900 dark:text-white">{summary.total_staff || 0}</h3>
                             </div>
                             <div className="w-12 h-12 rounded-2xl bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 flex items-center justify-center">
                                 <Users size={24} />
                             </div>
                         </div>
-                        <div className="flex items-center gap-2 text-sm text-slate-500">
+                        <div className="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
                             <Badge variant="primary">System</Badge>
                             <span>Users</span>
                         </div>
                     </Card>
 
-                    <Card className="animate-slide-up relative overflow-hidden flex flex-col justify-between" style={{ animationDelay: '0.1s' }}>
+                    <Card
+                        className={`animate-slide-up relative overflow-hidden flex flex-col justify-between cursor-pointer transition-all ${roleFilter === 'cashier' ? 'ring-2 ring-emerald-500' : 'hover:ring-2 hover:ring-emerald-400/50'}`}
+                        style={{ animationDelay: '0.1s' }}
+                        onClick={() => setRoleFilter(roleFilter === 'cashier' ? 'all' : 'cashier')}
+                    >
                         <div className="flex justify-between items-start mb-4">
                             <div>
-                                <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Cashiers</p>
+                                <p className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">Cashiers</p>
                                 <h3 className="text-3xl font-black text-slate-900 dark:text-white">{summary.cashiers || 0}</h3>
                             </div>
                             <div className="w-12 h-12 rounded-2xl bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 flex items-center justify-center">
                                 <UserSquare size={24} />
                             </div>
                         </div>
-                        <div className="flex items-center gap-2 text-sm text-slate-500">
+                        <div className="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
                             <Badge variant="success">Active</Badge>
                             <span>Point of Sale</span>
                         </div>
                     </Card>
 
-                    <Card className="animate-slide-up relative overflow-hidden flex flex-col justify-between" style={{ animationDelay: '0.2s' }}>
+                    <Card
+                        className={`animate-slide-up relative overflow-hidden flex flex-col justify-between cursor-pointer transition-all ${roleFilter === 'technician' ? 'ring-2 ring-amber-500' : 'hover:ring-2 hover:ring-amber-400/50'}`}
+                        style={{ animationDelay: '0.2s' }}
+                        onClick={() => setRoleFilter(roleFilter === 'technician' ? 'all' : 'technician')}
+                    >
                         <div className="flex justify-between items-start mb-4">
                             <div>
-                                <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Technicians</p>
+                                <p className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">Technicians</p>
                                 <h3 className="text-3xl font-black text-slate-900 dark:text-white">{summary.technicians || 0}</h3>
                             </div>
                             <div className="w-12 h-12 rounded-2xl bg-amber-50 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400 flex items-center justify-center">
                                 <Wrench size={24} />
                             </div>
                         </div>
-                        <div className="flex items-center gap-2 text-sm text-slate-500">
+                        <div className="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
                             <Badge variant="warning">Repairs</Badge>
                             <span>Workshop</span>
                         </div>
@@ -257,7 +278,8 @@ export default function UsersIndex({ auth, users = {}, filters = {}, summary }) 
                     </div>
                 </div>
 
-                <div className="overflow-x-auto">
+                {/* Desktop Table */}
+                <div className="hidden md:block overflow-x-auto">
                     <table className="saas-table w-full whitespace-nowrap">
                         <thead>
                             <tr>
@@ -282,7 +304,7 @@ export default function UsersIndex({ auth, users = {}, filters = {}, summary }) 
                                             </div>
                                             <div>
                                                 <div className="font-bold text-slate-900 dark:text-white">{user.name}</div>
-                                                <div className="text-xs text-slate-500">ID: #{user.id}</div>
+                                                <div className="text-xs text-slate-500 dark:text-slate-400">ID: #{user.id}</div>
                                             </div>
                                         </div>
                                     </td>
@@ -319,7 +341,7 @@ export default function UsersIndex({ auth, users = {}, filters = {}, summary }) 
                                                 <Pencil size={14} /> Edit
                                             </Button>
                                             {auth?.user?.id !== user.id && (
-                                                <Button variant="danger" onClick={() => handleDelete(user)} className="!px-3 !py-1.5 text-sm">
+                                                <Button variant="danger" onClick={() => setDeletingUser(user)} className="!px-3 !py-1.5 text-sm">
                                                     <Trash2 size={14} />
                                                 </Button>
                                             )}
@@ -341,14 +363,63 @@ export default function UsersIndex({ auth, users = {}, filters = {}, summary }) 
                     </table>
                 </div>
 
+                {/* Mobile Staff Cards */}
+                <div className="md:hidden divide-y divide-slate-100 dark:divide-slate-800">
+                    {users.data && users.data.map(user => (
+                        <div key={user.id} className="p-4 space-y-3 bg-white dark:bg-slate-900">
+                            <div className="flex items-start justify-between gap-2">
+                                <div className="flex items-center gap-3 min-w-0">
+                                    <div className="w-10 h-10 rounded-full border border-slate-200 dark:border-slate-700 overflow-hidden bg-slate-100 dark:bg-slate-800 shrink-0">
+                                        <img src={user.profile_photo_url} alt={user.name} className="w-full h-full object-cover" />
+                                    </div>
+                                    <div className="min-w-0">
+                                        <p className="font-bold text-slate-900 dark:text-white text-sm truncate">{user.name}</p>
+                                        <p className="text-xs text-slate-500 dark:text-slate-400 truncate">{user.email}</p>
+                                        {user.phone && <p className="text-xs text-slate-500 dark:text-slate-400 font-mono">{user.phone}</p>}
+                                    </div>
+                                </div>
+                                <div className="flex flex-col items-end gap-1 shrink-0">
+                                    {getRoleBadge(user.role)}
+                                    <Badge variant={user.status === 'active' ? 'success' : 'danger'}>
+                                        {user.status === 'active' ? 'Active' : 'Inactive'}
+                                    </Badge>
+                                </div>
+                            </div>
+                            <div className="flex items-center gap-2">
+                                <button
+                                    type="button"
+                                    onClick={() => handleEdit(user)}
+                                    className="flex-1 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 text-xs font-bold flex items-center justify-center gap-1.5"
+                                >
+                                    <Pencil size={13} /> Edit Staff
+                                </button>
+                                {auth?.user?.id !== user.id && (
+                                    <button
+                                        type="button"
+                                        onClick={() => setDeletingUser(user)}
+                                        className="px-3.5 py-1.5 rounded-lg bg-rose-50 dark:bg-rose-900/30 text-rose-600 dark:text-rose-400 text-xs font-bold flex items-center justify-center"
+                                    >
+                                        <Trash2 size={14} />
+                                    </button>
+                                )}
+                            </div>
+                        </div>
+                    ))}
+                    {users.data && users.data.length === 0 && (
+                        <div className="py-10 text-center text-sm text-slate-400">No users found matching your search.</div>
+                    )}
+                </div>
+
                 {users.links && users.links.length > 3 && (
-                    <div className="flex justify-center mt-6 p-6 border-t border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900">
-                        <nav className="inline-flex bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-100 dark:border-slate-700 overflow-hidden">
+                    <div className="flex justify-center p-5 border-t border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900">
+                        <nav className="inline-flex flex-wrap bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden">
                             {users.links.map((link, k) => (
                                 <Link 
                                     key={k}
                                     href={link.url || '#'}
-                                    className={`px-4 py-2 text-sm font-medium border-r border-slate-100 dark:border-slate-700 last:border-0 ${
+                                    preserveScroll
+                                    preserveState
+                                    className={`px-4 py-2 text-sm font-medium border-r border-slate-200 dark:border-slate-700 last:border-0 ${
                                         link.active ? 'bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 font-bold' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700'
                                     } ${link.url === null ? 'opacity-50 cursor-not-allowed pointer-events-none' : ''}`}
                                     dangerouslySetInnerHTML={{ __html: link.label }}
@@ -361,7 +432,7 @@ export default function UsersIndex({ auth, users = {}, filters = {}, summary }) 
 
             {/* Add/Edit Modal */}
             <Modal show={showModal} onClose={() => setShowModal(false)} maxWidth="4xl">
-                <div className="p-6 overflow-y-auto max-h-[90vh]">
+                <div className="p-6 overflow-y-auto max-h-[90vh] dark:bg-slate-900">
                     <div className="flex items-center justify-between mb-6">
                         <h2 className="text-xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
                             <div className="w-10 h-10 rounded-xl bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 flex items-center justify-center">
@@ -369,15 +440,18 @@ export default function UsersIndex({ auth, users = {}, filters = {}, summary }) 
                             </div>
                             {isEditing ? 'Edit Staff Member' : 'Add New Staff'}
                         </h2>
+                        <button type="button" onClick={() => setShowModal(false)} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">
+                            <X size={20} />
+                        </button>
                     </div>
 
                     <form id="userForm" onSubmit={handleSubmit} className="space-y-6">
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                             {/* Column 1: Personal Details */}
                             <div className="space-y-4">
-                                <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Personal Details</h4>
+                                <h4 className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">Personal Details</h4>
                                 <div>
-                                    <label className="block text-sm font-semibold text-slate-700 mb-1">Full Name</label>
+                                    <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">Full Name</label>
                                     <input 
                                         type="text" 
                                         className="saas-input w-full" 
@@ -387,7 +461,7 @@ export default function UsersIndex({ auth, users = {}, filters = {}, summary }) 
                                     />
                                 </div>
                                 <div>
-                                    <label className="block text-sm font-semibold text-slate-700 mb-1">Email Address</label>
+                                    <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">Email Address</label>
                                     <input 
                                         type="email" 
                                         className="saas-input w-full" 
@@ -397,7 +471,7 @@ export default function UsersIndex({ auth, users = {}, filters = {}, summary }) 
                                     />
                                 </div>
                                 <div>
-                                    <label className="block text-sm font-semibold text-slate-700 mb-1">Phone Number</label>
+                                    <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">Phone Number</label>
                                     <input 
                                         type="text" 
                                         className="saas-input w-full" 
@@ -407,7 +481,7 @@ export default function UsersIndex({ auth, users = {}, filters = {}, summary }) 
                                     />
                                 </div>
                                 <div>
-                                    <label className="block text-sm font-semibold text-slate-700 mb-1">National ID Number (NIN)</label>
+                                    <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">National ID Number (NIN)</label>
                                     <input 
                                         type="text" 
                                         className="saas-input w-full" 
@@ -416,7 +490,7 @@ export default function UsersIndex({ auth, users = {}, filters = {}, summary }) 
                                     />
                                 </div>
                                 <div>
-                                    <label className="block text-sm font-semibold text-slate-700 mb-1">Physical Address</label>
+                                    <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">Physical Address</label>
                                     <textarea 
                                         className="saas-input w-full resize-none" 
                                         rows="2"
@@ -428,14 +502,15 @@ export default function UsersIndex({ auth, users = {}, filters = {}, summary }) 
 
                             {/* Column 2: Employment Details & Security */}
                             <div className="space-y-4">
-                                <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Employment & Security</h4>
+                                <h4 className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">Employment & Security</h4>
                                 <div className="grid grid-cols-2 gap-4">
                                     <div>
-                                        <label className="block text-sm font-semibold text-slate-700 mb-1">System Role</label>
+                                        <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">System Role</label>
                                         <select 
-                                            className="saas-input w-full" 
+                                            className="saas-input w-full disabled:opacity-60" 
                                             value={formData.role} 
                                             onChange={e => setFormData({...formData, role: e.target.value})}
+                                            disabled={isEditingSelf}
                                             required
                                         >
                                             <option value="admin">Administrator</option>
@@ -445,19 +520,25 @@ export default function UsersIndex({ auth, users = {}, filters = {}, summary }) 
                                         </select>
                                     </div>
                                     <div>
-                                        <label className="block text-sm font-semibold text-slate-700 mb-1">Status</label>
+                                        <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">Status</label>
                                         <select 
-                                            className="saas-input w-full" 
+                                            className="saas-input w-full disabled:opacity-60" 
                                             value={formData.status} 
                                             onChange={e => setFormData({...formData, status: e.target.value})}
+                                            disabled={isEditingSelf}
                                         >
                                             <option value="active">Active</option>
                                             <option value="inactive">Inactive</option>
                                         </select>
                                     </div>
                                 </div>
+                                {isEditingSelf && (
+                                    <p className="text-xs text-amber-600 dark:text-amber-400 font-medium">
+                                        Your own admin role and active status are locked to prevent accidental lockout.
+                                    </p>
+                                )}
                                 <div>
-                                    <label className="block text-sm font-semibold text-slate-700 mb-1">Hire Date</label>
+                                    <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">Hire Date</label>
                                     <input 
                                         type="date" 
                                         className="saas-input w-full" 
@@ -467,7 +548,7 @@ export default function UsersIndex({ auth, users = {}, filters = {}, summary }) 
                                 </div>
                                 
                                 <div className="pt-2">
-                                    <label className="block text-sm font-semibold text-slate-700 mb-1 flex items-center gap-2">
+                                    <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1 flex items-center gap-2">
                                         <Lock size={14} className="text-slate-400" />
                                         {isEditing ? 'New Password (Optional)' : 'Password'}
                                     </label>
@@ -480,7 +561,7 @@ export default function UsersIndex({ auth, users = {}, filters = {}, summary }) 
                                         placeholder={isEditing ? 'Leave blank to keep current' : 'Enter password'}
                                     />
                                     
-                                    <label className="block text-sm font-semibold text-slate-700 mb-1">Confirm Password</label>
+                                    <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">Confirm Password</label>
                                     <input 
                                         type="password" 
                                         className="saas-input w-full" 
@@ -494,13 +575,13 @@ export default function UsersIndex({ auth, users = {}, filters = {}, summary }) 
                         </div>
 
                         {/* Emergency / Next of Kin Section */}
-                        <div className="pt-4 border-t border-slate-100">
-                            <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-4">Emergency & Next of Kin Info</h4>
+                        <div className="pt-4 border-t border-slate-100 dark:border-slate-800">
+                            <h4 className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-4">Emergency & Next of Kin Info</h4>
                             
                             <div className="space-y-4">
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                     <div>
-                                        <label className="block text-sm font-semibold text-slate-700 mb-1">Emergency Contact Name</label>
+                                        <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">Emergency Contact Name</label>
                                         <input 
                                             type="text" 
                                             className="saas-input w-full" 
@@ -509,7 +590,7 @@ export default function UsersIndex({ auth, users = {}, filters = {}, summary }) 
                                         />
                                     </div>
                                     <div>
-                                        <label className="block text-sm font-semibold text-slate-700 mb-1">Emergency Contact Phone</label>
+                                        <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">Emergency Contact Phone</label>
                                         <input 
                                             type="text" 
                                             className="saas-input w-full" 
@@ -521,7 +602,7 @@ export default function UsersIndex({ auth, users = {}, filters = {}, summary }) 
                                 
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                     <div>
-                                        <label className="block text-sm font-semibold text-slate-700 mb-1">Next of Kin Name</label>
+                                        <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">Next of Kin Name</label>
                                         <input 
                                             type="text" 
                                             className="saas-input w-full" 
@@ -530,7 +611,7 @@ export default function UsersIndex({ auth, users = {}, filters = {}, summary }) 
                                         />
                                     </div>
                                     <div>
-                                        <label className="block text-sm font-semibold text-slate-700 mb-1">Next of Kin Phone</label>
+                                        <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">Next of Kin Phone</label>
                                         <input 
                                             type="text" 
                                             className="saas-input w-full" 
@@ -542,16 +623,52 @@ export default function UsersIndex({ auth, users = {}, filters = {}, summary }) 
                             </div>
                         </div>
 
-                        <div className="flex justify-end gap-3 pt-4 border-t border-slate-100 mt-6">
+                        <div className="flex justify-end gap-3 pt-4 border-t border-slate-100 dark:border-slate-800 mt-6">
                             <Button type="button" variant="secondary" onClick={() => setShowModal(false)}>
                                 Cancel
                             </Button>
                             <Button type="submit" variant="primary" disabled={loading} icon={Plus}>
-                                {isEditing ? 'Save Changes' : 'Create Staff'}
+                                {loading ? 'Saving...' : (isEditing ? 'Save Changes' : 'Create Staff')}
                             </Button>
                         </div>
                     </form>
                 </div>
+            </Modal>
+
+            {/* Delete Staff Confirmation Modal */}
+            <Modal show={!!deletingUser} onClose={() => setDeletingUser(null)} maxWidth="sm">
+                {deletingUser && (
+                    <div className="p-6 text-center space-y-4 dark:bg-slate-900">
+                        <div className="w-14 h-14 bg-rose-50 dark:bg-rose-900/30 text-rose-500 rounded-full flex items-center justify-center mx-auto">
+                            <AlertTriangle size={28} />
+                        </div>
+                        <div>
+                            <h3 className="text-lg font-bold text-slate-900 dark:text-white">Delete Staff Account?</h3>
+                            <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
+                                Permanently delete <strong className="text-slate-900 dark:text-white">{deletingUser.name}</strong>?
+                                Staff with recorded sales, shifts, repairs, expenses, or invoices should be set to Inactive instead.
+                            </p>
+                        </div>
+                        <div className="flex gap-3 pt-2">
+                            <button
+                                type="button"
+                                onClick={() => setDeletingUser(null)}
+                                className="flex-1 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 font-bold text-sm hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                type="button"
+                                disabled={isDeleting}
+                                onClick={confirmDelete}
+                                className="flex-1 py-2.5 rounded-xl bg-rose-500 hover:bg-rose-600 disabled:opacity-50 text-white font-bold text-sm shadow-md transition-colors flex items-center justify-center gap-2"
+                            >
+                                <Trash2 size={15} />
+                                {isDeleting ? 'Deleting...' : 'Yes, Delete'}
+                            </button>
+                        </div>
+                    </div>
+                )}
             </Modal>
         </AuthenticatedLayout>
     );

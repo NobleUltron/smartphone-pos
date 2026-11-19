@@ -155,9 +155,13 @@ export default function StoreSettings({ auth, settings, windowsPrinters = [] }) 
         localStorage.setItem('smartpos_print_logo', data.printer_print_logo);
 
         post('/api/settings', {
+            preserveScroll: true,
             onSuccess: () => {
                 toast.success('Store & Thermal Printer settings saved successfully!');
-            }
+            },
+            onError: (err) => {
+                toast.error(Object.values(err)[0] || 'Failed to save settings. Please check your inputs.');
+            },
         });
     };
 
@@ -216,7 +220,7 @@ export default function StoreSettings({ auth, settings, windowsPrinters = [] }) 
                         
                         {/* Business Details */}
                         <Card>
-                            <h3 className="font-bold text-slate-900 mb-6 flex items-center gap-2 border-b border-slate-100 pb-4">
+                            <h3 className="font-bold text-slate-900 dark:text-white mb-6 flex items-center gap-2 border-b border-slate-100 dark:border-slate-800 pb-4">
                                 <Store size={20} className="text-pink-500" /> Business Details
                             </h3>
 
@@ -224,15 +228,15 @@ export default function StoreSettings({ auth, settings, windowsPrinters = [] }) 
                                 <div className="flex flex-col sm:flex-row gap-6">
                                     <div className="shrink-0 flex flex-col gap-2">
                                         <label className="saas-label">Store Logo</label>
-                                        <div className="w-24 h-24 rounded-2xl border-2 border-dashed border-slate-200 flex items-center justify-center overflow-hidden bg-slate-50 relative group cursor-pointer hover:border-indigo-400 transition-colors">
+                                        <div className="w-24 h-24 rounded-2xl border-2 border-dashed border-slate-200 dark:border-slate-700 flex items-center justify-center overflow-hidden bg-slate-50 dark:bg-slate-800 relative group cursor-pointer hover:border-indigo-400 transition-colors">
                                             {data.store_logo ? (
                                                 <img src={URL.createObjectURL(data.store_logo)} className="w-full h-full object-contain p-1" />
                                             ) : settings?.store_logo ? (
                                                 <img src={settings.store_logo} className="w-full h-full object-contain p-1" />
                                             ) : (
-                                                <Store className="text-slate-300 w-10 h-10" />
+                                                <Store className="text-slate-300 dark:text-slate-600 w-10 h-10" />
                                             )}
-                                            <input type="file" className="absolute inset-0 opacity-0 cursor-pointer" accept="image/*" onChange={(e) => setData('store_logo', e.target.files[0])} />
+                                            <input type="file" className="absolute inset-0 opacity-0 cursor-pointer" accept="image/png,image/jpeg,image/webp" onChange={(e) => setData('store_logo', e.target.files[0])} />
                                         </div>
                                     </div>
                                     <div className="flex-1 flex flex-col justify-end">
