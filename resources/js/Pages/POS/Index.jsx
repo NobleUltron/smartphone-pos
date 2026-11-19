@@ -1,8 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import toast from 'react-hot-toast';
 import { Head, Link, usePage } from '@inertiajs/react';
 import axios from 'axios';
-import { ScanLine, CreditCard, Sparkles, Trash2, ShoppingCart, Smartphone, Search, Package, RefreshCw, Plus, X } from 'lucide-react';
+import { ScanLine, CreditCard, Sparkles, Trash2, ShoppingCart, Smartphone, Search, Package, RefreshCw, Plus, X, AlertTriangle } from 'lucide-react';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import Card from '@/Components/SaaS/Card';
 import Badge from '@/Components/SaaS/Badge';
@@ -17,6 +17,7 @@ export default function POSIndex({ auth, customers = [], hasActiveDrawer }) {
     const isDiscountLocked = isCashier && permissions?.allow_cashier_discounts === false;
     const isPriceEditLocked = isCashier && permissions?.allow_cashier_price_overwrites === false;
 
+    const scanInputRef = useRef(null);
     const [imei, setImei] = useState('');
     const [cart, setCart] = useState([]);
     const [paymentMethod, setPaymentMethod] = useState('Cash');
@@ -25,8 +26,10 @@ export default function POSIndex({ auth, customers = [], hasActiveDrawer }) {
     const [tenderedAmount, setTenderedAmount] = useState('');
     const [discount, setDiscount] = useState(0);
     const [customerId, setCustomerId] = useState('');
+    const [customerSearch, setCustomerSearch] = useState('');
     const [customerName, setCustomerName] = useState('');
     const [customerPhone, setCustomerPhone] = useState('');
+    const [isSubmitting, setIsSubmitting] = useState(false);
 
     const [showInventoryModal, setShowInventoryModal] = useState(false);
     const [inventorySearchQuery, setInventorySearchQuery] = useState('');
@@ -47,16 +50,27 @@ export default function POSIndex({ auth, customers = [], hasActiveDrawer }) {
         selling_price: ''
     });
 
+    const filteredCustomers = useMemo(() => {
+        const q = customerSearch.trim().toLowerCase();
+        if (!q) return customers;
+        return customers.filter(c =>
+            (c.name || '').toLowerCase().includes(q) ||
+            (c.phone || '').toLowerCase().includes(q)
+        );
+    }, [customers, customerSearch]);
+
     const handleScan = async (e) => {
         e.preventDefault();
-        if (!imei) return;
+        const trimmed = imei.trim();
+        if (!trimmed) return;
 
         try {
-            const res = await axios.post('/api/pos/validate-imei', { imei });
+            const res = await axios.post('/api/pos/validate-imei', { imei: trimmed });
             const { type, item } = res.data;
             
             addToCart(type, item);
             setImei('');
+            scanInputRef.current?.focus();
         } catch (error) {
             toast.error(error.response?.data?.error || "Device not found");
         }
@@ -64,16 +78,16 @@ export default function POSIndex({ auth, customers = [], hasActiveDrawer }) {
 
     const addToCart = (type, item) => {
         if (type === 'serialized') {
-            if (cart.find(c => c.imei === item.imei)) {
+            if (cart.find(c => c.type === 'serialized' && c.id === item.id)) {
                 toast.error("Device already in cart");
                 return;
             }
-            setCart([...cart, { 
+            setCart(prev => [...prev, { 
                 type: 'serialized',
                 id: item.id,
                 imei: item.imei, 
                 name: `${item.product?.brand?.name || item.product?.brand || ''} ${item.product?.model_name || ''} - ${item.storage_capacity || 'N/A'}`.trim(), 
-                price: item.selling_price,
+                price: Number(item.selling_price || 0),
                 quantity: 1
             }]);
         } else {
@@ -83,14 +97,14 @@ export default function POSIndex({ auth, customers = [], hasActiveDrawer }) {
                     toast.error(`Only ${item.quantity} available in stock`);
                     return;
                 }
-                setCart(cart.map(c => (c.id === item.id && c.type === 'bulk') ? { ...c, quantity: c.quantity + 1 } : c));
+                setCart(prev => prev.map(c => (c.id === item.id && c.type === 'bulk') ? { ...c, quantity: c.quantity + 1 } : c));
             } else {
-                setCart([...cart, {
+                setCart(prev => [...prev, {
                     type: 'bulk',
                     id: item.id,
                     imei: item.sku || `BULK-${item.id}`,
                     name: `${item.brand?.name || ''} ${item.model_name}${item.storage_capacity ? ' - ' + item.storage_capacity : ''}`.trim(),
-                    price: item.selling_price,
+                    price: Number(item.selling_price || 0),
                     quantity: 1,
                     max_quantity: item.quantity
                 }]);
@@ -112,13 +126,15 @@ export default function POSIndex({ auth, customers = [], hasActiveDrawer }) {
     };
 
     useEffect(() => {
-        if (showInventoryModal) {
+        if (!showInventoryModal) return;
+        const timer = setTimeout(() => {
             searchInventory(inventorySearchQuery);
-        }
+        }, 250);
+        return () => clearTimeout(timer);
     }, [showInventoryModal, inventorySearchQuery]);
 
     const handleUpdateQuantity = (imei, newQuantity) => {
-        const qty = parseInt(newQuantity);
+        const qty = parseInt(newQuantity, 10);
         if (isNaN(qty) || qty < 1) return;
         setCart(cart.map(c => {
             if (c.imei === imei && c.type === 'bulk') {
@@ -141,15 +157,18 @@ export default function POSIndex({ auth, customers = [], hasActiveDrawer }) {
 
     const handleAddTradeIn = (e) => {
         e.preventDefault();
-        if (!tradeInForm.brand || !tradeInForm.model_name || !tradeInForm.value) return toast.error("Please fill in brand, model and value");
+        const appraised = parseFloat(tradeInForm.value);
+        if (!tradeInForm.brand || !tradeInForm.model_name || isNaN(appraised) || appraised <= 0) {
+            return toast.error("Please fill in brand, model, and a valid appraised value");
+        }
         setTradeIn({
-            brand: tradeInForm.brand,
-            model_name: tradeInForm.model_name,
-            imei: tradeInForm.imei,
+            brand: tradeInForm.brand.trim(),
+            model_name: tradeInForm.model_name.trim(),
+            imei: tradeInForm.imei.trim(),
             condition: tradeInForm.condition,
-            storage_capacity: tradeInForm.storage_capacity,
-            color: tradeInForm.color,
-            value: parseFloat(tradeInForm.value),
+            storage_capacity: tradeInForm.storage_capacity.trim(),
+            color: tradeInForm.color.trim(),
+            value: appraised,
             selling_price: tradeInForm.selling_price
         });
         setShowTradeInModal(false);
@@ -157,33 +176,48 @@ export default function POSIndex({ auth, customers = [], hasActiveDrawer }) {
         toast.success("Trade-in applied!");
     };
 
-    const total = cart.reduce((sum, item) => sum + (parseFloat(item.price) * (item.quantity || 1)), 0);
-    const tradeInDiscount = tradeIn ? tradeIn.value : 0;
-    const numericDiscount = isDiscountLocked ? 0 : (Number(discount) || 0);
+    const total = cart.reduce((sum, item) => sum + (parseFloat(item.price || 0) * (item.quantity || 1)), 0);
+    const tradeInDiscount = tradeIn ? Number(tradeIn.value || 0) : 0;
+    const numericDiscount = isDiscountLocked ? 0 : Math.max(0, Number(discount) || 0);
     const finalAmount = total - numericDiscount - tradeInDiscount;
+    const numericTendered = Number(tenderedAmount || 0);
 
     const handleCheckout = async () => {
+        if (isSubmitting) return;
         if (cart.length === 0) return toast.error("Cart is empty");
+        if (finalAmount < 0) {
+            return toast.error("Final amount cannot be negative. Please adjust discount or trade-in value.");
+        }
 
-        if (paymentMethod === 'Cash') {
-            if (!tenderedAmount || Number(tenderedAmount) < finalAmount) {
+        if (paymentMethod === 'Cash' && finalAmount > 0) {
+            if (tenderedAmount === '' || numericTendered < finalAmount) {
                 return toast.error("Please enter a valid Tendered Amount that covers the total cost.");
+            }
+        }
+
+        if (paymentMethod === 'Layaway') {
+            if (finalAmount <= 0) {
+                return toast.error("Cannot use Layaway for a zero-balance transaction. Please select Cash.");
+            }
+            if (Number(amountPaid || 0) >= finalAmount) {
+                return toast.error("Layaway deposit must be less than the final amount. Use a regular payment method for full payment.");
             }
         }
         
         // Open window synchronously before async operation to avoid popup blockers
         const receiptWindow = window.open('about:blank', '_blank');
+        setIsSubmitting(true);
         
         try {
             const res = await axios.post('/api/pos/checkout', {
                 items: cart,
-                customer_id: customerId,
+                customer_id: customerId || null,
                 customer_name: customerId ? '' : customerName,
                 customer_phone: customerId ? '' : customerPhone,
                 payment_method: paymentMethod,
                 deposit_payment_method: paymentMethod === 'Layaway' ? depositPaymentMethod : null,
                 amount_paid: amountPaid || 0,
-                tendered_amount: tenderedAmount || null,
+                tendered_amount: paymentMethod === 'Cash' ? (finalAmount === 0 ? 0 : (tenderedAmount || null)) : null,
                 discount: numericDiscount,
                 trade_in: tradeIn
             });
@@ -194,8 +228,11 @@ export default function POSIndex({ auth, customers = [], hasActiveDrawer }) {
             setTenderedAmount('');
             setDepositPaymentMethod('Cash');
             setCustomerId('');
+            setCustomerSearch('');
             setCustomerName('');
             setCustomerPhone('');
+            toast.success(`Sale #${res.data.sale_id} completed!`);
+            scanInputRef.current?.focus();
             
             if (receiptWindow) {
                 receiptWindow.location.href = `/pos/receipt/${res.data.sale_id}`;
@@ -204,6 +241,8 @@ export default function POSIndex({ auth, customers = [], hasActiveDrawer }) {
             if (receiptWindow) receiptWindow.close();
             const errorMsg = error.response?.data?.error || error.response?.data?.message || "Checkout failed";
             toast.error(errorMsg);
+        } finally {
+            setIsSubmitting(false);
         }
     };
 
@@ -213,12 +252,12 @@ export default function POSIndex({ auth, customers = [], hasActiveDrawer }) {
             
             {!hasActiveDrawer && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm">
-                    <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-8 text-center animate-fade-in">
-                        <div className="w-16 h-16 bg-rose-50 text-rose-500 rounded-full flex items-center justify-center mx-auto mb-6">
+                    <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl shadow-xl w-full max-w-md p-8 text-center animate-fade-in">
+                        <div className="w-16 h-16 bg-rose-50 dark:bg-rose-900/30 text-rose-500 rounded-full flex items-center justify-center mx-auto mb-6">
                             <ShoppingCart size={32} />
                         </div>
-                        <h2 className="text-xl font-bold text-slate-900 mb-2">Shift is Closed</h2>
-                        <p className="text-slate-500 text-sm mb-6">
+                        <h2 className="text-xl font-bold text-slate-900 dark:text-slate-100 mb-2">Shift is Closed</h2>
+                        <p className="text-slate-500 dark:text-slate-400 text-sm mb-6">
                             You must open your cash drawer shift before you can access the POS checkout system.
                         </p>
                         <Link 
@@ -257,6 +296,7 @@ export default function POSIndex({ auth, customers = [], hasActiveDrawer }) {
                                     <ScanLine size={24} />
                                 </div>
                                 <input 
+                                    ref={scanInputRef}
                                     type="text" 
                                     className="saas-input !text-base sm:!text-lg flex-1 min-w-0" 
                                     placeholder="Scan Barcode / IMEI" 
@@ -281,12 +321,21 @@ export default function POSIndex({ auth, customers = [], hasActiveDrawer }) {
 
                     {/* Cart Table */}
                     <Card noPadding className="overflow-hidden animate-slide-up" style={{ animationDelay: '0.1s' }}>
-                        <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-white">
-                            <h3 className="text-lg font-bold text-slate-900 flex items-center gap-2">
+                        <div className="px-6 py-4 border-b border-slate-100 dark:border-slate-700 flex items-center justify-between bg-white dark:bg-slate-900">
+                            <h3 className="text-lg font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
                                 <ShoppingCart size={20} className="text-rose-500" /> Cart Items
                             </h3>
                             {cart.length > 0 && (
-                                <Badge variant="info">{cart.length} item{cart.length > 1 ? 's' : ''}</Badge>
+                                <div className="flex items-center gap-2">
+                                    <Badge variant="info">{cart.reduce((s, i) => s + (i.quantity || 1), 0)} unit{cart.reduce((s, i) => s + (i.quantity || 1), 0) > 1 ? 's' : ''}</Badge>
+                                    <button
+                                        type="button"
+                                        onClick={() => { setCart([]); toast.success('Cart cleared'); }}
+                                        className="text-xs font-semibold text-rose-600 dark:text-rose-400 hover:underline px-2 py-1 rounded-lg hover:bg-rose-50 dark:hover:bg-rose-900/20 transition-colors"
+                                    >
+                                        Clear Cart
+                                    </button>
+                                </div>
                             )}
                         </div>
                         {/* Desktop Table View */}
@@ -297,50 +346,64 @@ export default function POSIndex({ auth, customers = [], hasActiveDrawer }) {
                                         <th>Device / Item</th>
                                         <th>IMEI / Barcode</th>
                                         <th>Qty</th>
-                                        <th>Price (UGX)</th>
+                                        <th>Unit Price (UGX)</th>
                                         <th className="text-right">Action</th>
                                     </tr>
                                 </thead>
                                 <tbody>
                                     {cart.map((item) => (
                                         <tr key={item.imei}>
-                                            <td className="font-bold text-slate-900">{item.name}</td>
-                                            <td className="font-mono text-slate-500 text-sm">{item.imei}</td>
+                                            <td className="font-bold text-slate-900 dark:text-slate-100">{item.name}</td>
+                                            <td className="font-mono text-slate-500 dark:text-slate-400 text-sm">{item.imei}</td>
                                             <td>
                                                 {item.type === 'bulk' ? (
                                                     <input 
                                                         type="number" 
                                                         min="1" 
+                                                        max={item.max_quantity || undefined}
                                                         value={item.quantity} 
                                                         onChange={(e) => handleUpdateQuantity(item.imei, e.target.value)}
                                                         className="w-16 saas-input !py-1 !px-2 text-center"
                                                     />
                                                 ) : (
-                                                    <span className="font-bold text-slate-900">{item.quantity}</span>
+                                                    <span className="font-bold text-slate-900 dark:text-slate-100">{item.quantity}</span>
                                                 )}
                                             </td>
                                             <td>
                                                 {isPriceEditLocked ? (
-                                                    <span className="font-bold text-slate-900 flex items-center gap-1">
-                                                        {(Number(item.price) * (item.quantity || 1)).toLocaleString()}
-                                                        <span className="text-[10px] text-rose-500 font-bold" title="Price overwrite disabled by Admin">🔒</span>
-                                                    </span>
+                                                    <div>
+                                                        <span className="font-bold text-slate-900 dark:text-slate-100 flex items-center gap-1">
+                                                            {Number(item.price).toLocaleString()}
+                                                            <span className="text-[10px] text-rose-500 font-bold" title="Price overwrite disabled by Admin">🔒</span>
+                                                        </span>
+                                                        {(item.quantity || 1) > 1 && (
+                                                            <span className="text-[11px] text-slate-500 dark:text-slate-400">
+                                                                Subtotal: {(Number(item.price) * item.quantity).toLocaleString()}
+                                                            </span>
+                                                        )}
+                                                    </div>
                                                 ) : (
-                                                    <div className="flex items-center gap-1">
+                                                    <div className="flex flex-col items-start gap-0.5">
                                                         <input 
                                                             type="number" 
                                                             min="0" 
-                                                            className="w-28 saas-input !py-1 !px-2 text-right font-bold text-slate-900"
+                                                            className="w-28 saas-input !py-1 !px-2 text-right font-bold text-slate-900 dark:text-slate-100"
                                                             value={item.price} 
                                                             onChange={(e) => handleUpdatePrice(item.imei, e.target.value)}
                                                             title="Click to edit unit selling price"
                                                         />
+                                                        {(item.quantity || 1) > 1 && (
+                                                            <span className="text-[11px] text-slate-500 dark:text-slate-400">
+                                                                Line: {(Number(item.price) * item.quantity).toLocaleString()}
+                                                            </span>
+                                                        )}
                                                     </div>
                                                 )}
                                             </td>
                                             <td className="text-right">
                                                 <button 
-                                                    className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors" 
+                                                    type="button"
+                                                    className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-900/20 rounded-lg transition-colors" 
                                                     onClick={() => setCart(cart.filter(i => i.imei !== item.imei))}
                                                 >
                                                     <Trash2 size={16} />
@@ -353,28 +416,46 @@ export default function POSIndex({ auth, customers = [], hasActiveDrawer }) {
                         </div>
 
                         {/* Mobile Cart View */}
-                        <div className="sm:hidden divide-y divide-slate-100">
+                        <div className="sm:hidden divide-y divide-slate-100 dark:divide-slate-700">
                             {cart.map((item) => (
-                                <div key={item.imei} className="p-3 flex items-center justify-between gap-3 bg-white">
+                                <div key={item.imei} className="p-3 flex items-center justify-between gap-3 bg-white dark:bg-slate-900">
                                     <div className="flex-1 min-w-0">
-                                        <p className="font-bold text-slate-900 text-sm truncate">{item.name}</p>
-                                        <p className="font-mono text-slate-500 text-xs truncate">{item.imei}</p>
-                                        <p className="text-xs font-bold text-rose-600 mt-1">
-                                            {(Number(item.price) * (item.quantity || 1)).toLocaleString()} UGX
-                                        </p>
+                                        <p className="font-bold text-slate-900 dark:text-slate-100 text-sm truncate">{item.name}</p>
+                                        <p className="font-mono text-slate-500 dark:text-slate-400 text-xs truncate">{item.imei}</p>
+                                        {isPriceEditLocked ? (
+                                            <p className="text-xs font-bold text-rose-600 dark:text-rose-400 mt-1">
+                                                {(Number(item.price) * (item.quantity || 1)).toLocaleString()} UGX
+                                            </p>
+                                        ) : (
+                                            <div className="flex items-center gap-2 mt-1.5">
+                                                <input
+                                                    type="number"
+                                                    min="0"
+                                                    value={item.price}
+                                                    onChange={(e) => handleUpdatePrice(item.imei, e.target.value)}
+                                                    className="w-24 saas-input !py-1 !px-2 text-xs font-bold text-right"
+                                                    title="Edit unit price"
+                                                />
+                                                <span className="text-[11px] font-bold text-rose-600 dark:text-rose-400">
+                                                    {(item.quantity || 1) > 1 ? `= ${(Number(item.price) * item.quantity).toLocaleString()} UGX` : 'UGX'}
+                                                </span>
+                                            </div>
+                                        )}
                                     </div>
                                     <div className="flex items-center gap-2">
                                         {item.type === 'bulk' && (
                                             <input 
                                                 type="number" 
                                                 min="1" 
+                                                max={item.max_quantity || undefined}
                                                 value={item.quantity} 
                                                 onChange={(e) => handleUpdateQuantity(item.imei, e.target.value)}
                                                 className="w-14 saas-input !py-1 !px-2 text-center text-xs font-bold"
                                             />
                                         )}
                                         <button 
-                                            className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors" 
+                                            type="button"
+                                            className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-900/20 rounded-lg transition-colors" 
                                             onClick={() => setCart(cart.filter(i => i.imei !== item.imei))}
                                         >
                                             <Trash2 size={18} />
@@ -386,10 +467,10 @@ export default function POSIndex({ auth, customers = [], hasActiveDrawer }) {
 
                         {cart.length === 0 && (
                             <div className="py-12 text-center flex flex-col items-center justify-center">
-                                <div className="w-16 h-16 bg-slate-100 text-slate-300 rounded-full flex items-center justify-center mb-4">
+                                <div className="w-16 h-16 bg-slate-100 dark:bg-slate-800 text-slate-300 dark:text-slate-600 rounded-full flex items-center justify-center mb-4">
                                     <Smartphone size={32} />
                                 </div>
-                                <p className="font-medium text-slate-500 text-sm">Cart is empty. Scan an item to begin.</p>
+                                <p className="font-medium text-slate-500 dark:text-slate-400 text-sm">Cart is empty. Scan an item to begin.</p>
                             </div>
                         )}
                     </Card>
@@ -399,65 +480,94 @@ export default function POSIndex({ auth, customers = [], hasActiveDrawer }) {
                 <div className="lg:col-span-1" id="order-summary-card">
                     <Card className="sticky top-24 animate-slide-up flex flex-col" style={{ animationDelay: '0.2s' }}>
                         <div className="flex items-center gap-3 mb-6">
-                            <div className="w-10 h-10 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center">
+                            <div className="w-10 h-10 rounded-xl bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 flex items-center justify-center">
                                 <CreditCard size={20} />
                             </div>
-                            <h3 className="text-lg font-bold text-slate-900">Order Summary</h3>
+                            <h3 className="text-lg font-bold text-slate-900 dark:text-slate-100">Order Summary</h3>
                         </div>
                         
-                        <div className="bg-slate-50 rounded-xl p-4 mb-6 space-y-3">
+                        <div className="bg-slate-50 dark:bg-slate-800/60 border border-slate-100 dark:border-slate-700/60 rounded-xl p-4 mb-6 space-y-3">
                             <div className="flex justify-between items-center text-sm">
-                                <span className="text-slate-500">Subtotal</span>
-                                <span className="font-bold text-slate-900">{total.toLocaleString()} UGX</span>
+                                <span className="text-slate-500 dark:text-slate-400">Subtotal</span>
+                                <span className="font-bold text-slate-900 dark:text-slate-100">{total.toLocaleString()} UGX</span>
                             </div>
                             <div className="flex justify-between items-center text-sm">
-                                <span className="text-slate-500 flex items-center gap-1">
+                                <span className="text-slate-500 dark:text-slate-400 flex items-center gap-1">
                                     Discount
                                     {isDiscountLocked && <span className="text-[10px] text-rose-500 font-bold">🔒 Admin Only</span>}
                                 </span>
                                 <input 
                                     type="number" 
-                                    className={`saas-input !w-28 !py-1.5 text-right !text-sm ${isDiscountLocked ? 'bg-slate-100 opacity-60 cursor-not-allowed border-rose-200' : ''}`}
+                                    min="0"
+                                    className={`saas-input !w-28 !py-1.5 text-right !text-sm ${isDiscountLocked ? 'bg-slate-100 dark:bg-slate-800 opacity-60 cursor-not-allowed border-rose-200 dark:border-rose-800' : ''}`}
                                     value={isDiscountLocked ? 0 : discount} 
-                                    onChange={(e) => !isDiscountLocked && setDiscount(e.target.value)} 
+                                    onChange={(e) => {
+                                        if (isDiscountLocked) return;
+                                        const val = e.target.value;
+                                        setDiscount(val === '' ? '' : Math.max(0, Number(val)));
+                                    }} 
                                     disabled={isDiscountLocked}
                                     title={isDiscountLocked ? "Cashiers are not authorized to issue custom discounts." : ""}
                                 />
                             </div>
                             {tradeIn && (
-                                <div className="flex justify-between items-center text-sm pt-2 border-t border-slate-200">
+                                <div className="flex justify-between items-center text-sm pt-2 border-t border-slate-200 dark:border-slate-700">
                                     <div className="flex flex-col">
-                                        <span className="text-emerald-600 font-bold">Trade-in Credit</span>
+                                        <span className="text-emerald-600 dark:text-emerald-400 font-bold">Trade-in Credit</span>
                                         <span className="text-xs text-slate-400">{tradeIn.brand} {tradeIn.model_name}</span>
                                     </div>
                                     <div className="flex items-center gap-2">
-                                        <span className="font-bold text-emerald-600">-{(tradeIn.value).toLocaleString()} UGX</span>
-                                        <button onClick={() => setTradeIn(null)} className="text-slate-300 hover:text-rose-500">
+                                        <span className="font-bold text-emerald-600 dark:text-emerald-400">-{(tradeIn.value).toLocaleString()} UGX</span>
+                                        <button type="button" onClick={() => setTradeIn(null)} className="text-slate-400 hover:text-rose-500">
                                             <Trash2 size={14} />
                                         </button>
                                     </div>
                                 </div>
                             )}
                         </div>
+
+                        {finalAmount < 0 && (
+                            <div className="mb-4 p-3 rounded-xl bg-rose-50 dark:bg-rose-900/30 border border-rose-200 dark:border-rose-800 flex items-start gap-2 text-xs text-rose-700 dark:text-rose-300">
+                                <AlertTriangle size={16} className="shrink-0 mt-0.5 text-rose-500" />
+                                <span>Discount and trade-in credit exceed the subtotal. Reduce the discount or trade-in value to proceed.</span>
+                            </div>
+                        )}
                         
                         <div className="flex justify-between items-end mb-6 px-1">
-                            <span className="text-xs font-bold text-slate-500 uppercase tracking-widest">Total Amount</span>
+                            <span className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest">Total Amount</span>
                             <div className="text-right">
-                                <span className="text-2xl font-bold text-slate-900">{finalAmount.toLocaleString()}</span>
-                                <span className="text-sm text-slate-500 ml-1">UGX</span>
+                                <span className={`text-2xl font-bold ${finalAmount < 0 ? 'text-rose-600 dark:text-rose-400' : 'text-slate-900 dark:text-slate-100'}`}>
+                                    {finalAmount.toLocaleString()}
+                                </span>
+                                <span className="text-sm text-slate-500 dark:text-slate-400 ml-1">UGX</span>
                             </div>
                         </div>
 
                         <div className="space-y-4 mb-6">
                             <div>
-                                <label className="saas-label">Select Customer</label>
+                                <div className="flex items-center justify-between mb-1">
+                                    <label className="saas-label !mb-0">Select Customer</label>
+                                    {customerSearch && (
+                                        <span className="text-[11px] text-slate-400">{filteredCustomers.length} match{filteredCustomers.length === 1 ? '' : 'es'}</span>
+                                    )}
+                                </div>
+                                <div className="relative mb-2">
+                                    <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                                    <input
+                                        type="text"
+                                        className="saas-input !pl-8 !py-1.5 !text-xs"
+                                        placeholder="Filter customers by name or phone..."
+                                        value={customerSearch}
+                                        onChange={(e) => setCustomerSearch(e.target.value)}
+                                    />
+                                </div>
                                 <select 
-                                    className="saas-input pl-4 font-semibold text-slate-700" 
+                                    className="saas-input pl-4 font-semibold text-slate-700 dark:text-slate-200" 
                                     value={customerId} 
                                     onChange={(e) => setCustomerId(e.target.value)}
                                 >
                                     <option value="">Walk-in / New Customer</option>
-                                    {customers.map(c => (
+                                    {filteredCustomers.map(c => (
                                         <option key={c.id} value={c.id}>{c.name} ({c.phone})</option>
                                     ))}
                                 </select>
@@ -500,33 +610,55 @@ export default function POSIndex({ auth, customers = [], hasActiveDrawer }) {
                             </div>
 
                             {paymentMethod === 'Cash' && (
-                                <div className="animate-fade-in border-t border-slate-100 pt-4 mt-4">
-                                    <label className="saas-label text-indigo-600">Tendered Amount (Cash Given)</label>
+                                <div className="animate-fade-in border-t border-slate-100 dark:border-slate-700 pt-4 mt-4">
+                                    <label className="saas-label text-indigo-600 dark:text-indigo-400">Tendered Amount (Cash Given)</label>
                                     <div className="relative">
                                         <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 font-semibold text-sm">
                                             UGX
                                         </div>
                                         <input 
                                             type="number" 
-                                            className="saas-input border-indigo-200 focus:border-indigo-500 focus:ring-indigo-500/20" 
+                                            min="0"
+                                            className="saas-input border-indigo-200 dark:border-indigo-700 focus:border-indigo-500 focus:ring-indigo-500/20" 
                                             style={{ paddingLeft: '3.5rem' }}
-                                            placeholder="Enter cash handed to you" 
+                                            placeholder={finalAmount === 0 ? "0 (Even Swap)" : "Enter cash handed to you"} 
                                             value={tenderedAmount} 
                                             onChange={(e) => setTenderedAmount(e.target.value)} 
                                         />
                                     </div>
-                                    {tenderedAmount > 0 && tenderedAmount >= finalAmount && (
-                                        <p className="text-xs text-slate-500 mt-2">
-                                            Change Due: <strong className="text-emerald-600 font-bold text-base">{(tenderedAmount - finalAmount).toLocaleString()} UGX</strong>
+                                    {finalAmount > 0 && (
+                                        <div className="flex flex-wrap gap-1.5 mt-2">
+                                            <button
+                                                type="button"
+                                                onClick={() => setTenderedAmount(String(finalAmount))}
+                                                className="px-2.5 py-1 text-[11px] font-bold rounded-lg bg-indigo-50 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 transition-colors"
+                                            >
+                                                Exact
+                                            </button>
+                                            {[10000, 50000, 100000].map(amt => (
+                                                <button
+                                                    key={amt}
+                                                    type="button"
+                                                    onClick={() => setTenderedAmount(String((Number(tenderedAmount) || 0) + amt))}
+                                                    className="px-2.5 py-1 text-[11px] font-bold rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
+                                                >
+                                                    +{amt / 1000}k
+                                                </button>
+                                            ))}
+                                        </div>
+                                    )}
+                                    {numericTendered > 0 && numericTendered >= finalAmount && finalAmount >= 0 && (
+                                        <p className="text-xs text-slate-500 dark:text-slate-400 mt-2">
+                                            Change Due: <strong className="text-emerald-600 dark:text-emerald-400 font-bold text-base">{(numericTendered - finalAmount).toLocaleString()} UGX</strong>
                                         </p>
                                     )}
                                 </div>
                             )}
 
                             {paymentMethod === 'Layaway' && (
-                                <div className="animate-fade-in border-t border-slate-100 pt-4 mt-4 space-y-3">
+                                <div className="animate-fade-in border-t border-slate-100 dark:border-slate-700 pt-4 mt-4 space-y-3">
                                     <div>
-                                        <label className="saas-label text-indigo-600">Deposit Payment Method</label>
+                                        <label className="saas-label text-indigo-600 dark:text-indigo-400">Deposit Payment Method</label>
                                         <select
                                             className="saas-input pl-4"
                                             value={depositPaymentMethod}
@@ -538,30 +670,37 @@ export default function POSIndex({ auth, customers = [], hasActiveDrawer }) {
                                             <option>Bank Transfer</option>
                                         </select>
                                     </div>
-                                    <label className="saas-label text-indigo-600">Initial Deposit (Amount Paid)</label>
+                                    <label className="saas-label text-indigo-600 dark:text-indigo-400">Initial Deposit (Amount Paid)</label>
                                     <div className="relative">
                                         <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 font-semibold text-sm">
                                             UGX
                                         </div>
                                         <input 
                                             type="number" 
-                                            className="saas-input border-indigo-200 focus:border-indigo-500 focus:ring-indigo-500/20" 
+                                            min="0"
+                                            className="saas-input border-indigo-200 dark:border-indigo-700 focus:border-indigo-500 focus:ring-indigo-500/20" 
                                             style={{ paddingLeft: '3.5rem' }}
                                             placeholder="Enter amount paid today" 
                                             value={amountPaid} 
                                             onChange={(e) => setAmountPaid(e.target.value)} 
                                         />
                                     </div>
-                                    <p className="text-xs text-slate-500 mt-2">
-                                        Remaining balance: <strong className="text-slate-900">{Math.max(0, finalAmount - (amountPaid || 0)).toLocaleString()} UGX</strong>
+                                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-2">
+                                        Remaining balance: <strong className="text-slate-900 dark:text-slate-100">{Math.max(0, finalAmount - (Number(amountPaid) || 0)).toLocaleString()} UGX</strong>
                                     </p>
                                 </div>
                             )}
                         </div>
 
-                        <div className="mt-auto pt-4 border-t border-slate-100">
-                            <Button variant="primary" className="w-full !py-3 !text-base" onClick={handleCheckout} icon={Sparkles}>
-                                Complete Sale
+                        <div className="mt-auto pt-4 border-t border-slate-100 dark:border-slate-700">
+                            <Button
+                                variant="primary"
+                                className="w-full !py-3 !text-base"
+                                onClick={handleCheckout}
+                                icon={Sparkles}
+                                disabled={isSubmitting || cart.length === 0 || finalAmount < 0}
+                            >
+                                {isSubmitting ? 'Processing Sale...' : 'Complete Sale'}
                             </Button>
                         </div>
                     </Card>
@@ -570,12 +709,14 @@ export default function POSIndex({ auth, customers = [], hasActiveDrawer }) {
 
             {/* Browse Inventory Modal */}
             <Modal show={showInventoryModal} onClose={() => { setShowInventoryModal(false); setSelectedProductForImei(null); setInventorySearchQuery(''); }} maxWidth="2xl">
-                <div className="p-6">
+                <div className="p-6 dark:bg-slate-900">
                     <div className="flex items-center justify-between mb-4">
-                        <h2 className="text-xl font-bold text-slate-900 flex items-center gap-2">
+                        <h2 className="text-xl font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
                             <Package className="text-indigo-500" /> Browse Inventory
                         </h2>
-                        <button onClick={() => { setShowInventoryModal(false); setSelectedProductForImei(null); setInventorySearchQuery(''); }} className="text-slate-400 hover:text-slate-600">✕</button>
+                        <button type="button" onClick={() => { setShowInventoryModal(false); setSelectedProductForImei(null); setInventorySearchQuery(''); }} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">
+                            <X size={20} />
+                        </button>
                     </div>
 
                     {!selectedProductForImei ? (
@@ -585,7 +726,7 @@ export default function POSIndex({ auth, customers = [], hasActiveDrawer }) {
                                 <input
                                     type="text"
                                     className="saas-input !pl-10"
-                                    placeholder="Search products by brand, model, or SKU..."
+                                    placeholder="Search products by brand, model, IMEI, or SKU..."
                                     value={inventorySearchQuery}
                                     onChange={(e) => setInventorySearchQuery(e.target.value)}
                                 />
@@ -597,65 +738,96 @@ export default function POSIndex({ auth, customers = [], hasActiveDrawer }) {
                                 ) : inventoryResults.length === 0 ? (
                                     <div className="text-center py-8 text-slate-400">No products found in stock.</div>
                                 ) : (
-                                    inventoryResults.map(product => (
-                                        <div key={`prod-${product.id}`} className="flex items-center justify-between p-3 bg-slate-50 rounded-xl hover:bg-slate-100 transition-colors border border-slate-100">
-                                            <div>
-                                                <div className="font-bold text-slate-900 flex items-center gap-2">
-                                                    <span>{product.brand?.name} {product.model_name}</span>
-                                                    {product.storage_capacity && (
-                                                        <span className="px-1.5 py-0.5 rounded text-[10px] font-black bg-indigo-50 text-indigo-700 border border-indigo-200">
-                                                            {product.storage_capacity}
-                                                        </span>
+                                    inventoryResults.map(product => {
+                                        const bulkInCart = product.type === 'bulk' ? cart.find(c => c.type === 'bulk' && c.id === product.id) : null;
+                                        return (
+                                            <div key={`prod-${product.id}`} className="flex items-center justify-between gap-3 p-3 bg-slate-50 dark:bg-slate-800/70 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors border border-slate-100 dark:border-slate-700">
+                                                <div className="min-w-0">
+                                                    <div className="font-bold text-slate-900 dark:text-slate-100 flex items-center flex-wrap gap-2">
+                                                        <span>{product.brand?.name} {product.model_name}</span>
+                                                        {product.storage_capacity && (
+                                                            <span className="px-1.5 py-0.5 rounded text-[10px] font-black bg-indigo-50 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-700">
+                                                                {product.storage_capacity}
+                                                            </span>
+                                                        )}
+                                                        {bulkInCart && (
+                                                            <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-50 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300">
+                                                                In Cart ({bulkInCart.quantity}/{product.quantity})
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                    <div className="text-xs text-slate-500 dark:text-slate-400">
+                                                        {product.type === 'bulk' ? `Stock: ${product.quantity} | SKU: ${product.sku || 'N/A'}` : `Available Devices: ${product.device_imeis?.length || 0}`}
+                                                    </div>
+                                                </div>
+                                                <div className="flex items-center gap-3 shrink-0">
+                                                    <div className="font-bold text-indigo-600 dark:text-indigo-400 text-sm">
+                                                        {Number(product.selling_price).toLocaleString()} UGX
+                                                    </div>
+                                                    {product.type === 'bulk' ? (
+                                                        <Button variant="primary" icon={Plus} className="!py-1.5 !px-3.5 !text-xs font-bold" onClick={() => {
+                                                            addToCart('bulk', product);
+                                                            setShowInventoryModal(false);
+                                                        }}>
+                                                            Add
+                                                        </Button>
+                                                    ) : (
+                                                        <Button variant="primary" className="!py-1.5 !px-3.5 !text-xs font-bold" onClick={() => setSelectedProductForImei(product)}>
+                                                            Select Device
+                                                        </Button>
                                                     )}
                                                 </div>
-                                                <div className="text-xs text-slate-500">
-                                                    {product.type === 'bulk' ? `Stock: ${product.quantity} | SKU: ${product.sku || 'N/A'}` : `Available Devices: ${product.device_imeis?.length || 0}`}
-                                                </div>
                                             </div>
-                                            <div className="flex items-center gap-4">
-                                                <div className="font-bold text-indigo-600">{Number(product.selling_price).toLocaleString()} UGX</div>
-                                                {product.type === 'bulk' ? (
-                                                    <Button variant="primary" icon={Plus} className="!py-1.5 !px-3.5 !text-xs font-bold" onClick={() => {
-                                                        addToCart('bulk', product);
-                                                        setShowInventoryModal(false);
-                                                    }}>
-                                                        Add
-                                                    </Button>
-                                                ) : (
-                                                    <Button variant="primary" className="!py-1.5 !px-3.5 !text-xs font-bold" onClick={() => setSelectedProductForImei(product)}>
-                                                        Select Device
-                                                    </Button>
-                                                )}
-                                            </div>
-                                        </div>
-                                    ))
+                                        );
+                                    })
                                 )}
                             </div>
                         </>
                     ) : (
                         <div className="animate-fade-in">
-                            <button onClick={() => setSelectedProductForImei(null)} className="text-indigo-600 text-sm font-semibold mb-4 hover:underline">
+                            <button type="button" onClick={() => setSelectedProductForImei(null)} className="text-indigo-600 dark:text-indigo-400 text-sm font-semibold mb-4 hover:underline">
                                 ← Back to Products
                             </button>
-                            <h3 className="font-bold text-slate-900 mb-2">Select a Device: {selectedProductForImei.brand?.name} {selectedProductForImei.model_name}</h3>
+                            <h3 className="font-bold text-slate-900 dark:text-slate-100 mb-2">Select a Device: {selectedProductForImei.brand?.name} {selectedProductForImei.model_name}</h3>
                             <div className="max-h-96 overflow-y-auto space-y-2">
-                                {selectedProductForImei.device_imeis?.map(device => (
-                                    <div key={device.id} className="flex items-center justify-between p-3 bg-slate-50 rounded-xl hover:bg-slate-100 transition-colors border border-slate-100">
-                                        <div>
-                                            <div className="font-bold text-slate-900 font-mono text-sm">{device.imei}</div>
-                                            <div className="text-xs text-slate-500">
-                                                {device.storage_capacity} • {device.color} • {device.condition}
+                                {selectedProductForImei.device_imeis?.map(device => {
+                                    const isAlreadyInCart = cart.some(c => c.type === 'serialized' && c.id === device.id);
+                                    return (
+                                        <div key={device.id} className="flex items-center justify-between gap-3 p-3 bg-slate-50 dark:bg-slate-800/70 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors border border-slate-100 dark:border-slate-700">
+                                            <div className="min-w-0">
+                                                <div className="font-bold text-slate-900 dark:text-slate-100 font-mono text-sm flex items-center gap-2">
+                                                    <span>{device.imei}</span>
+                                                    {isAlreadyInCart && (
+                                                        <span className="px-1.5 py-0.5 rounded text-[10px] font-sans font-bold bg-emerald-50 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300">
+                                                            In Cart
+                                                        </span>
+                                                    )}
+                                                </div>
+                                                <div className="text-xs text-slate-500 dark:text-slate-400">
+                                                    {device.storage_capacity || 'N/A'} • {device.color || 'N/A'} • {device.condition || 'N/A'}
+                                                </div>
+                                            </div>
+                                            <div className="flex items-center gap-3 shrink-0">
+                                                <span className="font-bold text-indigo-600 dark:text-indigo-400 text-sm">
+                                                    {Number(device.selling_price || selectedProductForImei.selling_price || 0).toLocaleString()} UGX
+                                                </span>
+                                                <Button
+                                                    variant="primary"
+                                                    icon={Plus}
+                                                    className="!py-1.5 !px-3.5 !text-xs font-bold"
+                                                    disabled={isAlreadyInCart}
+                                                    onClick={() => {
+                                                        addToCart('serialized', { ...device, product: selectedProductForImei });
+                                                        setShowInventoryModal(false);
+                                                        setSelectedProductForImei(null);
+                                                    }}
+                                                >
+                                                    {isAlreadyInCart ? 'Added' : 'Add'}
+                                                </Button>
                                             </div>
                                         </div>
-                                        <Button variant="primary" icon={Plus} className="!py-1.5 !px-3.5 !text-xs font-bold" onClick={() => {
-                                            addToCart('serialized', { ...device, product: selectedProductForImei });
-                                            setShowInventoryModal(false);
-                                            setSelectedProductForImei(null);
-                                        }}>
-                                            Add
-                                        </Button>
-                                    </div>
-                                ))}
+                                    );
+                                })}
                                 {!selectedProductForImei.device_imeis?.length && (
                                     <div className="text-center py-4 text-slate-400 text-sm">No specific devices found in stock.</div>
                                 )}
@@ -667,17 +839,17 @@ export default function POSIndex({ auth, customers = [], hasActiveDrawer }) {
 
             {/* Trade-In Modal */}
             <Modal show={showTradeInModal} onClose={() => setShowTradeInModal(false)} maxWidth="lg">
-                <div className="p-6">
-                    <div className="flex justify-between items-center mb-6 pb-3 border-b border-slate-100">
+                <div className="p-6 dark:bg-slate-900">
+                    <div className="flex justify-between items-center mb-6 pb-3 border-b border-slate-100 dark:border-slate-700">
                         <div>
-                            <h3 className="text-lg font-bold text-slate-900 flex items-center gap-2">
-                                <RefreshCw className="text-emerald-600" size={20} /> Trade-In Device (Swap & Valuation)
+                            <h3 className="text-lg font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
+                                <RefreshCw className="text-emerald-600 dark:text-emerald-400" size={20} /> Trade-In Device (Swap & Valuation)
                             </h3>
-                            <p className="text-xs text-slate-500 mt-0.5">
+                            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
                                 Valuate customer device to give immediate store credit towards their purchase.
                             </p>
                         </div>
-                        <button onClick={() => setShowTradeInModal(false)} className="text-slate-400 hover:text-slate-600">
+                        <button type="button" onClick={() => setShowTradeInModal(false)} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">
                             <X size={20} />
                         </button>
                     </div>
@@ -759,28 +931,30 @@ export default function POSIndex({ auth, customers = [], hasActiveDrawer }) {
                                 <label className="saas-label">Appraised Credit Value (UGX) *</label>
                                 <input 
                                     type="number" 
-                                    className="saas-input font-bold text-emerald-600" 
+                                    min="1"
+                                    className="saas-input font-bold text-emerald-600 dark:text-emerald-400" 
                                     placeholder="0" 
                                     value={tradeInForm.value}
                                     onChange={e => setTradeInForm({...tradeInForm, value: e.target.value})}
                                     required
                                 />
-                                <p className="text-xs text-slate-500 mt-1">Deducted from customer total (Cost Price).</p>
+                                <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">Deducted from customer total (Cost Price).</p>
                             </div>
                             <div>
                                 <label className="saas-label">Target Selling Price (UGX)</label>
                                 <input 
                                     type="number" 
-                                    className="saas-input font-bold text-indigo-600" 
+                                    min="0"
+                                    className="saas-input font-bold text-indigo-600 dark:text-indigo-400" 
                                     placeholder="e.g. Resale Price" 
                                     value={tradeInForm.selling_price}
                                     onChange={e => setTradeInForm({...tradeInForm, selling_price: e.target.value})}
                                 />
-                                <p className="text-xs text-slate-500 mt-1">Expected resale price in shop inventory.</p>
+                                <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">Expected resale price in shop inventory.</p>
                             </div>
                         </div>
 
-                        <div className="pt-4 flex justify-end gap-3 border-t border-slate-100">
+                        <div className="pt-4 flex justify-end gap-3 border-t border-slate-100 dark:border-slate-700">
                             <Button variant="secondary" type="button" onClick={() => setShowTradeInModal(false)}>Cancel</Button>
                             <Button variant="emerald" icon={RefreshCw} type="submit">Apply Trade-In Credit</Button>
                         </div>
@@ -792,13 +966,14 @@ export default function POSIndex({ auth, customers = [], hasActiveDrawer }) {
             {cart.length > 0 && (
                 <div className="lg:hidden fixed bottom-14 left-0 right-0 z-30 p-3 bg-slate-900/95 backdrop-blur-xl border-t border-rose-500/30 flex items-center justify-between text-white shadow-2xl">
                     <div>
-                        <p className="text-[10px] uppercase tracking-wider text-slate-400 font-bold">Total ({cart.length} item{cart.length > 1 ? 's' : ''})</p>
-                        <p className="text-lg font-extrabold text-white">{finalAmount.toLocaleString()} <span className="text-xs text-rose-400 font-normal">UGX</span></p>
+                        <p className="text-[10px] uppercase tracking-wider text-slate-400 font-bold">Total ({cart.reduce((s, i) => s + (i.quantity || 1), 0)} unit{cart.reduce((s, i) => s + (i.quantity || 1), 0) > 1 ? 's' : ''})</p>
+                        <p className={`text-lg font-extrabold ${finalAmount < 0 ? 'text-rose-400' : 'text-white'}`}>{finalAmount.toLocaleString()} <span className="text-xs text-rose-400 font-normal">UGX</span></p>
                     </div>
                     <button
                         type="button"
+                        disabled={isSubmitting || finalAmount < 0}
                         onClick={() => {
-                            if (paymentMethod === 'Cash' && (!tenderedAmount || Number(tenderedAmount) < finalAmount)) {
+                            if (paymentMethod === 'Cash' && finalAmount > 0 && (tenderedAmount === '' || numericTendered < finalAmount)) {
                                 const summaryEl = document.getElementById('order-summary-card');
                                 if (summaryEl) summaryEl.scrollIntoView({ behavior: 'smooth' });
                                 toast.error("Please enter a valid Tendered Amount to complete checkout.");
@@ -806,10 +981,10 @@ export default function POSIndex({ auth, customers = [], hasActiveDrawer }) {
                             }
                             handleCheckout();
                         }}
-                        className="flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-rose-500 to-pink-600 hover:from-rose-600 hover:to-pink-700 text-white font-bold text-xs rounded-xl shadow-lg shadow-rose-500/30 active:scale-95 transition-transform"
+                        className="flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-rose-500 to-pink-600 hover:from-rose-600 hover:to-pink-700 disabled:opacity-50 text-white font-bold text-xs rounded-xl shadow-lg shadow-rose-500/30 active:scale-95 transition-transform"
                     >
                         <CreditCard size={16} />
-                        Pay & Checkout
+                        {isSubmitting ? 'Processing...' : 'Pay & Checkout'}
                     </button>
                 </div>
             )}

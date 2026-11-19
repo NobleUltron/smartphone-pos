@@ -29,16 +29,27 @@ class POSController extends Controller
     public function validateImei(Request $request)
     {
         $request->validate(['imei' => 'required|string']);
-        
-        // Check for serialized device first
-        $device = DeviceImei::with('product.brand')->where('imei', $request->imei)->where('status', 'In Stock')->first();
+        $code = strtolower(trim($request->imei));
+        if ($code === '') {
+            return response()->json(['error' => 'Please enter or scan an IMEI or SKU'], 422);
+        }
+
+        // Check for serialized device first (PostgreSQL-safe case-insensitive match)
+        $device = DeviceImei::with('product.brand')
+            ->whereRaw('LOWER(imei) = ?', [$code])
+            ->where('status', 'In Stock')
+            ->first();
 
         if ($device) {
             return response()->json(['type' => 'serialized', 'item' => $device]);
         }
 
         // Check for bulk product SKU
-        $product = \App\Models\Product::with('brand')->where('sku', $request->imei)->where('type', 'bulk')->where('quantity', '>', 0)->first();
+        $product = \App\Models\Product::with('brand')
+            ->whereRaw('LOWER(sku) = ?', [$code])
+            ->where('type', 'bulk')
+            ->where('quantity', '>', 0)
+            ->first();
 
         if ($product) {
             return response()->json(['type' => 'bulk', 'item' => $product]);
@@ -105,22 +116,26 @@ class POSController extends Controller
         $request->validate([
             'customer_name' => 'nullable|string',
             'customer_phone' => 'nullable|string',
-            'items' => 'required|array',
+            'items' => 'required|array|min:1',
             'items.*.type' => 'required|in:serialized,bulk',
             'items.*.id' => 'required',
-            'items.*.price' => 'required|numeric',
+            'items.*.price' => 'required|numeric|min:0',
+            'items.*.quantity' => 'nullable|integer|min:1',
             'payment_method' => 'required|in:Cash,Bank Transfer,MTN MoMo,Airtel Money,Layaway',
             'deposit_payment_method' => 'nullable|in:Cash,Bank Transfer,MTN MoMo,Airtel Money',
             'amount_paid' => 'nullable|numeric|min:0',
             'tendered_amount' => 'nullable|numeric|min:0',
             'discount' => 'nullable|numeric|min:0',
-            'customer_id' => 'nullable|exists:customers,id'
+            'customer_id' => 'nullable|exists:customers,id',
+            'trade_in.value' => 'nullable|numeric|min:0',
+            'trade_in.selling_price' => 'nullable|numeric|min:0',
         ]);
 
         $userRole = auth()->user()->role ?? 'cashier';
         if ($userRole === 'cashier' && floatval($request->discount ?? 0) > 0 && !\App\Models\Setting::get('allow_cashier_discounts', true)) {
             return response()->json(['message' => 'Cashiers are not authorized to grant custom discounts.'], 422);
         }
+        $priceOverwriteLocked = $userRole === 'cashier' && !\App\Models\Setting::get('allow_cashier_price_overwrites', true);
 
         DB::beginTransaction();
 
@@ -130,19 +145,63 @@ class POSController extends Controller
                 ->first();
 
             if (!$activeDrawer) {
+                DB::rollBack();
                 return response()->json(['message' => 'You must open a shift (Cash Drawer) before making a sale.'], 403);
             }
 
-            // Validate bulk item stock before proceeding
+            // Lock & validate serialized devices (prevent double-selling & enforce price lock)
+            $serializedItems = collect($request->items)->filter(fn($i) => $i['type'] === 'serialized');
+            $seenDeviceIds = [];
+            foreach ($serializedItems as $item) {
+                $deviceId = (int) $item['id'];
+                if (in_array($deviceId, $seenDeviceIds, true)) {
+                    DB::rollBack();
+                    return response()->json(['message' => 'Duplicate serialized device detected in cart.'], 422);
+                }
+                $seenDeviceIds[] = $deviceId;
+
+                $device = DeviceImei::with('product.brand')->where('id', $deviceId)->lockForUpdate()->first();
+                if (!$device) {
+                    DB::rollBack();
+                    return response()->json(['message' => 'One of the serialized devices in your cart was not found.'], 404);
+                }
+                if ($device->status !== 'In Stock') {
+                    DB::rollBack();
+                    return response()->json(['message' => "Device {$device->imei} is no longer in stock (Status: {$device->status})."], 422);
+                }
+                if ($priceOverwriteLocked && abs(floatval($item['price']) - floatval($device->selling_price)) > 0.01) {
+                    DB::rollBack();
+                    return response()->json(['message' => 'Cashiers are not authorized to overwrite item prices.'], 422);
+                }
+            }
+
+            // Lock & validate bulk item stock (aggregate requested qty per product_id)
             $bulkItems = collect($request->items)->filter(fn($i) => $i['type'] === 'bulk');
+            $bulkTotals = [];
             foreach ($bulkItems as $item) {
-                $qty = $item['quantity'] ?? 1;
-                $product = \App\Models\Product::find($item['id']);
+                $pid = (int) $item['id'];
+                $bulkTotals[$pid] = ($bulkTotals[$pid] ?? 0) + max(1, (int) ($item['quantity'] ?? 1));
+            }
+            $lockedBulkProducts = [];
+            foreach ($bulkTotals as $pid => $totalQty) {
+                $product = \App\Models\Product::with('brand')->where('id', $pid)->where('type', 'bulk')->lockForUpdate()->first();
                 if (!$product) {
+                    DB::rollBack();
                     return response()->json(['message' => 'Product not found.'], 404);
                 }
-                if ($product->quantity < $qty) {
+                if ($product->quantity < $totalQty) {
+                    DB::rollBack();
                     return response()->json(['message' => "Insufficient stock for {$product->brand?->name} {$product->model_name}. Only {$product->quantity} left in stock."], 422);
+                }
+                $lockedBulkProducts[$pid] = $product;
+            }
+            if ($priceOverwriteLocked) {
+                foreach ($bulkItems as $item) {
+                    $product = $lockedBulkProducts[(int) $item['id']] ?? null;
+                    if ($product && abs(floatval($item['price']) - floatval($product->selling_price)) > 0.01) {
+                        DB::rollBack();
+                        return response()->json(['message' => 'Cashiers are not authorized to overwrite item prices.'], 422);
+                    }
                 }
             }
 
@@ -158,19 +217,25 @@ class POSController extends Controller
                 $customer_id = $customer->id;
             }
 
-            $total = array_reduce($request->items, fn($carry, $item) => $carry + ($item['price'] * ($item['quantity'] ?? 1)), 0);
-            $discount = $request->discount ?? 0;
-            $tradeInValue = $request->trade_in ? ($request->trade_in['value'] ?? 0) : 0;
-            $tradeInDeviceStr = $request->trade_in ? ($request->trade_in['brand'] . ' ' . $request->trade_in['model_name']) : null;
+            $total = array_reduce($request->items, fn($carry, $item) => $carry + (floatval($item['price']) * max(1, (int) ($item['quantity'] ?? 1))), 0);
+            $discount = floatval($request->discount ?? 0);
+            $tradeInValue = $request->trade_in ? floatval($request->trade_in['value'] ?? 0) : 0;
+            $tradeInDeviceStr = $request->trade_in ? trim(($request->trade_in['brand'] ?? '') . ' ' . ($request->trade_in['model_name'] ?? '')) : null;
             
             $final = $total - $discount - $tradeInValue;
             
             if ($final < 0) {
+                DB::rollBack();
                 return response()->json(['message' => 'Final amount cannot be negative. Please adjust the discount or trade-in value.'], 422);
             }
 
             if ($request->payment_method === 'Layaway') {
-                if ($request->amount_paid >= $final && $final > 0) {
+                if ($final <= 0) {
+                    DB::rollBack();
+                    return response()->json(['message' => 'Cannot use Layaway for a zero-balance transaction. Please select Cash or another payment method.'], 422);
+                }
+                if (floatval($request->amount_paid ?? 0) >= $final) {
+                    DB::rollBack();
                     return response()->json(['message' => 'Layaway deposit cannot be equal to or greater than the final amount. Please use a regular payment method.'], 422);
                 }
             }
@@ -343,6 +408,8 @@ class POSController extends Controller
             );
 
             DB::commit();
+            \Illuminate\Support\Facades\Cache::forget('global_low_stock_count');
+            \Illuminate\Support\Facades\Cache::forget('inventory_stats');
             return response()->json(['success' => true, 'sale_id' => $sale->id]);
 
         } catch (\Exception $e) {
