@@ -27,27 +27,37 @@ class ActivityLogController extends Controller
         }
 
         if ($request->filled('action')) {
-            $query->where('action', 'like', '%' . $request->action . '%');
+            $actionTerm = '%' . strtolower(trim($request->action)) . '%';
+            $query->whereRaw("LOWER(COALESCE(action, '')) LIKE ?", [$actionTerm]);
         }
 
         if ($request->filled('search')) {
-            $search = $request->search;
+            $search = '%' . strtolower(trim($request->search)) . '%';
             $query->where(function ($q) use ($search) {
-                $q->where('description', 'like', "%{$search}%")
-                  ->orWhere('action', 'like', "%{$search}%")
-                  ->orWhere('ip_address', 'like', "%{$search}%");
+                $q->whereRaw("LOWER(COALESCE(description, '')) LIKE ?", [$search])
+                  ->orWhereRaw("LOWER(COALESCE(action, '')) LIKE ?", [$search])
+                  ->orWhereRaw("LOWER(COALESCE(ip_address, '')) LIKE ?", [$search])
+                  ->orWhereRaw("LOWER(COALESCE(module, '')) LIKE ?", [$search]);
             });
+        }
+
+        if ($request->filled('date_from')) {
+            $query->whereDate('created_at', '>=', $request->date_from);
+        }
+
+        if ($request->filled('date_to')) {
+            $query->whereDate('created_at', '<=', $request->date_to);
         }
 
         $logs = $query->paginate(25)->withQueryString();
         $users = User::select('id', 'name', 'role')->orderBy('name')->get();
-        $modules = ActivityLog::distinct()->pluck('module')->filter()->values();
+        $modules = ActivityLog::distinct()->pluck('module')->filter()->sort()->values();
 
         return Inertia::render('ActivityLogs/Index', [
             'logs' => $logs,
             'users' => $users,
             'modules' => $modules,
-            'filters' => $request->only(['module', 'user_id', 'action', 'search'])
+            'filters' => $request->only(['module', 'user_id', 'action', 'search', 'date_from', 'date_to'])
         ]);
     }
 }

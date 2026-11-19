@@ -8,24 +8,39 @@ use App\Models\DeviceImei;
 use App\Models\SaleItem;
 use App\Models\Sale;
 use Carbon\Carbon;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 
 class WarrantyController extends Controller
 {
     public function index(Request $request)
     {
+        $statusFilter = $request->input('status', 'all');
         $query = WarrantyClaim::with(['deviceImei.product.brand', 'saleItem.sale', 'customer']);
 
         if ($request->filled('search')) {
             $searchTerm = '%' . strtolower(trim($request->search)) . '%';
-            $query->where(function($q) use ($searchTerm) {
+            $query->where(function ($q) use ($searchTerm) {
                 $q->whereRaw('LOWER(claim_type) LIKE ?', [$searchTerm])
                   ->orWhereRaw('LOWER(status) LIKE ?', [$searchTerm])
-                  ->orWhereHas('customer', function($cq) use ($searchTerm) {
+                  ->orWhereHas('customer', function ($cq) use ($searchTerm) {
                       $cq->whereRaw('LOWER(name) LIKE ?', [$searchTerm])
                          ->orWhereRaw('LOWER(phone) LIKE ?', [$searchTerm]);
+                  })
+                  ->orWhereHas('deviceImei', function ($dq) use ($searchTerm) {
+                      $dq->whereRaw('LOWER(imei) LIKE ?', [$searchTerm]);
                   });
             });
+        }
+
+        if ($statusFilter === 'active') {
+            $query->whereIn('status', ['Pending', 'Approved', 'In Repair']);
+        } elseif ($statusFilter === 'resolved') {
+            $query->whereIn('status', ['Completed', 'Resolved', 'Rejected']);
+        } elseif ($statusFilter && $statusFilter !== 'all') {
+            $query->where('status', $statusFilter);
         }
 
         $claims = $query->orderBy('created_at', 'desc')->paginate(10)->withQueryString();
@@ -41,7 +56,10 @@ class WarrantyController extends Controller
         return Inertia::render('Warranties/Index', [
             'claims' => $claims,
             'inStockDevices' => $inStockDevices,
-            'filters' => $request->only(['search']),
+            'filters' => [
+                'search' => $request->input('search', ''),
+                'status' => $statusFilter,
+            ],
             'summary' => [
                 'active_claims' => $activeClaims,
                 'resolved_claims' => $resolvedClaims,
@@ -65,8 +83,10 @@ class WarrantyController extends Controller
 
         $saleItems = collect();
 
-        // 1. Search by IMEI
-        $deviceByImei = DeviceImei::with(['product.brand'])->where('imei', $query)->first();
+        // 1. Search by IMEI (PostgreSQL-safe case-insensitive)
+        $deviceByImei = DeviceImei::with(['product.brand'])
+            ->whereRaw('LOWER(imei) = ?', [strtolower($query)])
+            ->first();
         if ($deviceByImei) {
             $saleItems = SaleItem::with(['sale.customer', 'deviceImei.product.brand', 'product.brand'])
                 ->where('device_imei_id', $deviceByImei->id)
@@ -147,73 +167,92 @@ class WarrantyController extends Controller
             'payment_method' => 'nullable|in:Cash,Bank Transfer,MTN MoMo,Airtel Money',
         ]);
 
-        $oldDevice = DeviceImei::with('product.brand')->find($validated['device_imei_id']);
-        $resolutionNotes = null;
-        $status = 'Pending';
-        $resolvedAt = null;
+        DB::transaction(function () use ($validated) {
+            $oldDevice = DeviceImei::with('product.brand')->where('id', $validated['device_imei_id'])->lockForUpdate()->first();
+            $resolutionNotes = null;
+            $status = 'Pending';
+            $resolvedAt = null;
 
-        $disposition = $validated['device_disposition'] ?? 'defective';
+            $disposition = $validated['device_disposition'] ?? 'defective';
 
-        // 1. Update old device inventory status based on disposition
-        if ($oldDevice) {
-            if ($disposition === 'restock') {
-                $oldDevice->update(['status' => 'In Stock']);
-            } elseif ($disposition === 'defective' || $validated['claim_type'] === 'Refund') {
-                $oldDevice->update(['status' => 'Defective']);
-            }
-        }
-
-        // 2. Handling Replacement Swap (if immediate replacement phone chosen)
-        if ($validated['claim_type'] === 'Replacement') {
-            if (!empty($validated['replacement_imei_id'])) {
-                $newDevice = DeviceImei::with('product.brand')->find($validated['replacement_imei_id']);
-                if ($newDevice) {
+            // 1. Update old device inventory status based on disposition
+            if ($oldDevice) {
+                if ($disposition === 'restock') {
+                    $oldDevice->update(['status' => 'In Stock']);
+                } elseif ($disposition === 'defective' || $validated['claim_type'] === 'Refund') {
                     $oldDevice->update(['status' => 'Defective']);
+                }
+            }
+
+            // 2. Handling Replacement Swap (if immediate replacement phone chosen)
+            if ($validated['claim_type'] === 'Replacement') {
+                if (!empty($validated['replacement_imei_id'])) {
+                    $newDevice = DeviceImei::with('product.brand')->where('id', $validated['replacement_imei_id'])->lockForUpdate()->first();
+                    if (!$newDevice || $newDevice->status !== 'In Stock') {
+                        throw ValidationException::withMessages([
+                            'replacement_imei_id' => 'Selected replacement device is no longer in stock.',
+                        ]);
+                    }
+                    if ($oldDevice) {
+                        $oldDevice->update(['status' => 'Defective']);
+                    }
                     $newDevice->update(['status' => 'Sold']);
 
-                    $saleItem = SaleItem::find($validated['sale_item_id']);
+                    $saleItem = SaleItem::with('deviceImei.product.brand')->where('id', $validated['sale_item_id'])->lockForUpdate()->first();
                     $priceNotes = $this->handlePriceDifference($saleItem, $newDevice, $validated['customer_id'], $validated['payment_method'] ?? 'Cash');
 
                     // Update SaleItem to reference the new IMEI so future warranty lookups work
-                    $saleItem->update([
-                        'device_imei_id' => $newDevice->id, 
-                        'price' => $newDevice->selling_price,
-                        'notes' => "Warranty Replacement for IMEI: {$oldDevice->imei}"
-                    ]);
+                    if ($saleItem) {
+                        $saleItem->update([
+                            'device_imei_id' => $newDevice->id,
+                            'price' => $newDevice->selling_price,
+                            'notes' => "Warranty Replacement for IMEI: {$oldDevice?->imei}",
+                        ]);
+                    }
 
                     $brandName = $newDevice->product->brand->name ?? '';
                     $modelName = $newDevice->product->model_name ?? '';
-                    $resolutionNotes = "Replacement Issued: Swapped defective IMEI ({$oldDevice->imei}) for {$brandName} {$modelName} (New IMEI: {$newDevice->imei})." . $priceNotes;
+                    $resolutionNotes = "Replacement Issued: Swapped defective IMEI ({$oldDevice?->imei}) for {$brandName} {$modelName} (New IMEI: {$newDevice->imei})." . $priceNotes;
                     $status = 'Completed';
                     $resolvedAt = now();
+                } else {
+                    $resolutionNotes = "Replacement requested. Defective IMEI ({$oldDevice?->imei}) marked {$disposition}. Awaiting replacement device assignment.";
                 }
-            } else {
-                $resolutionNotes = "Replacement requested. Defective IMEI ({$oldDevice->imei}) marked {$disposition}. Awaiting replacement device assignment.";
             }
-        } 
-        // 3. Handling Refund
-        elseif ($validated['claim_type'] === 'Refund') {
-            $dispositionText = $disposition === 'restock' ? 'Restocked to In-Stock' : 'Marked Defective';
-            $resolutionNotes = "Store Refund Processed: IMEI ({$oldDevice->imei}) {$dispositionText}.";
-            $status = 'Completed';
-            $resolvedAt = now();
+            // 3. Handling Refund
+            elseif ($validated['claim_type'] === 'Refund') {
+                $dispositionText = $disposition === 'restock' ? 'Restocked to In-Stock' : 'Marked Defective';
+                $resolutionNotes = "Store Refund Processed: IMEI ({$oldDevice?->imei}) {$dispositionText}.";
+                $status = 'Completed';
+                $resolvedAt = now();
 
-            $saleItem = SaleItem::with('sale')->find($validated['sale_item_id']);
-            if ($saleItem && $saleItem->sale && $saleItem->sale->payment_status !== 'Refunded') {
-                $this->processWarrantyRefund($saleItem, $validated['payment_method'] ?? null, "Warranty Refund for IMEI {$oldDevice->imei}");
+                $saleItem = SaleItem::with('sale')->where('id', $validated['sale_item_id'])->lockForUpdate()->first();
+                if ($saleItem && $saleItem->sale && $saleItem->sale->payment_status !== 'Refunded') {
+                    $this->processWarrantyRefund($saleItem, $validated['payment_method'] ?? null, "Warranty Refund for IMEI {$oldDevice?->imei}");
+                }
             }
-        }
 
-        $claim = WarrantyClaim::create([
-            'sale_item_id' => $validated['sale_item_id'],
-            'device_imei_id' => $validated['device_imei_id'],
-            'customer_id' => $validated['customer_id'],
-            'claim_type' => $validated['claim_type'],
-            'issue_description' => $validated['issue_description'],
-            'status' => $status,
-            'resolution_notes' => $resolutionNotes,
-            'resolved_at' => $resolvedAt,
-        ]);
+            $claim = WarrantyClaim::create([
+                'sale_item_id' => $validated['sale_item_id'],
+                'device_imei_id' => $validated['device_imei_id'],
+                'customer_id' => $validated['customer_id'],
+                'claim_type' => $validated['claim_type'],
+                'issue_description' => $validated['issue_description'],
+                'status' => $status,
+                'resolution_notes' => $resolutionNotes,
+                'resolved_at' => $resolvedAt,
+            ]);
+
+            \App\Models\ActivityLog::log(
+                'warranty_claim_created',
+                'Warranties',
+                "Logged Warranty {$claim->claim_type} Claim #{$claim->id} for IMEI {$oldDevice?->imei} (Status: {$claim->status})",
+                ['claim_id' => $claim->id, 'claim_type' => $claim->claim_type, 'status' => $claim->status]
+            );
+        });
+
+        Cache::forget('global_low_stock_count');
+        Cache::forget('inventory_stats');
 
         return redirect()->back()->with('success', 'Warranty claim submitted successfully.');
     }
@@ -228,54 +267,72 @@ class WarrantyController extends Controller
             'payment_method' => 'nullable|in:Cash,Bank Transfer,MTN MoMo,Airtel Money',
         ]);
 
-        $notes = $validated['resolution_notes'] ?? '';
-        $deviceAction = $validated['device_action'] ?? 'none';
-        $oldDevice = DeviceImei::with('product.brand')->find($claim->device_imei_id);
+        DB::transaction(function () use ($validated, $claim) {
+            $lockedClaim = WarrantyClaim::with('saleItem.sale')->where('id', $claim->id)->lockForUpdate()->firstOrFail();
+            $notes = $validated['resolution_notes'] ?? '';
+            $deviceAction = $validated['device_action'] ?? 'none';
+            $oldDevice = DeviceImei::with('product.brand')->where('id', $lockedClaim->device_imei_id)->lockForUpdate()->first();
 
-        if ($deviceAction === 'restock' && $oldDevice) {
-            $oldDevice->update(['status' => 'In Stock']);
-            $notes .= " [Device Repaired & Restocked to In-Stock Inventory]";
-        } elseif ($deviceAction === 'hand_to_customer' && $oldDevice) {
-            $oldDevice->update(['status' => 'Sold']);
-            $notes .= " [Device Repaired & Handed Back to Customer]";
-        } elseif ($deviceAction === 'mark_defective' && $oldDevice) {
-            $oldDevice->update(['status' => 'Defective']);
-            $notes .= " [Device Marked Defective]";
-
-            if ($claim->saleItem && $claim->saleItem->sale && $claim->saleItem->sale->payment_status !== 'Refunded') {
-                $this->processWarrantyRefund($claim->saleItem, $validated['payment_method'] ?? null, "Warranty Claim #{$claim->id} Refund for IMEI {$oldDevice->imei}");
-            }
-        } elseif ($deviceAction === 'issue_replacement' && !empty($validated['replacement_imei_id'])) {
-            $newDevice = DeviceImei::with('product.brand')->find($validated['replacement_imei_id']);
-            if ($newDevice && $oldDevice) {
+            if ($deviceAction === 'restock' && $oldDevice) {
+                $oldDevice->update(['status' => 'In Stock']);
+                $notes .= " [Device Repaired & Restocked to In-Stock Inventory]";
+            } elseif ($deviceAction === 'hand_to_customer' && $oldDevice) {
+                $oldDevice->update(['status' => 'Sold']);
+                $notes .= " [Device Repaired & Handed Back to Customer]";
+            } elseif ($deviceAction === 'mark_defective' && $oldDevice) {
                 $oldDevice->update(['status' => 'Defective']);
-                $newDevice->update(['status' => 'Sold']);
+                $notes .= " [Device Marked Defective]";
 
-                $priceNotes = $this->handlePriceDifference($claim->saleItem, $newDevice, $claim->customer_id, $validated['payment_method'] ?? 'Cash');
+                if ($lockedClaim->saleItem && $lockedClaim->saleItem->sale && $lockedClaim->saleItem->sale->payment_status !== 'Refunded') {
+                    $this->processWarrantyRefund($lockedClaim->saleItem, $validated['payment_method'] ?? null, "Warranty Claim #{$lockedClaim->id} Refund for IMEI {$oldDevice->imei}");
+                }
+            } elseif ($deviceAction === 'issue_replacement' && !empty($validated['replacement_imei_id'])) {
+                $newDevice = DeviceImei::with('product.brand')->where('id', $validated['replacement_imei_id'])->lockForUpdate()->first();
+                if (!$newDevice || $newDevice->status !== 'In Stock') {
+                    throw ValidationException::withMessages([
+                        'replacement_imei_id' => 'Selected replacement device is no longer in stock.',
+                    ]);
+                }
+                if ($oldDevice) {
+                    $oldDevice->update(['status' => 'Defective']);
+                    $newDevice->update(['status' => 'Sold']);
 
-                // Update SaleItem reference
-                SaleItem::where('id', $claim->sale_item_id)->update([
-                    'device_imei_id' => $newDevice->id, 
-                    'price' => $newDevice->selling_price,
-                    'notes' => "Warranty Replacement for IMEI: {$oldDevice->imei}"
-                ]);
+                    $priceNotes = $this->handlePriceDifference($lockedClaim->saleItem, $newDevice, $lockedClaim->customer_id, $validated['payment_method'] ?? 'Cash');
 
-                $brandName = $newDevice->product->brand->name ?? '';
-                $modelName = $newDevice->product->model_name ?? '';
-                $notes .= " [Replacement Issued: Swapped defective IMEI ({$oldDevice->imei}) for {$brandName} {$modelName} (New IMEI: {$newDevice->imei})]" . $priceNotes;
+                    // Update SaleItem reference
+                    SaleItem::where('id', $lockedClaim->sale_item_id)->update([
+                        'device_imei_id' => $newDevice->id,
+                        'price' => $newDevice->selling_price,
+                        'notes' => "Warranty Replacement for IMEI: {$oldDevice->imei}",
+                    ]);
+
+                    $brandName = $newDevice->product->brand->name ?? '';
+                    $modelName = $newDevice->product->model_name ?? '';
+                    $notes .= " [Replacement Issued: Swapped defective IMEI ({$oldDevice->imei}) for {$brandName} {$modelName} (New IMEI: {$newDevice->imei})]" . $priceNotes;
+                }
             }
-        }
 
-        $updateData = [
-            'status' => $validated['status'],
-            'resolution_notes' => trim($notes),
-        ];
+            $updateData = [
+                'status' => $validated['status'],
+                'resolution_notes' => trim($notes),
+            ];
 
-        if (in_array($validated['status'], ['Completed', 'Rejected'])) {
-            $updateData['resolved_at'] = now();
-        }
+            if (in_array($validated['status'], ['Completed', 'Rejected'])) {
+                $updateData['resolved_at'] = now();
+            }
 
-        $claim->update($updateData);
+            $lockedClaim->update($updateData);
+
+            \App\Models\ActivityLog::log(
+                'warranty_claim_updated',
+                'Warranties',
+                "Updated Warranty Claim #{$lockedClaim->id} to {$validated['status']} (Action: {$deviceAction})",
+                ['claim_id' => $lockedClaim->id, 'status' => $validated['status'], 'device_action' => $deviceAction]
+            );
+        });
+
+        Cache::forget('global_low_stock_count');
+        Cache::forget('inventory_stats');
 
         return redirect()->back()->with('success', 'Claim status updated successfully.');
     }
@@ -396,29 +453,34 @@ class WarrantyController extends Controller
 
             $notes = " [Upgrade Fee of UGX " . number_format($difference, 2) . " charged and paid.]";
         } elseif ($difference < 0) {
-            // Store refunds the customer the difference
+            // Store refunds the customer the difference on the chosen payment channel
             $refundAmount = abs($difference);
-            if ($activeDrawer) {
-                \App\Models\Expense::create([
-                    'cash_drawer_id' => $activeDrawer->id,
-                    'user_id' => auth()->id(),
-                    'amount' => $refundAmount,
-                    'category' => 'Refund',
-                    'description' => "Warranty Price Difference Refund for IMEI: {$saleItem->deviceImei->imei}",
-                    'expense_date' => now(),
-                ]);
-            }
-            $tillAccount = \App\Services\TreasuryService::getTillAccount();
+            $method = $paymentMethod ?: 'Cash';
+            $refundAccount = $method === 'Cash'
+                ? \App\Services\TreasuryService::getTillAccount()
+                : \App\Models\PaymentAccount::getForMethod($method);
+
+            \App\Models\Expense::create([
+                'cash_drawer_id' => ($method === 'Cash' && $activeDrawer) ? $activeDrawer->id : null,
+                'payment_account_id' => $refundAccount?->id,
+                'user_id' => auth()->id(),
+                'recorded_by' => auth()->id(),
+                'amount' => $refundAmount,
+                'category' => 'Refund',
+                'description' => "Warranty Price Difference Refund ({$method}) for IMEI: " . ($saleItem->deviceImei?->imei ?? ''),
+                'expense_date' => now(),
+            ]);
+
             \App\Services\TreasuryService::recordOutflow(
-                $tillAccount,
+                $refundAccount,
                 floatval($refundAmount),
                 'Refund',
                 $saleItem,
-                "Warranty Price Difference Refund for IMEI: " . ($saleItem->deviceImei?->imei ?? ''),
+                "Warranty Price Difference Refund ({$method}) for IMEI: " . ($saleItem->deviceImei?->imei ?? ''),
                 'WAR-REF-' . $saleItem->id,
                 auth()->id()
             );
-            $notes = " [Partial Refund of UGX " . number_format($refundAmount, 2) . " processed.]";
+            $notes = " [Partial Refund of UGX " . number_format($refundAmount, 0) . " processed via {$method}.]";
         }
 
         return $notes;

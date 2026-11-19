@@ -6,18 +6,11 @@ import Card from '@/Components/SaaS/Card';
 import Button from '@/Components/SaaS/Button';
 import Badge from '@/Components/SaaS/Badge';
 import Modal from '@/Components/Modal';
-import { 
-    ShieldCheck, 
-    Search, 
-    Filter, 
-    User, 
-    Clock, 
-    Eye, 
-    AlertTriangle, 
-    ShoppingCart, 
-    Tag, 
-    Database, 
-    Key, 
+import {
+    ShieldCheck,
+    Search,
+    Clock,
+    Eye,
     RefreshCw,
     X
 } from 'lucide-react';
@@ -27,32 +20,38 @@ export default function ActivityLogsIndex({ auth, logs, users, modules, filters 
     const [search, setSearch] = useState(filters.search || '');
     const [selectedModule, setSelectedModule] = useState(filters.module || '');
     const [selectedUser, setSelectedUser] = useState(filters.user_id || '');
+    const [dateFrom, setDateFrom] = useState(filters.date_from || '');
+    const [dateTo, setDateTo] = useState(filters.date_to || '');
     const [activeLog, setActiveLog] = useState(null);
 
     const handleSearch = (e) => {
         e.preventDefault();
         router.get(route('activity-logs.index'), {
-            search,
-            module: selectedModule,
-            user_id: selectedUser
-        }, { preserveState: true });
+            search: search || undefined,
+            module: selectedModule || undefined,
+            user_id: selectedUser || undefined,
+            date_from: dateFrom || undefined,
+            date_to: dateTo || undefined,
+        }, { preserveState: true, preserveScroll: true });
     };
 
     const handleReset = () => {
         setSearch('');
         setSelectedModule('');
         setSelectedUser('');
-        router.get(route('activity-logs.index'));
+        setDateFrom('');
+        setDateTo('');
+        router.get(route('activity-logs.index'), {}, { preserveScroll: true });
     };
 
-    const getActionBadge = (action) => {
-        if (action.includes('discount') || action.includes('override') || action.includes('delete')) {
+    const getActionBadge = (action = '') => {
+        if (action.includes('discount') || action.includes('override') || action.includes('delete') || action.includes('refund') || action.includes('cancel')) {
             return <Badge variant="danger" className="text-[10px] uppercase font-bold">{action}</Badge>;
         }
-        if (action.includes('checkout') || action.includes('intake') || action.includes('created')) {
+        if (action.includes('checkout') || action.includes('intake') || action.includes('created') || action.includes('payment')) {
             return <Badge variant="success" className="text-[10px] uppercase font-bold">{action}</Badge>;
         }
-        if (action.includes('security') || action.includes('backup')) {
+        if (action.includes('security') || action.includes('backup') || action.includes('warranty')) {
             return <Badge variant="warning" className="text-[10px] uppercase font-bold">{action}</Badge>;
         }
         return <Badge variant="info" className="text-[10px] uppercase font-bold">{action}</Badge>;
@@ -60,11 +59,11 @@ export default function ActivityLogsIndex({ auth, logs, users, modules, filters 
 
     return (
         <AuthenticatedLayout>
-            <Head title="Cashier Audit Trail Log" />
+            <Head title="Audit Trail Log" />
 
             <div className="max-w-7xl mx-auto py-8 px-4 sm:px-6 lg:px-8">
-                <PageHeader 
-                    title="Cashier Audit Trail Log"
+                <PageHeader
+                    title="System Audit Trail Log"
                     breadcrumbs={[{ label: 'Home', href: '/' }, { label: 'Audit Log' }]}
                     actions={
                         <Button variant="glass" icon={RefreshCw} onClick={handleReset}>
@@ -74,21 +73,21 @@ export default function ActivityLogsIndex({ auth, logs, users, modules, filters 
                 />
 
                 {/* Filter & Search Bar */}
-                <Card className="p-6 mb-8">
-                    <form onSubmit={handleSearch} className="grid grid-cols-1 md:grid-cols-4 gap-4 items-center">
-                        <div className="relative">
-                            <Search className="absolute left-3.5 top-3 text-slate-400" size={18} />
-                            <input 
+                <Card className="p-5 mb-6">
+                    <form onSubmit={handleSearch} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-3 items-center">
+                        <div className="relative lg:col-span-2">
+                            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" size={16} />
+                            <input
                                 type="text"
-                                className="saas-input pl-10 w-full text-xs"
-                                placeholder="Search logs by keyword or IP..."
+                                className="saas-input !pl-10 w-full text-xs"
+                                placeholder="Search keyword, action, module, or IP..."
                                 value={search}
                                 onChange={(e) => setSearch(e.target.value)}
                             />
                         </div>
 
                         <div>
-                            <select 
+                            <select
                                 className="saas-input w-full text-xs"
                                 value={selectedModule}
                                 onChange={(e) => setSelectedModule(e.target.value)}
@@ -101,19 +100,36 @@ export default function ActivityLogsIndex({ auth, logs, users, modules, filters 
                         </div>
 
                         <div>
-                            <select 
+                            <select
                                 className="saas-input w-full text-xs"
                                 value={selectedUser}
                                 onChange={(e) => setSelectedUser(e.target.value)}
                             >
-                                <option value="">All Cashiers & Staff</option>
+                                <option value="">All Staff</option>
                                 {users.map((u) => (
                                     <option key={u.id} value={u.id}>{u.name} ({u.role})</option>
                                 ))}
                             </select>
                         </div>
 
-                        <div className="flex gap-2">
+                        <div className="flex items-center gap-1.5">
+                            <input
+                                type="date"
+                                value={dateFrom}
+                                onChange={(e) => setDateFrom(e.target.value)}
+                                title="From date"
+                                className="saas-input !px-2 text-xs w-full"
+                            />
+                            <input
+                                type="date"
+                                value={dateTo}
+                                onChange={(e) => setDateTo(e.target.value)}
+                                title="To date"
+                                className="saas-input !px-2 text-xs w-full"
+                            />
+                        </div>
+
+                        <div>
                             <Button variant="primary" type="submit" className="w-full text-xs">
                                 Apply Filter
                             </Button>
@@ -122,11 +138,12 @@ export default function ActivityLogsIndex({ auth, logs, users, modules, filters 
                 </Card>
 
                 {/* Logs Table */}
-                <Card className="overflow-hidden">
-                    <div className="overflow-x-auto">
+                <Card noPadding className="overflow-hidden">
+                    {/* Desktop Table */}
+                    <div className="hidden md:block overflow-x-auto">
                         <table className="w-full text-left border-collapse">
                             <thead>
-                                <tr className="bg-slate-50/80 border-b border-slate-200/80 text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+                                <tr className="bg-slate-50/80 dark:bg-slate-800/60 border-b border-slate-200/80 dark:border-slate-800 text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
                                     <th className="py-3.5 px-6">Timestamp</th>
                                     <th className="py-3.5 px-6">Staff Member</th>
                                     <th className="py-3.5 px-6">Module</th>
@@ -135,11 +152,11 @@ export default function ActivityLogsIndex({ auth, logs, users, modules, filters 
                                     <th className="py-3.5 px-6 text-right">Details</th>
                                 </tr>
                             </thead>
-                            <tbody className="divide-y divide-slate-100 text-xs">
+                            <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-xs">
                                 {logs.data.length > 0 ? (
                                     logs.data.map((log) => (
-                                        <tr key={log.id} className="hover:bg-slate-50/50 transition-colors">
-                                            <td className="py-4 px-6 font-semibold text-slate-600 whitespace-nowrap">
+                                        <tr key={log.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/50 transition-colors">
+                                            <td className="py-4 px-6 font-semibold text-slate-600 dark:text-slate-300 whitespace-nowrap">
                                                 <div className="flex items-center gap-2">
                                                     <Clock size={14} className="text-slate-400" />
                                                     {dayjs(log.created_at).format('MMM DD, YYYY HH:mm:ss')}
@@ -147,28 +164,28 @@ export default function ActivityLogsIndex({ auth, logs, users, modules, filters 
                                             </td>
                                             <td className="py-4 px-6 whitespace-nowrap">
                                                 <div className="flex items-center gap-2">
-                                                    <div className="w-7 h-7 rounded-full bg-slate-100 text-slate-600 font-bold flex items-center justify-center text-xs border border-slate-200">
+                                                    <div className="w-7 h-7 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 font-bold flex items-center justify-center text-xs border border-slate-200 dark:border-slate-700">
                                                         {log.user?.name ? log.user.name.charAt(0) : '?'}
                                                     </div>
                                                     <div>
-                                                        <p className="font-bold text-slate-900">{log.user?.name || 'System / Guest'}</p>
+                                                        <p className="font-bold text-slate-900 dark:text-white">{log.user?.name || 'System / Guest'}</p>
                                                         <p className="text-[10px] text-slate-400 capitalize">{log.user?.role || 'System'}</p>
                                                     </div>
                                                 </div>
                                             </td>
-                                            <td className="py-4 px-6 whitespace-nowrap font-bold text-slate-700">
+                                            <td className="py-4 px-6 whitespace-nowrap font-bold text-slate-700 dark:text-slate-200">
                                                 {log.module}
                                             </td>
                                             <td className="py-4 px-6 whitespace-nowrap">
                                                 {getActionBadge(log.action)}
                                             </td>
-                                            <td className="py-4 px-6 font-medium text-slate-700 max-w-md truncate">
+                                            <td className="py-4 px-6 font-medium text-slate-700 dark:text-slate-300 max-w-md truncate" title={log.description}>
                                                 {log.description}
                                             </td>
                                             <td className="py-4 px-6 text-right whitespace-nowrap">
-                                                <Button 
-                                                    variant="secondary" 
-                                                    className="py-1 px-2.5 text-xs" 
+                                                <Button
+                                                    variant="secondary"
+                                                    className="py-1 px-2.5 text-xs"
                                                     icon={Eye}
                                                     onClick={() => setActiveLog(log)}
                                                 >
@@ -180,8 +197,8 @@ export default function ActivityLogsIndex({ auth, logs, users, modules, filters 
                                 ) : (
                                     <tr>
                                         <td colSpan="6" className="py-12 text-center text-slate-400">
-                                            <ShieldCheck size={48} className="mx-auto mb-3 text-slate-300" />
-                                            <p className="text-base font-semibold text-slate-600">No activity logs recorded yet</p>
+                                            <ShieldCheck size={48} className="mx-auto mb-3 text-slate-300 dark:text-slate-600" />
+                                            <p className="text-base font-semibold text-slate-600 dark:text-slate-300">No activity logs recorded yet</p>
                                             <p className="text-xs mt-1">Actions performed by cashiers and staff will be logged here automatically.</p>
                                         </td>
                                     </tr>
@@ -190,23 +207,53 @@ export default function ActivityLogsIndex({ auth, logs, users, modules, filters 
                         </table>
                     </div>
 
+                    {/* Mobile Cards View */}
+                    <div className="md:hidden divide-y divide-slate-100 dark:divide-slate-800">
+                        {logs.data.length > 0 ? logs.data.map((log) => (
+                            <div key={log.id} className="p-4 space-y-2 bg-white dark:bg-slate-900">
+                                <div className="flex items-start justify-between gap-2">
+                                    <div>
+                                        <div className="flex items-center flex-wrap gap-1.5">
+                                            <span className="font-bold text-slate-900 dark:text-white text-xs">{log.module}</span>
+                                            {getActionBadge(log.action)}
+                                        </div>
+                                        <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+                                            {log.user?.name || 'System'} • {dayjs(log.created_at).format('MMM DD, HH:mm')}
+                                        </p>
+                                    </div>
+                                    <button
+                                        type="button"
+                                        onClick={() => setActiveLog(log)}
+                                        className="px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 text-xs font-bold flex items-center gap-1 shrink-0"
+                                    >
+                                        <Eye size={12} /> View
+                                    </button>
+                                </div>
+                                <p className="text-xs text-slate-700 dark:text-slate-300 line-clamp-2">{log.description}</p>
+                            </div>
+                        )) : (
+                            <div className="py-10 text-center text-sm text-slate-400">No activity logs found.</div>
+                        )}
+                    </div>
+
                     {/* Pagination */}
                     {logs.links && logs.links.length > 3 && (
-                        <div className="p-4 border-t border-slate-100 flex items-center justify-between">
-                            <span className="text-xs text-slate-500">
+                        <div className="p-4 border-t border-slate-100 dark:border-slate-800 bg-slate-50/40 dark:bg-slate-800/30 flex flex-wrap items-center justify-between gap-3">
+                            <span className="text-xs text-slate-500 dark:text-slate-400">
                                 Showing {logs.from} to {logs.to} of {logs.total} entries
                             </span>
-                            <div className="flex gap-1">
+                            <div className="flex flex-wrap gap-1">
                                 {logs.links.map((link, idx) => (
                                     <button
                                         key={idx}
-                                        onClick={() => link.url && router.get(link.url)}
+                                        type="button"
+                                        onClick={() => link.url && router.get(link.url, {}, { preserveScroll: true, preserveState: true })}
                                         disabled={!link.url}
                                         dangerouslySetInnerHTML={{ __html: link.label }}
                                         className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
-                                            link.active 
-                                                ? 'bg-indigo-600 text-white' 
-                                                : 'text-slate-600 hover:bg-slate-100'
+                                            link.active
+                                                ? 'bg-indigo-600 text-white'
+                                                : 'text-slate-600 dark:text-slate-300 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700'
                                         } ${!link.url ? 'opacity-40 cursor-not-allowed' : ''}`}
                                     />
                                 ))}
@@ -230,7 +277,7 @@ export default function ActivityLogsIndex({ auth, logs, users, modules, filters 
                                     <p className="text-xs text-slate-500 dark:text-slate-400">Event ID #{activeLog.id} • {dayjs(activeLog.created_at).format('MMM DD, YYYY HH:mm:ss')}</p>
                                 </div>
                             </div>
-                            <button onClick={() => setActiveLog(null)} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">
+                            <button type="button" onClick={() => setActiveLog(null)} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">
                                 <X size={20} />
                             </button>
                         </div>
@@ -250,7 +297,7 @@ export default function ActivityLogsIndex({ auth, logs, users, modules, filters 
 
                             <div>
                                 <span className="block font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider text-[10px] mb-1">Description</span>
-                                <p className="p-3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200 font-medium">
+                                <p className="p-3 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200 font-medium">
                                     {activeLog.description}
                                 </p>
                             </div>

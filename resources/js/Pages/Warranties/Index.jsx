@@ -1,7 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Head, Link, useForm, router } from '@inertiajs/react';
 import axios from 'axios';
-import { ShieldCheck, ShieldAlert, Search, RefreshCw, Wrench, CheckCircle, XCircle, AlertCircle, FileText, ClipboardList, CheckSquare, DollarSign } from 'lucide-react';
+import toast from 'react-hot-toast';
+import { ShieldCheck, ShieldAlert, Search, RefreshCw, Wrench, CheckCircle, XCircle, AlertCircle, FileText, ClipboardList, CheckSquare, X } from 'lucide-react';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import Card from '@/Components/SaaS/Card';
 import Badge from '@/Components/SaaS/Badge';
@@ -18,25 +19,27 @@ export default function WarrantiesIndex({ auth, claims = {}, inStockDevices = []
     const [selectedClaim, setSelectedClaim] = useState(null);
     const [showUpdateModal, setShowUpdateModal] = useState(false);
 
-    // Claims Search State
+    // Claims Search & Status Filter State
     const [claimSearchQuery, setClaimSearchQuery] = useState(filters.search || '');
-    const [isInitialRender, setIsInitialRender] = useState(true);
+    const [statusFilter, setStatusFilter] = useState(filters.status || 'all');
+    const isInitialRender = useRef(true);
 
     useEffect(() => {
-        if (isInitialRender) {
-            setIsInitialRender(false);
+        if (isInitialRender.current) {
+            isInitialRender.current = false;
             return;
         }
 
         const timer = setTimeout(() => {
             const params = {};
             if (claimSearchQuery) params.search = claimSearchQuery;
+            if (statusFilter && statusFilter !== 'all') params.status = statusFilter;
 
-            router.get('/warranties', params, { preserveState: true, replace: true });
+            router.get('/warranties', params, { preserveState: true, preserveScroll: true, replace: true });
         }, 300);
 
         return () => clearTimeout(timer);
-    }, [claimSearchQuery]);
+    }, [claimSearchQuery, statusFilter]);
 
     // Claim Creation Form
     const claimForm = useForm({
@@ -77,6 +80,7 @@ export default function WarrantiesIndex({ auth, claims = {}, inStockDevices = []
     };
 
     const openClaimModal = (item) => {
+        claimForm.clearErrors();
         setSelectedDevice(item);
         claimForm.setData({
             sale_item_id: item.sale_item_id,
@@ -94,16 +98,22 @@ export default function WarrantiesIndex({ auth, claims = {}, inStockDevices = []
     const handleClaimSubmit = (e) => {
         e.preventDefault();
         claimForm.post('/api/warranties', {
+            preserveScroll: true,
             onSuccess: () => {
+                toast.success('Warranty claim submitted successfully!');
                 setShowClaimModal(false);
                 setSelectedDevice(null);
                 setSearchResults(null);
                 setSearchQuery('');
+            },
+            onError: (err) => {
+                toast.error(Object.values(err)[0] || 'Failed to submit warranty claim.');
             }
         });
     };
 
     const openUpdateModal = (claim) => {
+        updateForm.clearErrors();
         setSelectedClaim(claim);
         updateForm.setData({
             status: claim.status,
@@ -117,10 +127,16 @@ export default function WarrantiesIndex({ auth, claims = {}, inStockDevices = []
 
     const handleUpdateSubmit = (e) => {
         e.preventDefault();
+        if (!selectedClaim) return;
         updateForm.put(`/api/warranties/${selectedClaim.id}`, {
+            preserveScroll: true,
             onSuccess: () => {
+                toast.success(`Claim #${selectedClaim.id} updated successfully!`);
                 setShowUpdateModal(false);
                 setSelectedClaim(null);
+            },
+            onError: (err) => {
+                toast.error(Object.values(err)[0] || 'Failed to update claim.');
             }
         });
     };
@@ -153,51 +169,63 @@ export default function WarrantiesIndex({ auth, claims = {}, inStockDevices = []
 
             {summary && (
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
-                    <Card className="animate-slide-up relative overflow-hidden flex flex-col justify-between" style={{ animationDelay: '0.0s' }}>
+                    <Card
+                        className={`animate-slide-up relative overflow-hidden flex flex-col justify-between cursor-pointer transition-all ${statusFilter === 'active' ? 'ring-2 ring-amber-500' : 'hover:ring-2 hover:ring-amber-400/50'}`}
+                        style={{ animationDelay: '0.0s' }}
+                        onClick={() => setStatusFilter(statusFilter === 'active' ? 'all' : 'active')}
+                    >
                         <div className="flex justify-between items-start mb-4">
                             <div>
-                                <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Active Claims</p>
-                                <h3 className="text-3xl font-black text-slate-900">{summary.active_claims || 0}</h3>
+                                <p className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">Active Claims</p>
+                                <h3 className="text-3xl font-black text-slate-900 dark:text-white">{summary.active_claims || 0}</h3>
                             </div>
-                            <div className="w-12 h-12 rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center">
+                            <div className="w-12 h-12 rounded-2xl bg-amber-50 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400 flex items-center justify-center">
                                 <ClipboardList size={24} />
                             </div>
                         </div>
-                        <div className="flex items-center gap-2 text-sm text-slate-500">
+                        <div className="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
                             <Badge variant="warning">In Progress</Badge>
                             <span>Open</span>
                         </div>
                     </Card>
 
-                    <Card className="animate-slide-up relative overflow-hidden flex flex-col justify-between" style={{ animationDelay: '0.1s' }}>
+                    <Card
+                        className={`animate-slide-up relative overflow-hidden flex flex-col justify-between cursor-pointer transition-all ${statusFilter === 'resolved' ? 'ring-2 ring-blue-500' : 'hover:ring-2 hover:ring-blue-400/50'}`}
+                        style={{ animationDelay: '0.1s' }}
+                        onClick={() => setStatusFilter(statusFilter === 'resolved' ? 'all' : 'resolved')}
+                    >
                         <div className="flex justify-between items-start mb-4">
                             <div>
-                                <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Resolved Claims</p>
-                                <h3 className="text-3xl font-black text-slate-900">{summary.resolved_claims || 0}</h3>
+                                <p className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">Resolved Claims</p>
+                                <h3 className="text-3xl font-black text-slate-900 dark:text-white">{summary.resolved_claims || 0}</h3>
                             </div>
-                            <div className="w-12 h-12 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center">
+                            <div className="w-12 h-12 rounded-2xl bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 flex items-center justify-center">
                                 <CheckSquare size={24} />
                             </div>
                         </div>
-                        <div className="flex items-center gap-2 text-sm text-slate-500">
+                        <div className="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
                             <Badge variant="primary">Completed</Badge>
                             <span>Closed</span>
                         </div>
                     </Card>
 
-                    <Card className="animate-slide-up relative overflow-hidden flex flex-col justify-between" style={{ animationDelay: '0.2s' }}>
+                    <Card
+                        className="animate-slide-up relative overflow-hidden flex flex-col justify-between cursor-pointer hover:ring-2 hover:ring-slate-400/50 transition-all"
+                        style={{ animationDelay: '0.2s' }}
+                        onClick={() => setStatusFilter('all')}
+                    >
                         <div className="flex justify-between items-start mb-4">
                             <div>
-                                <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Total Claims</p>
-                                <h3 className="text-3xl font-black text-slate-900">
+                                <p className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">Total Claims</p>
+                                <h3 className="text-3xl font-black text-slate-900 dark:text-white">
                                     {summary.total_claims || 0}
                                 </h3>
                             </div>
-                            <div className="w-12 h-12 rounded-2xl bg-slate-50 text-slate-600 flex items-center justify-center">
+                            <div className="w-12 h-12 rounded-2xl bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 flex items-center justify-center">
                                 <FileText size={24} />
                             </div>
                         </div>
-                        <div className="flex items-center gap-2 text-sm text-slate-500">
+                        <div className="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
                             <Badge variant="neutral">Historical</Badge>
                             <span>All Claims</span>
                         </div>
@@ -208,7 +236,7 @@ export default function WarrantiesIndex({ auth, claims = {}, inStockDevices = []
             <div className="grid grid-cols-1 gap-6 mb-6">
                 <Card className="animate-slide-up">
                     <form onSubmit={handleLookup} className="flex flex-col gap-4">
-                        <label className="text-sm font-bold text-slate-900">
+                        <label className="text-sm font-bold text-slate-900 dark:text-white">
                             Scan Receipt Barcode or Enter IMEI Number
                         </label>
                         <div className="flex flex-col md:flex-row gap-4">
@@ -232,7 +260,7 @@ export default function WarrantiesIndex({ auth, claims = {}, inStockDevices = []
                     </form>
 
                     {searchError && (
-                        <div className="mt-4 p-4 bg-rose-50 text-rose-600 rounded-xl border border-rose-100 flex items-center gap-2">
+                        <div className="mt-4 p-4 bg-rose-50 dark:bg-rose-950/40 text-rose-600 dark:text-rose-300 rounded-xl border border-rose-200 dark:border-rose-800 flex items-center gap-2">
                             <AlertCircle size={18} /> {searchError}
                         </div>
                     )}
@@ -242,60 +270,60 @@ export default function WarrantiesIndex({ auth, claims = {}, inStockDevices = []
             {/* Search Results Display */}
             {searchResults && (
                 <div className="mb-8 animate-slide-up">
-                    <h5 className="font-bold text-slate-900 mb-4 flex items-center gap-2">
+                    <h5 className="font-bold text-slate-900 dark:text-white mb-4 flex items-center gap-2">
                         Matching Device Sales <Badge variant="neutral">{searchResults.length}</Badge>
                     </h5>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                         {searchResults.map((item, idx) => (
                             <Card key={idx} className="relative">
-                                <div className="flex justify-between items-start mb-6">
+                                <div className="flex justify-between items-start gap-2 mb-6">
                                     <div>
-                                        <h5 className="font-bold text-lg text-slate-900 mb-1">
+                                        <h5 className="font-bold text-lg text-slate-900 dark:text-white mb-1">
                                             {item.device.brand} {item.device.model}
                                         </h5>
-                                        <div className="text-sm text-slate-500">
-                                            IMEI: <span className="font-mono font-bold text-slate-700">{item.device.imei}</span>
+                                        <div className="text-sm text-slate-500 dark:text-slate-400">
+                                            IMEI: <span className="font-mono font-bold text-slate-700 dark:text-slate-200">{item.device.imei}</span>
                                         </div>
                                     </div>
 
                                     {item.is_active ? (
-                                        <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-emerald-50 text-emerald-700 font-bold text-sm border border-emerald-200">
-                                            <ShieldCheck size={16} /> Active ({item.days_remaining} days left)
+                                        <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 font-bold text-xs border border-emerald-200 dark:border-emerald-800 shrink-0">
+                                            <ShieldCheck size={15} /> Active ({item.days_remaining}d left)
                                         </span>
                                     ) : (
-                                        <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-rose-50 text-rose-700 font-bold text-sm border border-rose-200">
-                                            <ShieldAlert size={16} /> Expired ({Math.abs(item.days_remaining)} days ago)
+                                        <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-rose-50 dark:bg-rose-900/30 text-rose-700 dark:text-rose-300 font-bold text-xs border border-rose-200 dark:border-rose-800 shrink-0">
+                                            <ShieldAlert size={15} /> Expired ({Math.abs(item.days_remaining)}d ago)
                                         </span>
                                     )}
                                 </div>
 
-                                <div className="grid grid-cols-2 gap-4 bg-slate-50 p-4 rounded-xl text-sm mb-6 border border-slate-100">
+                                <div className="grid grid-cols-2 gap-4 bg-slate-50 dark:bg-slate-800/60 p-4 rounded-xl text-sm mb-6 border border-slate-100 dark:border-slate-700">
                                     <div>
-                                        <span className="text-slate-500 block mb-1">Receipt #</span> 
-                                        <span className="font-bold text-slate-900">#{item.sale_id}</span>
+                                        <span className="text-slate-500 dark:text-slate-400 block mb-1">Receipt #</span> 
+                                        <span className="font-bold text-slate-900 dark:text-white">#{item.sale_id}</span>
                                     </div>
                                     <div>
-                                        <span className="text-slate-500 block mb-1">Purchase Date</span> 
-                                        <span className="font-bold text-slate-900">{item.purchase_date}</span>
+                                        <span className="text-slate-500 dark:text-slate-400 block mb-1">Purchase Date</span> 
+                                        <span className="font-bold text-slate-900 dark:text-white">{item.purchase_date}</span>
                                     </div>
                                     <div>
-                                        <span className="text-slate-500 block mb-1">Warranty Period</span> 
-                                        <span className="font-bold text-slate-900">{item.warranty_months} Months</span>
+                                        <span className="text-slate-500 dark:text-slate-400 block mb-1">Warranty Period</span> 
+                                        <span className="font-bold text-slate-900 dark:text-white">{item.warranty_months} Months</span>
                                     </div>
                                     <div>
-                                        <span className="text-slate-500 block mb-1">Expiration Date</span> 
-                                        <span className="font-bold text-slate-900">{item.expiry_date}</span>
+                                        <span className="text-slate-500 dark:text-slate-400 block mb-1">Expiration Date</span> 
+                                        <span className="font-bold text-slate-900 dark:text-white">{item.expiry_date}</span>
                                     </div>
                                     {item.customer && (
-                                        <div className="col-span-2 pt-3 mt-1 border-t border-slate-200">
-                                            <span className="text-slate-500 mr-2">Customer:</span> 
-                                            <span className="font-bold text-slate-900">{item.customer.name} ({item.customer.phone})</span>
+                                        <div className="col-span-2 pt-3 mt-1 border-t border-slate-200 dark:border-slate-700">
+                                            <span className="text-slate-500 dark:text-slate-400 mr-2">Customer:</span> 
+                                            <span className="font-bold text-slate-900 dark:text-white">{item.customer.name} ({item.customer.phone})</span>
                                         </div>
                                     )}
                                 </div>
 
-                                <div className="flex justify-between items-center pt-4 border-t border-slate-100">
-                                    <span className="text-sm text-slate-500">Past claims: {item.past_claims_count}</span>
+                                <div className="flex justify-between items-center pt-4 border-t border-slate-100 dark:border-slate-800">
+                                    <span className="text-sm text-slate-500 dark:text-slate-400">Past claims: {item.past_claims_count}</span>
                                     <Button variant="secondary" onClick={() => openClaimModal(item)} icon={FileText} className="!py-2">
                                         Log Claim
                                     </Button>
@@ -309,26 +337,44 @@ export default function WarrantiesIndex({ auth, claims = {}, inStockDevices = []
             {/* Claims Tracking Table */}
             <div className="animate-slide-up" style={{ animationDelay: '0.2s' }}>
                 <Card noPadding className="overflow-hidden">
-                    <div className="px-6 py-4 border-b border-slate-100 bg-white flex flex-col sm:flex-row justify-between items-center gap-4">
-                        <h3 className="font-bold text-slate-900 flex items-center gap-2">
+                    <div className="px-6 py-4 border-b border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900 flex flex-col sm:flex-row justify-between items-stretch sm:items-center gap-3">
+                        <h3 className="font-bold text-slate-900 dark:text-white flex items-center gap-2">
                             <RefreshCw size={20} className="text-pink-500" /> Claims & Returns Log
                         </h3>
                         
-                        <div className="relative w-full sm:w-72">
-                            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
-                                <Search size={16} />
+                        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5">
+                            <select
+                                value={statusFilter}
+                                onChange={(e) => setStatusFilter(e.target.value)}
+                                className="saas-input !py-2 !text-xs font-semibold sm:w-40"
+                            >
+                                <option value="all">All Statuses</option>
+                                <option value="active">Active (Open)</option>
+                                <option value="resolved">Resolved (Closed)</option>
+                                <option value="Pending">Pending</option>
+                                <option value="Approved">Approved</option>
+                                <option value="In Repair">In Repair</option>
+                                <option value="Completed">Completed</option>
+                                <option value="Rejected">Rejected</option>
+                            </select>
+
+                            <div className="relative w-full sm:w-64">
+                                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
+                                    <Search size={16} />
+                                </div>
+                                <input 
+                                    type="text" 
+                                    className="saas-input !pl-9 !py-2 !text-sm" 
+                                    placeholder="Search IMEI, customer, type..." 
+                                    value={claimSearchQuery}
+                                    onChange={e => setClaimSearchQuery(e.target.value)}
+                                />
                             </div>
-                            <input 
-                                type="text" 
-                                className="saas-input !pl-9 !py-2 !text-sm" 
-                                placeholder="Search claims..." 
-                                value={claimSearchQuery}
-                                onChange={e => setClaimSearchQuery(e.target.value)}
-                            />
                         </div>
                     </div>
 
-                    <div className="overflow-x-auto">
+                    {/* Desktop Table */}
+                    <div className="hidden md:block overflow-x-auto">
                         <table className="saas-table w-full whitespace-nowrap">
                             <thead>
                                 <tr>
@@ -345,34 +391,34 @@ export default function WarrantiesIndex({ auth, claims = {}, inStockDevices = []
                             <tbody>
                                 {claims.data && claims.data.length > 0 ? claims.data.map(claim => (
                                     <tr key={claim.id}>
-                                        <td className="font-bold text-slate-900">#{claim.id}</td>
+                                        <td className="font-bold text-slate-900 dark:text-white">#{claim.id}</td>
                                         <td>
-                                            <div className="font-bold text-slate-900">{claim.device_imei?.product?.brand?.name} {claim.device_imei?.product?.model_name}</div>
-                                            <div className="text-sm text-slate-500 font-mono mt-0.5">{claim.device_imei?.imei}</div>
+                                            <div className="font-bold text-slate-900 dark:text-white">{claim.device_imei?.product?.brand?.name} {claim.device_imei?.product?.model_name}</div>
+                                            <div className="text-sm text-slate-500 dark:text-slate-400 font-mono mt-0.5">{claim.device_imei?.imei}</div>
                                         </td>
                                         <td>
                                             {claim.customer ? (
                                                 <div>
-                                                    <div className="font-bold text-slate-900">{claim.customer.name}</div>
-                                                    <div className="text-sm text-slate-500 mt-0.5">{claim.customer.phone}</div>
+                                                    <div className="font-bold text-slate-900 dark:text-white">{claim.customer.name}</div>
+                                                    <div className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">{claim.customer.phone}</div>
                                                 </div>
-                                            ) : <span className="text-slate-500 italic">Walk-in</span>}
+                                            ) : <span className="text-slate-500 dark:text-slate-400 italic">Walk-in</span>}
                                         </td>
                                         <td>
                                             <Badge variant="neutral">{claim.claim_type}</Badge>
                                         </td>
                                         <td className="max-w-[220px]">
-                                            <div className="truncate text-sm text-slate-900" title={claim.issue_description}>
+                                            <div className="truncate text-sm text-slate-900 dark:text-slate-200" title={claim.issue_description}>
                                                 {claim.issue_description}
                                             </div>
                                             {claim.resolution_notes && (
-                                                <div className="truncate text-xs text-slate-500 italic mt-1" title={claim.resolution_notes}>
+                                                <div className="truncate text-xs text-slate-500 dark:text-slate-400 italic mt-1" title={claim.resolution_notes}>
                                                     {claim.resolution_notes}
                                                 </div>
                                             )}
                                         </td>
                                         <td>{getStatusBadge(claim.status)}</td>
-                                        <td className="text-slate-500 text-sm">
+                                        <td className="text-slate-500 dark:text-slate-400 text-sm">
                                             {new Date(claim.created_at).toLocaleDateString()}
                                         </td>
                                         <td className="text-right">
@@ -383,7 +429,7 @@ export default function WarrantiesIndex({ auth, claims = {}, inStockDevices = []
                                     </tr>
                                 )) : (
                                     <tr>
-                                        <td colSpan="8" className="text-center py-12 text-slate-500">
+                                        <td colSpan="8" className="text-center py-12 text-slate-500 dark:text-slate-400">
                                             No warranty claims or returns logged yet.
                                         </td>
                                     </tr>
@@ -392,16 +438,50 @@ export default function WarrantiesIndex({ auth, claims = {}, inStockDevices = []
                         </table>
                     </div>
 
+                    {/* Mobile Claims Cards */}
+                    <div className="md:hidden divide-y divide-slate-100 dark:divide-slate-800">
+                        {claims.data && claims.data.length > 0 ? claims.data.map(claim => (
+                            <div key={claim.id} className="p-4 space-y-2.5 bg-white dark:bg-slate-900">
+                                <div className="flex items-start justify-between gap-2">
+                                    <div>
+                                        <div className="flex items-center gap-2">
+                                            <span className="font-bold text-slate-900 dark:text-white text-sm">#{claim.id}</span>
+                                            <Badge variant="neutral">{claim.claim_type}</Badge>
+                                        </div>
+                                        <p className="font-bold text-slate-800 dark:text-slate-200 text-sm mt-0.5">
+                                            {claim.device_imei?.product?.brand?.name} {claim.device_imei?.product?.model_name}
+                                        </p>
+                                        <p className="font-mono text-xs text-slate-500 dark:text-slate-400">{claim.device_imei?.imei}</p>
+                                    </div>
+                                    {getStatusBadge(claim.status)}
+                                </div>
+                                <p className="text-xs text-slate-600 dark:text-slate-300 line-clamp-2">{claim.issue_description}</p>
+                                <div className="flex items-center justify-between pt-1">
+                                    <span className="text-xs text-slate-500 dark:text-slate-400">
+                                        {claim.customer?.name || 'Walk-in'} • {new Date(claim.created_at).toLocaleDateString()}
+                                    </span>
+                                    <Button variant="secondary" onClick={() => openUpdateModal(claim)} className="!py-1 !px-3 !text-xs">
+                                        Update
+                                    </Button>
+                                </div>
+                            </div>
+                        )) : (
+                            <div className="py-10 text-center text-sm text-slate-400">No warranty claims found.</div>
+                        )}
+                    </div>
+
                     {/* Pagination */}
                     {claims.links && claims.links.length > 3 && (
-                        <div className="flex justify-center mt-6 p-6 border-t border-slate-100 bg-white">
-                            <nav className="inline-flex bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden">
+                        <div className="flex justify-center p-5 border-t border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900">
+                            <nav className="inline-flex flex-wrap bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden">
                                 {claims.links.map((link, k) => (
                                     <Link 
                                         key={k}
                                         href={link.url || '#'}
-                                        className={`px-4 py-2 text-sm font-medium border-r border-slate-100 last:border-0 ${
-                                            link.active ? 'bg-indigo-50 text-indigo-600' : 'text-slate-600 hover:bg-slate-50'
+                                        preserveScroll
+                                        preserveState
+                                        className={`px-4 py-2 text-sm font-medium border-r border-slate-200 dark:border-slate-700 last:border-0 ${
+                                            link.active ? 'bg-indigo-50 dark:bg-indigo-900/40 text-indigo-600 dark:text-indigo-300 font-bold' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700'
                                         } ${link.url === null ? 'opacity-50 cursor-not-allowed pointer-events-none' : ''}`}
                                         dangerouslySetInnerHTML={{ __html: link.label }}
                                     />
@@ -414,28 +494,28 @@ export default function WarrantiesIndex({ auth, claims = {}, inStockDevices = []
 
             {/* Log Claim Modal */}
             {showClaimModal && selectedDevice && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm animate-fade-in">
-                    <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg overflow-hidden flex flex-col max-h-[90vh]">
-                        <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
-                            <h3 className="font-bold text-slate-900">Log Warranty Claim</h3>
-                            <button onClick={() => setShowClaimModal(false)} className="text-slate-400 hover:text-slate-600 transition-colors">
-                                &times;
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fade-in">
+                    <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-xl w-full max-w-lg overflow-hidden flex flex-col max-h-[90vh]">
+                        <div className="px-6 py-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
+                            <h3 className="font-bold text-slate-900 dark:text-white">Log Warranty Claim</h3>
+                            <button type="button" onClick={() => setShowClaimModal(false)} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors">
+                                <X size={18} />
                             </button>
                         </div>
                         <div className="p-6 overflow-y-auto">
                             <form id="claimForm" onSubmit={handleClaimSubmit} className="space-y-4">
-                                <div className="bg-slate-50 p-4 rounded-xl text-sm border border-slate-100 space-y-2">
+                                <div className="bg-slate-50 dark:bg-slate-800/60 p-4 rounded-xl text-sm border border-slate-100 dark:border-slate-700 space-y-2">
                                     <div className="flex justify-between">
-                                        <span className="text-slate-500">Device:</span>
-                                        <span className="font-bold text-slate-900">{selectedDevice.device.brand} {selectedDevice.device.model}</span>
+                                        <span className="text-slate-500 dark:text-slate-400">Device:</span>
+                                        <span className="font-bold text-slate-900 dark:text-white">{selectedDevice.device.brand} {selectedDevice.device.model}</span>
                                     </div>
                                     <div className="flex justify-between">
-                                        <span className="text-slate-500">IMEI:</span>
-                                        <span className="font-mono text-slate-900">{selectedDevice.device.imei}</span>
+                                        <span className="text-slate-500 dark:text-slate-400">IMEI:</span>
+                                        <span className="font-mono text-slate-900 dark:text-white">{selectedDevice.device.imei}</span>
                                     </div>
                                     <div className="flex justify-between">
-                                        <span className="text-slate-500">Status:</span>
-                                        <span className={`font-bold ${selectedDevice.is_active ? 'text-emerald-600' : 'text-rose-600'}`}>
+                                        <span className="text-slate-500 dark:text-slate-400">Status:</span>
+                                        <span className={`font-bold ${selectedDevice.is_active ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
                                             {selectedDevice.is_active ? 'Active Warranty' : 'Expired Warranty'}
                                         </span>
                                     </div>
@@ -455,11 +535,11 @@ export default function WarrantiesIndex({ auth, claims = {}, inStockDevices = []
                                 </div>
 
                                 {claimForm.data.claim_type === 'Replacement' && (
-                                    <div className="bg-indigo-50/50 p-4 rounded-xl border border-indigo-100 space-y-4">
+                                    <div className="bg-indigo-50/50 dark:bg-indigo-950/30 p-4 rounded-xl border border-indigo-100 dark:border-indigo-800 space-y-4">
                                         <div>
-                                            <label className="saas-label text-indigo-900">Select New Replacement Device (Optional)</label>
+                                            <label className="saas-label text-indigo-900 dark:text-indigo-300">Select New Replacement Device (Optional)</label>
                                             <select 
-                                                className="saas-input bg-white border-indigo-200 focus:ring-indigo-500/20 focus:border-indigo-500"
+                                                className="saas-input border-indigo-200 dark:border-indigo-700 focus:ring-indigo-500/20 focus:border-indigo-500"
                                                 value={claimForm.data.replacement_imei_id}
                                                 onChange={(e) => claimForm.setData('replacement_imei_id', e.target.value)}
                                             >
@@ -479,29 +559,29 @@ export default function WarrantiesIndex({ auth, claims = {}, inStockDevices = []
                                             const difference = newPrice - originalPrice;
 
                                             return (
-                                                <div className="bg-white p-3 rounded-lg border border-indigo-100 text-sm space-y-2">
+                                                <div className="bg-white dark:bg-slate-900 p-3 rounded-lg border border-indigo-100 dark:border-indigo-800 text-sm space-y-2">
                                                     <div className="flex justify-between">
-                                                        <span className="text-slate-500">Original Paid:</span>
-                                                        <span className="font-bold text-slate-900">UGX {originalPrice.toLocaleString()}</span>
+                                                        <span className="text-slate-500 dark:text-slate-400">Original Paid:</span>
+                                                        <span className="font-bold text-slate-900 dark:text-white">UGX {originalPrice.toLocaleString()}</span>
                                                     </div>
                                                     <div className="flex justify-between">
-                                                        <span className="text-slate-500">Replacement Price:</span>
-                                                        <span className="font-bold text-slate-900">UGX {newPrice.toLocaleString()}</span>
+                                                        <span className="text-slate-500 dark:text-slate-400">Replacement Price:</span>
+                                                        <span className="font-bold text-slate-900 dark:text-white">UGX {newPrice.toLocaleString()}</span>
                                                     </div>
-                                                    <div className="flex justify-between border-t border-indigo-50 pt-2">
-                                                        <span className="font-bold text-slate-700">Difference:</span>
+                                                    <div className="flex justify-between border-t border-indigo-50 dark:border-slate-800 pt-2">
+                                                        <span className="font-bold text-slate-700 dark:text-slate-300">Difference:</span>
                                                         {difference > 0 ? (
-                                                            <span className="font-extrabold text-rose-600">+UGX {difference.toLocaleString()} (Upgrade Fee)</span>
+                                                            <span className="font-extrabold text-rose-600 dark:text-rose-400">+UGX {difference.toLocaleString()} (Upgrade Fee)</span>
                                                         ) : difference < 0 ? (
-                                                            <span className="font-extrabold text-emerald-600">-UGX {Math.abs(difference).toLocaleString()} (Refund Due)</span>
+                                                            <span className="font-extrabold text-emerald-600 dark:text-emerald-400">-UGX {Math.abs(difference).toLocaleString()} (Refund Due)</span>
                                                         ) : (
-                                                            <span className="font-bold text-slate-500">Even Swap (No fee)</span>
+                                                            <span className="font-bold text-slate-500 dark:text-slate-400">Even Swap (No fee)</span>
                                                         )}
                                                     </div>
                                                     
                                                     {difference !== 0 && (
                                                         <div className="pt-2">
-                                                            <label className="text-xs font-bold text-slate-700 uppercase tracking-wider mb-1 block">
+                                                            <label className="text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1 block">
                                                                 {difference > 0 ? 'Collect Upgrade Fee Via' : 'Issue Refund Via'}
                                                             </label>
                                                             <select 
@@ -548,7 +628,7 @@ export default function WarrantiesIndex({ auth, claims = {}, inStockDevices = []
                                 </div>
                             </form>
                         </div>
-                        <div className="px-6 py-4 border-t border-slate-100 bg-slate-50 flex gap-3 justify-end">
+                        <div className="px-6 py-4 border-t border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/50 flex gap-3 justify-end">
                             <Button variant="secondary" onClick={() => setShowClaimModal(false)}>Cancel</Button>
                             <Button variant="primary" form="claimForm" type="submit" isLoading={claimForm.processing}>
                                 Submit Claim
@@ -560,12 +640,12 @@ export default function WarrantiesIndex({ auth, claims = {}, inStockDevices = []
 
             {/* Update Status Modal */}
             {showUpdateModal && selectedClaim && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm animate-fade-in">
-                    <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg overflow-hidden flex flex-col max-h-[90vh]">
-                        <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
-                            <h3 className="font-bold text-slate-900">Update Claim #{selectedClaim.id}</h3>
-                            <button onClick={() => setShowUpdateModal(false)} className="text-slate-400 hover:text-slate-600 transition-colors">
-                                &times;
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fade-in">
+                    <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-xl w-full max-w-lg overflow-hidden flex flex-col max-h-[90vh]">
+                        <div className="px-6 py-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
+                            <h3 className="font-bold text-slate-900 dark:text-white">Update Claim #{selectedClaim.id}</h3>
+                            <button type="button" onClick={() => setShowUpdateModal(false)} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors">
+                                <X size={18} />
                             </button>
                         </div>
                         <div className="p-6 overflow-y-auto">
@@ -601,11 +681,11 @@ export default function WarrantiesIndex({ auth, claims = {}, inStockDevices = []
                                 </div>
 
                                 {updateForm.data.device_action === 'issue_replacement' && (
-                                    <div className="bg-indigo-50/50 p-4 rounded-xl border border-indigo-100 space-y-4">
+                                    <div className="bg-indigo-50/50 dark:bg-indigo-950/30 p-4 rounded-xl border border-indigo-100 dark:border-indigo-800 space-y-4">
                                         <div>
-                                            <label className="saas-label text-indigo-900">Select Replacement Phone from In-Stock</label>
+                                            <label className="saas-label text-indigo-900 dark:text-indigo-300">Select Replacement Phone from In-Stock</label>
                                             <select 
-                                                className="saas-input bg-white border-indigo-200 focus:ring-indigo-500/20 focus:border-indigo-500"
+                                                className="saas-input border-indigo-200 dark:border-indigo-700 focus:ring-indigo-500/20 focus:border-indigo-500"
                                                 value={updateForm.data.replacement_imei_id}
                                                 onChange={(e) => updateForm.setData('replacement_imei_id', e.target.value)}
                                                 required
@@ -626,29 +706,29 @@ export default function WarrantiesIndex({ auth, claims = {}, inStockDevices = []
                                             const difference = newPrice - originalPrice;
 
                                             return (
-                                                <div className="bg-white p-3 rounded-lg border border-indigo-100 text-sm space-y-2">
+                                                <div className="bg-white dark:bg-slate-900 p-3 rounded-lg border border-indigo-100 dark:border-indigo-800 text-sm space-y-2">
                                                     <div className="flex justify-between">
-                                                        <span className="text-slate-500">Original Paid:</span>
-                                                        <span className="font-bold text-slate-900">UGX {originalPrice.toLocaleString()}</span>
+                                                        <span className="text-slate-500 dark:text-slate-400">Original Paid:</span>
+                                                        <span className="font-bold text-slate-900 dark:text-white">UGX {originalPrice.toLocaleString()}</span>
                                                     </div>
                                                     <div className="flex justify-between">
-                                                        <span className="text-slate-500">Replacement Price:</span>
-                                                        <span className="font-bold text-slate-900">UGX {newPrice.toLocaleString()}</span>
+                                                        <span className="text-slate-500 dark:text-slate-400">Replacement Price:</span>
+                                                        <span className="font-bold text-slate-900 dark:text-white">UGX {newPrice.toLocaleString()}</span>
                                                     </div>
-                                                    <div className="flex justify-between border-t border-indigo-50 pt-2">
-                                                        <span className="font-bold text-slate-700">Difference:</span>
+                                                    <div className="flex justify-between border-t border-indigo-50 dark:border-slate-800 pt-2">
+                                                        <span className="font-bold text-slate-700 dark:text-slate-300">Difference:</span>
                                                         {difference > 0 ? (
-                                                            <span className="font-extrabold text-rose-600">+UGX {difference.toLocaleString()} (Upgrade Fee)</span>
+                                                            <span className="font-extrabold text-rose-600 dark:text-rose-400">+UGX {difference.toLocaleString()} (Upgrade Fee)</span>
                                                         ) : difference < 0 ? (
-                                                            <span className="font-extrabold text-emerald-600">-UGX {Math.abs(difference).toLocaleString()} (Refund Due)</span>
+                                                            <span className="font-extrabold text-emerald-600 dark:text-emerald-400">-UGX {Math.abs(difference).toLocaleString()} (Refund Due)</span>
                                                         ) : (
-                                                            <span className="font-bold text-slate-500">Even Swap (No fee)</span>
+                                                            <span className="font-bold text-slate-500 dark:text-slate-400">Even Swap (No fee)</span>
                                                         )}
                                                     </div>
                                                     
                                                     {difference !== 0 && (
                                                         <div className="pt-2">
-                                                            <label className="text-xs font-bold text-slate-700 uppercase tracking-wider mb-1 block">
+                                                            <label className="text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1 block">
                                                                 {difference > 0 ? 'Collect Upgrade Fee Via' : 'Issue Refund Via'}
                                                             </label>
                                                             <select 
@@ -681,7 +761,7 @@ export default function WarrantiesIndex({ auth, claims = {}, inStockDevices = []
                                 </div>
                             </form>
                         </div>
-                        <div className="px-6 py-4 border-t border-slate-100 bg-slate-50 flex gap-3 justify-end">
+                        <div className="px-6 py-4 border-t border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/50 flex gap-3 justify-end">
                             <Button variant="secondary" onClick={() => setShowUpdateModal(false)}>Cancel</Button>
                             <Button variant="primary" form="updateForm" type="submit" isLoading={updateForm.processing}>
                                 Save Changes
