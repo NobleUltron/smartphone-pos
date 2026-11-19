@@ -11,7 +11,9 @@ use App\Models\QuotationItem;
 use App\Models\Setting;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 
 class QuotationController extends Controller
@@ -257,13 +259,18 @@ class QuotationController extends Controller
 
     public function destroy(Quotation $quotation)
     {
-        if ($quotation->status === 'Converted' || $quotation->invoice()->exists()) {
-            return redirect()->back()->withErrors(['error' => 'Converted quotations cannot be deleted as they are linked to an official Tax Invoice.']);
+        $hasActiveInvoice = $quotation->invoice()->where('status', '!=', 'Cancelled')->exists();
+        if ($quotation->status === 'Converted' || $hasActiveInvoice) {
+            return redirect()->back()->withErrors(['error' => 'Converted quotations cannot be deleted while linked to an active Tax Invoice.']);
         }
 
         $quoteNumber = $quotation->quotation_number;
 
         DB::transaction(function () use ($quotation) {
+            Invoice::where('quotation_id', $quotation->id)
+                ->where('status', 'Cancelled')
+                ->update(['quotation_id' => null]);
+
             $quotation->items()->delete();
             $quotation->delete();
         });
@@ -284,7 +291,7 @@ class QuotationController extends Controller
             'due_date' => 'nullable|date',
         ]);
 
-        return DB::transaction(function () use ($quotation, $request) {
+        $invoice = DB::transaction(function () use ($quotation, $request) {
             $paymentTerms = $request->input('payment_terms', 'Net 30');
             $issueDate = now()->toDateString();
             $days = 30;
@@ -315,7 +322,7 @@ class QuotationController extends Controller
                 'notes' => "Converted from Quotation #{$quotation->quotation_number}",
             ]);
 
-            // Clone items and optionally decrement stock if product
+            // Clone items and decrement stock for bulk products with lock & guard
             foreach ($quotation->items as $qItem) {
                 InvoiceItem::create([
                     'invoice_id' => $invoice->id,
@@ -328,10 +335,14 @@ class QuotationController extends Controller
                     'total_price' => $qItem->total_price,
                 ]);
 
-                // Decrement inventory for bulk products
                 if ($qItem->type === 'product' && $qItem->product_id) {
-                    $prod = Product::find($qItem->product_id);
+                    $prod = Product::where('id', $qItem->product_id)->lockForUpdate()->first();
                     if ($prod && $prod->type === 'bulk') {
+                        if ($prod->quantity < $qItem->quantity) {
+                            throw ValidationException::withMessages([
+                                'error' => "Insufficient stock for {$qItem->item_name}. Only {$prod->quantity} left in stock.",
+                            ]);
+                        }
                         $prod->decrement('quantity', $qItem->quantity);
                     }
                 }
@@ -340,9 +351,21 @@ class QuotationController extends Controller
             // Mark quotation converted
             $quotation->update(['status' => 'Converted']);
 
-            return redirect()->route('invoices.show', $invoice->id)
-                ->with('success', "Quotation successfully converted to Invoice {$invoice->invoice_number}!");
+            \App\Models\ActivityLog::log(
+                'quotation_converted',
+                'Quotations',
+                "Converted Quotation {$quotation->quotation_number} to Invoice {$invoice->invoice_number}",
+                ['quotation_id' => $quotation->id, 'invoice_id' => $invoice->id]
+            );
+
+            return $invoice;
         });
+
+        Cache::forget('global_low_stock_count');
+        Cache::forget('inventory_stats');
+
+        return redirect()->route('invoices.show', $invoice->id)
+            ->with('success', "Quotation successfully converted to Invoice {$invoice->invoice_number}!");
     }
 
     public function printPdf(Quotation $quotation)

@@ -1,29 +1,30 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import { Head, Link, router } from '@inertiajs/react';
 import Modal from '@/Components/Modal';
+import toast from 'react-hot-toast';
 import { 
     FileText, 
     Plus, 
     Search, 
-    DollarSign, 
     AlertCircle, 
     AlertTriangle,
     CheckCircle2, 
     Clock, 
-    Building2,
     Download,
     Eye,
     TrendingUp,
     FileSpreadsheet,
     Ban,
-    Trash2
+    Trash2,
+    X
 } from 'lucide-react';
 import dayjs from 'dayjs';
 
 export default function InvoicesIndex({ invoices, filters, metrics }) {
     const [search, setSearch] = useState(filters.search || '');
     const [paymentStatus, setPaymentStatus] = useState(filters.payment_status || 'all');
+    const isInitialRender = useRef(true);
     
     // Cancellation & Deletion States
     const [cancellingInvoice, setCancellingInvoice] = useState(null);
@@ -33,16 +34,23 @@ export default function InvoicesIndex({ invoices, filters, metrics }) {
     const [deletingInvoice, setDeletingInvoice] = useState(null);
     const [isSubmittingDelete, setIsSubmittingDelete] = useState(false);
 
-    const handleFilter = (newFilters = {}) => {
-        router.get(route('invoices.index'), {
-            search,
-            payment_status: paymentStatus,
-            ...newFilters
-        }, {
-            preserveState: true,
-            replace: true
-        });
-    };
+    useEffect(() => {
+        if (isInitialRender.current) {
+            isInitialRender.current = false;
+            return;
+        }
+        const timer = setTimeout(() => {
+            router.get(route('invoices.index'), {
+                search: search || undefined,
+                payment_status: paymentStatus !== 'all' ? paymentStatus : undefined,
+            }, {
+                preserveState: true,
+                preserveScroll: true,
+                replace: true,
+            });
+        }, 300);
+        return () => clearTimeout(timer);
+    }, [search, paymentStatus]);
 
     const getStatusBadge = (st) => {
         switch (st) {
@@ -68,8 +76,12 @@ export default function InvoicesIndex({ invoices, filters, metrics }) {
         }, {
             preserveScroll: true,
             onSuccess: () => {
+                toast.success(`Invoice #${cancellingInvoice.invoice_number} cancelled.`);
                 setCancellingInvoice(null);
                 setCancelReason('');
+            },
+            onError: (err) => {
+                toast.error(err.error || 'Failed to cancel invoice.');
             },
             onFinish: () => setIsSubmittingCancel(false),
         });
@@ -82,7 +94,11 @@ export default function InvoicesIndex({ invoices, filters, metrics }) {
         router.delete(route('invoices.destroy', deletingInvoice.id), {
             preserveScroll: true,
             onSuccess: () => {
+                toast.success(`Invoice #${deletingInvoice.invoice_number} deleted.`);
                 setDeletingInvoice(null);
+            },
+            onError: (err) => {
+                toast.error(err.error || 'Failed to delete invoice.');
             },
             onFinish: () => setIsSubmittingDelete(false),
         });
@@ -127,7 +143,10 @@ export default function InvoicesIndex({ invoices, filters, metrics }) {
 
                 {/* 4 Metrics Strip */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                    <div className="p-5 rounded-2xl bg-gradient-to-br from-indigo-900 via-indigo-800 to-purple-900 text-white shadow-lg shadow-indigo-900/20">
+                    <div
+                        onClick={() => setPaymentStatus('all')}
+                        className="p-5 rounded-2xl bg-gradient-to-br from-indigo-900 via-indigo-800 to-purple-900 text-white shadow-lg shadow-indigo-900/20 cursor-pointer hover:brightness-110 transition-all"
+                    >
                         <div className="text-[11px] font-bold text-indigo-200 uppercase tracking-wider flex items-center gap-1.5">
                             <TrendingUp size={14} /> Total Invoiced
                         </div>
@@ -139,7 +158,10 @@ export default function InvoicesIndex({ invoices, filters, metrics }) {
                         </div>
                     </div>
 
-                    <div className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-sm">
+                    <div
+                        onClick={() => setPaymentStatus(paymentStatus === 'Paid' ? 'all' : 'Paid')}
+                        className={`p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-sm cursor-pointer transition-all ${paymentStatus === 'Paid' ? 'ring-2 ring-emerald-500' : 'hover:ring-2 hover:ring-emerald-400/50'}`}
+                    >
                         <div className="flex items-center justify-between text-xs font-bold text-slate-500 dark:text-slate-400">
                             <span className="uppercase tracking-wider">Collected Revenue</span>
                             <div className="p-1.5 rounded-lg bg-emerald-50 dark:bg-emerald-950/50 text-emerald-600 dark:text-emerald-400">
@@ -154,7 +176,10 @@ export default function InvoicesIndex({ invoices, filters, metrics }) {
                         </div>
                     </div>
 
-                    <div className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-sm">
+                    <div
+                        onClick={() => setPaymentStatus(paymentStatus === 'Unpaid' ? 'all' : 'Unpaid')}
+                        className={`p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-sm cursor-pointer transition-all ${paymentStatus === 'Unpaid' ? 'ring-2 ring-amber-500' : 'hover:ring-2 hover:ring-amber-400/50'}`}
+                    >
                         <div className="flex items-center justify-between text-xs font-bold text-slate-500 dark:text-slate-400">
                             <span className="uppercase tracking-wider">Outstanding Debtors</span>
                             <div className="p-1.5 rounded-lg bg-amber-50 dark:bg-amber-950/50 text-amber-600 dark:text-amber-400">
@@ -169,7 +194,10 @@ export default function InvoicesIndex({ invoices, filters, metrics }) {
                         </div>
                     </div>
 
-                    <div className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-sm">
+                    <div
+                        onClick={() => setPaymentStatus(paymentStatus === 'Overdue' ? 'all' : 'Overdue')}
+                        className={`p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-sm cursor-pointer transition-all ${paymentStatus === 'Overdue' ? 'ring-2 ring-rose-500' : 'hover:ring-2 hover:ring-rose-400/50'}`}
+                    >
                         <div className="flex items-center justify-between text-xs font-bold text-slate-500 dark:text-slate-400">
                             <span className="uppercase tracking-wider">Overdue Receivables</span>
                             <div className="p-1.5 rounded-lg bg-rose-50 dark:bg-rose-950/50 text-rose-600 dark:text-rose-400">
@@ -194,22 +222,21 @@ export default function InvoicesIndex({ invoices, filters, metrics }) {
                                 type="text"
                                 placeholder="Search by Invoice #, PO #, Client..."
                                 value={search}
-                                onChange={e => {
-                                    setSearch(e.target.value);
-                                    handleFilter({ search: e.target.value });
-                                }}
-                                className="w-full pl-9 pr-4 py-2 text-xs font-semibold rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/80 text-slate-900 dark:text-white placeholder-slate-400 focus:bg-white dark:focus:bg-slate-800 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all shadow-sm"
+                                onChange={e => setSearch(e.target.value)}
+                                className="w-full pl-9 pr-8 py-2 text-xs font-semibold rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/80 text-slate-900 dark:text-white placeholder-slate-400 focus:bg-white dark:focus:bg-slate-800 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all shadow-sm"
                             />
+                            {search && (
+                                <button type="button" onClick={() => setSearch('')} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">
+                                    <X size={14} />
+                                </button>
+                            )}
                         </div>
 
                         <div className="flex items-center gap-2 w-full sm:w-auto">
                             <select
                                 value={paymentStatus}
-                                onChange={e => {
-                                    setPaymentStatus(e.target.value);
-                                    handleFilter({ payment_status: e.target.value });
-                                }}
-                                className="px-3 py-2 text-xs font-bold rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-800 dark:text-white"
+                                onChange={e => setPaymentStatus(e.target.value)}
+                                className="flex-1 sm:flex-none px-3 py-2 text-xs font-bold rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-800 dark:text-white"
                             >
                                 <option value="all">All Payment Statuses</option>
                                 <option value="Unpaid">Unpaid</option>
@@ -218,11 +245,20 @@ export default function InvoicesIndex({ invoices, filters, metrics }) {
                                 <option value="Overdue">Overdue</option>
                                 <option value="Cancelled">Cancelled</option>
                             </select>
+                            {(search || paymentStatus !== 'all') && (
+                                <button
+                                    type="button"
+                                    onClick={() => { setSearch(''); setPaymentStatus('all'); }}
+                                    className="px-3 py-2 text-xs font-bold rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 transition-colors"
+                                >
+                                    Clear
+                                </button>
+                            )}
                         </div>
                     </div>
 
-                    {/* Table */}
-                    <div className="overflow-x-auto">
+                    {/* Desktop Table */}
+                    <div className="hidden md:block overflow-x-auto">
                         <table className="w-full text-left text-xs border-collapse">
                             <thead>
                                 <tr className="border-b border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider text-[11px] bg-slate-50/50 dark:bg-slate-800/30">
@@ -239,7 +275,9 @@ export default function InvoicesIndex({ invoices, filters, metrics }) {
                             </thead>
                             <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-slate-700 dark:text-slate-300">
                                 {invoices.data.map(inv => {
-                                    const balance = Math.max(0, Number(inv.total_amount) - Number(inv.paid_amount));
+                                    const balance = inv.status === 'Cancelled' ? 0 : Math.max(0, Number(inv.total_amount) - Number(inv.paid_amount));
+                                    const isCancelled = inv.status === 'Cancelled' || inv.payment_status === 'Cancelled';
+                                    const isOverdueDate = !isCancelled && inv.payment_status !== 'Paid' && dayjs().isAfter(inv.due_date, 'day');
                                     return (
                                         <tr key={inv.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors">
                                             <td className="py-3 px-4 font-mono font-bold text-indigo-600 dark:text-indigo-400">
@@ -261,7 +299,7 @@ export default function InvoicesIndex({ invoices, filters, metrics }) {
                                                 {inv.po_number || '—'}
                                             </td>
                                             <td className="py-3 px-4 font-medium">
-                                                <span className={dayjs().isAfter(inv.due_date) && inv.payment_status !== 'Paid' ? 'text-rose-500 font-bold' : 'text-slate-500'}>
+                                                <span className={isOverdueDate ? 'text-rose-500 font-bold' : 'text-slate-500 dark:text-slate-400'}>
                                                     {dayjs(inv.due_date).format('DD MMM YYYY')}
                                                 </span>
                                             </td>
@@ -297,7 +335,7 @@ export default function InvoicesIndex({ invoices, filters, metrics }) {
                                                     >
                                                         <Download size={15} />
                                                     </a>
-                                                    {inv.status !== 'Cancelled' && (
+                                                    {!isCancelled && Number(inv.paid_amount) === 0 && (
                                                         <button
                                                             type="button"
                                                             onClick={() => {
@@ -322,7 +360,7 @@ export default function InvoicesIndex({ invoices, filters, metrics }) {
                                                     ) : (
                                                         <span
                                                             className="p-1.5 text-slate-200 dark:text-slate-700 cursor-not-allowed"
-                                                            title="Cannot delete: payments have been collected"
+                                                            title="Cannot cancel or delete: payments have been collected"
                                                         >
                                                             <Trash2 size={15} />
                                                         </span>
@@ -341,6 +379,71 @@ export default function InvoicesIndex({ invoices, filters, metrics }) {
                                 )}
                             </tbody>
                         </table>
+                    </div>
+
+                    {/* Mobile Cards View */}
+                    <div className="md:hidden divide-y divide-slate-100 dark:divide-slate-800">
+                        {invoices.data.map(inv => {
+                            const isCancelled = inv.status === 'Cancelled' || inv.payment_status === 'Cancelled';
+                            const balance = isCancelled ? 0 : Math.max(0, Number(inv.total_amount) - Number(inv.paid_amount));
+                            return (
+                                <div key={inv.id} className="py-4 space-y-2.5">
+                                    <div className="flex items-start justify-between gap-2">
+                                        <div>
+                                            <Link href={route('invoices.show', inv.id)} className="font-mono font-bold text-indigo-600 dark:text-indigo-400 text-sm">
+                                                {inv.invoice_number}
+                                            </Link>
+                                            <p className="font-bold text-slate-900 dark:text-white text-sm">
+                                                {inv.customer?.company_name || inv.customer?.name || 'Corporate Buyer'}
+                                            </p>
+                                            <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                                                Due: {dayjs(inv.due_date).format('DD MMM YYYY')}{inv.po_number ? ` • PO: ${inv.po_number}` : ''}
+                                            </p>
+                                        </div>
+                                        <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold border ${getStatusBadge(inv.payment_status)}`}>
+                                            {inv.payment_status}
+                                        </span>
+                                    </div>
+                                    <div className="grid grid-cols-3 gap-2 text-xs bg-slate-50 dark:bg-slate-800/60 p-2.5 rounded-xl border border-slate-100 dark:border-slate-700">
+                                        <div>
+                                            <span className="text-[10px] text-slate-400 block uppercase">Invoiced</span>
+                                            <span className="font-bold text-slate-900 dark:text-white">{Number(inv.total_amount).toLocaleString()}</span>
+                                        </div>
+                                        <div>
+                                            <span className="text-[10px] text-slate-400 block uppercase">Paid</span>
+                                            <span className="font-bold text-emerald-600 dark:text-emerald-400">{Number(inv.paid_amount).toLocaleString()}</span>
+                                        </div>
+                                        <div>
+                                            <span className="text-[10px] text-slate-400 block uppercase">Balance</span>
+                                            <span className="font-bold text-rose-600 dark:text-rose-400">{balance.toLocaleString()}</span>
+                                        </div>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                        <Link href={route('invoices.show', inv.id)} className="flex-1 py-1.5 rounded-lg bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 text-xs font-bold flex items-center justify-center gap-1">
+                                            <Eye size={14} /> View
+                                        </Link>
+                                        <a href={route('invoices.pdf', inv.id)} target="_blank" rel="noopener noreferrer" className="flex-1 py-1.5 rounded-lg bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 text-xs font-bold flex items-center justify-center gap-1">
+                                            <Download size={14} /> PDF
+                                        </a>
+                                        {!isCancelled && Number(inv.paid_amount) === 0 && (
+                                            <button type="button" onClick={() => { setCancellingInvoice(inv); setCancelReason(''); }} className="px-3 py-1.5 rounded-lg bg-amber-50 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 text-xs font-bold">
+                                                <Ban size={14} />
+                                            </button>
+                                        )}
+                                        {Number(inv.paid_amount) === 0 && (
+                                            <button type="button" onClick={() => setDeletingInvoice(inv)} className="px-3 py-1.5 rounded-lg bg-rose-50 dark:bg-rose-900/30 text-rose-600 dark:text-rose-400 text-xs font-bold">
+                                                <Trash2 size={14} />
+                                            </button>
+                                        )}
+                                    </div>
+                                </div>
+                            );
+                        })}
+                        {invoices.data.length === 0 && (
+                            <div className="py-10 text-center text-xs text-slate-400">
+                                No corporate invoices recorded.
+                            </div>
+                        )}
                     </div>
                     {invoices.links && invoices.links.length > 3 && (
                         <div className="px-6 py-4 border-t border-slate-100 dark:border-slate-800 flex flex-wrap items-center justify-between gap-2">

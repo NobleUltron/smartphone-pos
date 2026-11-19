@@ -13,17 +13,25 @@ use App\Models\Setting;
 use App\Services\TreasuryService;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 
 class InvoiceController extends Controller
 {
     public function index(Request $request)
     {
+        // Bulk-sync overdue invoices BEFORE filtering and computing KPI metrics
+        Invoice::where('status', '!=', 'Cancelled')
+            ->whereIn('payment_status', ['Unpaid', 'Partial'])
+            ->whereDate('due_date', '<', now()->toDateString())
+            ->update(['payment_status' => 'Overdue']);
+
         $query = Invoice::with(['customer', 'user', 'payments'])->latest();
 
         if ($request->filled('search')) {
-            $search = '%' . strtolower($request->input('search')) . '%';
+            $search = '%' . strtolower(trim($request->input('search'))) . '%';
             $query->where(function ($q) use ($search) {
                 $q->whereRaw('LOWER(invoice_number) LIKE ?', [$search])
                     ->orWhereRaw('LOWER(po_number) LIKE ?', [$search])
@@ -41,26 +49,19 @@ class InvoiceController extends Controller
 
         $invoices = $query->paginate(15)->withQueryString();
 
-        // Update overdue status dynamically on load (exclude Cancelled)
-        foreach ($invoices as $inv) {
-            if ($inv->status !== 'Cancelled' && $inv->payment_status !== 'Cancelled' && $inv->payment_status !== 'Paid' && now()->gt($inv->due_date) && $inv->payment_status !== 'Overdue') {
-                $inv->update(['payment_status' => 'Overdue']);
-            }
-        }
-
-        $totalInvoiced = Invoice::where('status', '!=', 'Cancelled')->sum('total_amount');
-        $totalCollected = InvoicePayment::sum('amount');
+        $totalInvoiced = (float) Invoice::where('status', '!=', 'Cancelled')->sum('total_amount');
+        $totalCollected = (float) InvoicePayment::sum('amount');
         $totalOutstanding = max(0, $totalInvoiced - $totalCollected);
-        $overdueAmount = Invoice::where('payment_status', 'Overdue')
+        $overdueAmount = (float) (Invoice::where('payment_status', 'Overdue')
             ->where('status', '!=', 'Cancelled')
             ->selectRaw('SUM(total_amount - paid_amount) as remaining')
-            ->value('remaining') ?? 0;
+            ->value('remaining') ?? 0);
 
         $metrics = [
             'total_invoiced' => $totalInvoiced,
             'total_collected' => $totalCollected,
             'total_outstanding' => $totalOutstanding,
-            'overdue_amount' => $overdueAmount,
+            'overdue_amount' => max(0, $overdueAmount),
             'overdue_count' => Invoice::where('payment_status', 'Overdue')->where('status', '!=', 'Cancelled')->count(),
             'pending_count' => Invoice::whereIn('payment_status', ['Unpaid', 'Partial'])->where('status', '!=', 'Cancelled')->count(),
         ];
@@ -173,14 +174,29 @@ class InvoiceController extends Controller
                     'total_price' => floatval($itemData['quantity']) * floatval($itemData['unit_price']),
                 ]);
 
-                // Decrement inventory for bulk products
+                // Lock & decrement inventory for bulk products with stock guard
                 if ($itemData['type'] === 'product' && !empty($itemData['product_id'])) {
-                    $prod = Product::find($itemData['product_id']);
+                    $prod = Product::where('id', $itemData['product_id'])->lockForUpdate()->first();
                     if ($prod && $prod->type === 'bulk') {
+                        if ($prod->quantity < $itemData['quantity']) {
+                            throw ValidationException::withMessages([
+                                'items' => "Insufficient stock for {$itemData['item_name']}. Only {$prod->quantity} left in stock.",
+                            ]);
+                        }
                         $prod->decrement('quantity', $itemData['quantity']);
                     }
                 }
             }
+
+            \App\Models\ActivityLog::log(
+                'invoice_created',
+                'Invoices',
+                "Created Invoice {$invoice->invoice_number} for UGX " . number_format($totalAmount),
+                ['invoice_id' => $invoice->id, 'total_amount' => $totalAmount]
+            );
+
+            Cache::forget('global_low_stock_count');
+            Cache::forget('inventory_stats');
 
             return redirect()->route('invoices.show', $invoice->id)
                 ->with('success', "Invoice {$invoice->invoice_number} generated successfully.");
@@ -200,35 +216,45 @@ class InvoiceController extends Controller
 
     public function recordPayment(Request $request, Invoice $invoice)
     {
-        if ($invoice->status === 'Cancelled') {
-            return redirect()->back()->withErrors(['amount' => 'Cannot record payment for a cancelled invoice.']);
-        }
-
-        $balanceRemaining = $invoice->balance_due;
-
-        if ($balanceRemaining <= 0) {
-            return redirect()->back()->withErrors(['amount' => 'This invoice is already fully paid.']);
-        }
-
         $validated = $request->validate([
-            'amount' => 'required|numeric|min:1|max:' . $balanceRemaining,
+            'amount' => 'required|numeric|min:1',
             'payment_account_id' => 'required|exists:payment_accounts,id',
             'payment_method' => 'nullable|string|max:50',
             'transaction_reference' => 'nullable|string|max:100',
             'payment_date' => 'required|date',
             'notes' => 'nullable|string',
-        ], [
-            'amount.max' => 'Amount cannot exceed the remaining balance of ' . number_format($balanceRemaining) . ' UGX.',
         ]);
 
         return DB::transaction(function () use ($validated, $invoice) {
-            $paymentAccount = PaymentAccount::find($validated['payment_account_id']);
+            $lockedInvoice = Invoice::with('customer')->where('id', $invoice->id)->lockForUpdate()->firstOrFail();
+
+            if ($lockedInvoice->status === 'Cancelled') {
+                throw ValidationException::withMessages([
+                    'amount' => 'Cannot record payment for a cancelled invoice.',
+                ]);
+            }
+
+            $balanceRemaining = max(0, (float) $lockedInvoice->total_amount - (float) $lockedInvoice->paid_amount);
+
+            if ($balanceRemaining <= 0) {
+                throw ValidationException::withMessages([
+                    'amount' => 'This invoice is already fully paid.',
+                ]);
+            }
+
+            if (floatval($validated['amount']) > $balanceRemaining + 0.01) {
+                throw ValidationException::withMessages([
+                    'amount' => 'Amount cannot exceed the remaining balance of ' . number_format($balanceRemaining) . ' UGX.',
+                ]);
+            }
+
+            $paymentAccount = PaymentAccount::findOrFail($validated['payment_account_id']);
             $receiptNumber = InvoicePayment::generateReceiptNumber();
-            $method = $validated['payment_method'] ?: ($paymentAccount ? $paymentAccount->name : 'Bank Transfer');
+            $method = $validated['payment_method'] ?: $paymentAccount->name;
 
             // 1. Create Invoice Payment record
-            $payment = InvoicePayment::create([
-                'invoice_id' => $invoice->id,
+            InvoicePayment::create([
+                'invoice_id' => $lockedInvoice->id,
                 'payment_account_id' => $paymentAccount->id,
                 'user_id' => auth()->id(),
                 'receipt_number' => $receiptNumber,
@@ -240,7 +266,8 @@ class InvoiceController extends Controller
             ]);
 
             // 2. Sync Treasury Inflow
-            $desc = "Corporate Payment for Invoice #{$invoice->invoice_number} (" . ($invoice->customer->company_name ?: $invoice->customer->name) . ")";
+            $clientLabel = $lockedInvoice->customer?->company_name ?: $lockedInvoice->customer?->name ?: 'Walk-in Client';
+            $desc = "Corporate Payment for Invoice #{$lockedInvoice->invoice_number} ({$clientLabel})";
             if (!empty($validated['transaction_reference'])) {
                 $desc .= " - Ref: {$validated['transaction_reference']}";
             }
@@ -249,16 +276,28 @@ class InvoiceController extends Controller
                 $paymentAccount,
                 floatval($validated['amount']),
                 'Invoice Payment',
-                $invoice,
+                $lockedInvoice,
                 $desc,
                 $validated['transaction_reference'] ?? $receiptNumber,
                 auth()->id()
             );
 
             // 3. Recalculate Invoice Status
-            $invoice->recalculatePaymentStatus();
+            $lockedInvoice->recalculatePaymentStatus();
 
-            return redirect()->route('invoices.show', $invoice->id)
+            \App\Models\ActivityLog::log(
+                'invoice_payment',
+                'Invoices',
+                "Collected UGX " . number_format($validated['amount']) . " for Invoice {$lockedInvoice->invoice_number} (Receipt #{$receiptNumber})",
+                [
+                    'invoice_id' => $lockedInvoice->id,
+                    'receipt_number' => $receiptNumber,
+                    'amount' => floatval($validated['amount']),
+                    'payment_account_id' => $paymentAccount->id,
+                ]
+            );
+
+            return redirect()->route('invoices.show', $lockedInvoice->id)
                 ->with('success', "Payment of UGX " . number_format($validated['amount']) . " recorded successfully. Official Receipt #{$receiptNumber} issued.");
         });
     }
@@ -303,21 +342,27 @@ class InvoiceController extends Controller
 
     public function cancel(Request $request, Invoice $invoice)
     {
-        if ($invoice->status === 'Cancelled') {
-            return redirect()->back()->withErrors(['error' => 'This invoice has already been cancelled.']);
-        }
-
-        if ($invoice->paid_amount > 0 || $invoice->payments()->exists()) {
-            return redirect()->back()->withErrors(['error' => 'Invoices with recorded payments cannot be cancelled directly. Please refund or reverse the recorded receipts first to preserve Treasury integrity.']);
-        }
-
         $reason = $request->input('reason', 'Cancelled by manager/admin');
 
         DB::transaction(function () use ($invoice, $reason) {
+            $lockedInvoice = Invoice::with(['items', 'quotation'])->where('id', $invoice->id)->lockForUpdate()->firstOrFail();
+
+            if ($lockedInvoice->status === 'Cancelled') {
+                throw ValidationException::withMessages([
+                    'error' => 'This invoice has already been cancelled.',
+                ]);
+            }
+
+            if ($lockedInvoice->paid_amount > 0 || $lockedInvoice->payments()->exists()) {
+                throw ValidationException::withMessages([
+                    'error' => 'Invoices with recorded payments cannot be cancelled directly. Please refund or reverse the recorded receipts first to preserve Treasury integrity.',
+                ]);
+            }
+
             // 1. Restock bulk products and serialized devices
-            foreach ($invoice->items as $item) {
+            foreach ($lockedInvoice->items as $item) {
                 if ($item->type === 'product' && !empty($item->product_id)) {
-                    $prod = Product::find($item->product_id);
+                    $prod = Product::where('id', $item->product_id)->lockForUpdate()->first();
                     if ($prod && $prod->type === 'bulk') {
                         $prod->increment('quantity', $item->quantity);
                     }
@@ -329,35 +374,49 @@ class InvoiceController extends Controller
             }
 
             // 2. Revert linked quotation status to Approved if applicable
-            if ($invoice->quotation) {
-                $invoice->quotation->update(['status' => 'Approved']);
+            if ($lockedInvoice->quotation) {
+                $lockedInvoice->quotation->update(['status' => 'Approved']);
             }
 
             // 3. Update invoice status to Cancelled
-            $invoice->update([
+            $lockedInvoice->update([
                 'status' => 'Cancelled',
                 'payment_status' => 'Cancelled',
-                'notes' => trim(($invoice->notes ?? '') . "\n[Cancelled on " . now()->format('Y-m-d H:i') . ": " . $reason . "]"),
+                'notes' => trim(($lockedInvoice->notes ?? '') . "\n[Cancelled on " . now()->format('Y-m-d H:i') . ": " . $reason . "]"),
             ]);
+
+            \App\Models\ActivityLog::log(
+                'invoice_cancelled',
+                'Invoices',
+                "Cancelled Invoice {$lockedInvoice->invoice_number} ({$reason})",
+                ['invoice_id' => $lockedInvoice->id, 'reason' => $reason]
+            );
         });
+
+        Cache::forget('global_low_stock_count');
+        Cache::forget('inventory_stats');
 
         return redirect()->back()->with('success', "Invoice #{$invoice->invoice_number} has been cancelled and reserved inventory has been returned to stock.");
     }
 
     public function destroy(Invoice $invoice)
     {
-        if ($invoice->paid_amount > 0 || $invoice->payments()->exists()) {
-            return redirect()->back()->withErrors(['error' => 'Invoices with recorded payments cannot be deleted to preserve Treasury and financial audit integrity. Please reverse the payments first or mark the invoice as Cancelled.']);
-        }
-
         $invoiceNumber = $invoice->invoice_number;
 
-        DB::transaction(function () use ($invoice) {
+        DB::transaction(function () use ($invoice, $invoiceNumber) {
+            $lockedInvoice = Invoice::with(['items', 'quotation'])->where('id', $invoice->id)->lockForUpdate()->firstOrFail();
+
+            if ($lockedInvoice->paid_amount > 0 || $lockedInvoice->payments()->exists()) {
+                throw ValidationException::withMessages([
+                    'error' => 'Invoices with recorded payments cannot be deleted to preserve Treasury and financial audit integrity. Please reverse the payments first or mark the invoice as Cancelled.',
+                ]);
+            }
+
             // 1. Restock inventory if not already cancelled (if it was already cancelled, stock was already returned)
-            if ($invoice->status !== 'Cancelled') {
-                foreach ($invoice->items as $item) {
+            if ($lockedInvoice->status !== 'Cancelled') {
+                foreach ($lockedInvoice->items as $item) {
                     if ($item->type === 'product' && !empty($item->product_id)) {
-                        $prod = Product::find($item->product_id);
+                        $prod = Product::where('id', $item->product_id)->lockForUpdate()->first();
                         if ($prod && $prod->type === 'bulk') {
                             $prod->increment('quantity', $item->quantity);
                         }
@@ -370,14 +429,24 @@ class InvoiceController extends Controller
             }
 
             // 2. Revert linked quotation status to Approved if applicable
-            if ($invoice->quotation) {
-                $invoice->quotation->update(['status' => 'Approved']);
+            if ($lockedInvoice->quotation) {
+                $lockedInvoice->quotation->update(['status' => 'Approved']);
             }
 
+            \App\Models\ActivityLog::log(
+                'invoice_deleted',
+                'Invoices',
+                "Permanently deleted Invoice {$invoiceNumber}",
+                ['invoice_id' => $lockedInvoice->id, 'invoice_number' => $invoiceNumber]
+            );
+
             // 3. Delete items and invoice
-            $invoice->items()->delete();
-            $invoice->delete();
+            $lockedInvoice->items()->delete();
+            $lockedInvoice->delete();
         });
+
+        Cache::forget('global_low_stock_count');
+        Cache::forget('inventory_stats');
 
         return redirect()->route('invoices.index')->with('success', "Invoice #{$invoiceNumber} has been permanently deleted and inventory returned to stock.");
     }
