@@ -27,7 +27,15 @@ class RepairController extends Controller
             $query->where('status', $request->status);
         }
 
-        $repairs = $query->with(['user', 'customer', 'parts.brand', 'sale.layawayPayments'])->latest()->paginate(10)->withQueryString();
+        if ($request->filled('technician_id') && $request->technician_id !== 'All') {
+            if ($request->technician_id === 'unassigned') {
+                $query->whereNull('technician_id');
+            } else {
+                $query->where('technician_id', $request->technician_id);
+            }
+        }
+
+        $repairs = $query->with(['user', 'technician', 'customer', 'parts.brand', 'sale.layawayPayments'])->latest()->paginate(10)->withQueryString();
 
         // Customers fetched below with full fields
 
@@ -61,7 +69,7 @@ class RepairController extends Controller
 
         return Inertia::render('Repairs/Index', [
             'repairs' => $repairs,
-            'filters' => $request->only(['search', 'status']),
+            'filters' => $request->only(['search', 'status', 'technician_id']),
             'products' => $products,
             'customers' => $customers,
             'technicians' => $technicians,
@@ -111,7 +119,7 @@ class RepairController extends Controller
         foreach ($parts as $partData) {
             $product = \App\Models\Product::find($partData['product_id']);
             if (!$product || $product->quantity < $partData['quantity']) {
-                $productName = $product ? $product->name : 'Unknown';
+                $productName = $product ? $product->model_name : 'Unknown';
                 return back()->withInput()->withErrors(['parts' => "Insufficient stock for part: {$productName}. Available: " . ($product->quantity ?? 0)]);
             }
         }
@@ -132,6 +140,7 @@ class RepairController extends Controller
             \Log::info('Created repair ID: ' . $repair->id);
 
             // Create Initial Sale
+            $isPaidInFull = $repair->estimated_cost > 0 && $repair->deposit >= $repair->estimated_cost;
             $sale = \App\Models\Sale::create([
                 'user_id' => auth()->id(),
                 'cash_drawer_id' => ($depositMethod === 'Cash' && $activeDrawer) ? $activeDrawer->id : null,
@@ -142,11 +151,11 @@ class RepairController extends Controller
                 'trade_in_value' => 0,
                 'final_amount' => $repair->estimated_cost,
                 'payment_method' => 'Layaway',
-                'payment_status' => 'Partial',
+                'payment_status' => $isPaidInFull ? 'Paid' : 'Partial',
             ]);
 
             if ($repair->deposit > 0) {
-                \App\Models\LayawayPayment::create([
+                $layawayPayment = \App\Models\LayawayPayment::create([
                     'sale_id' => $sale->id,
                     'cash_drawer_id' => ($depositMethod === 'Cash' && $activeDrawer) ? $activeDrawer->id : null,
                     'amount_paid' => $repair->deposit,
@@ -158,7 +167,7 @@ class RepairController extends Controller
                     $depositMethod,
                     floatval($repair->deposit),
                     'Repair Deposit',
-                    $repair,
+                    $layawayPayment,
                     "Repair Deposit for Ticket #{$repair->id} ({$depositMethod})",
                     null,
                     auth()->id()
@@ -279,20 +288,23 @@ class RepairController extends Controller
                 $deliveryMethod = $validatedDelivery['payment_method'];
 
                 if ($repair->sale) {
-                    // Use actual payments sum for accurate balance — not the denormalized deposit field
+                    // Use updated estimated_cost (if provided) and actual payments sum for accurate balance
+                    $effectiveEstimatedCost = isset($validated['estimated_cost']) ? floatval($validated['estimated_cost']) : floatval($repair->estimated_cost);
                     $totalActuallyPaid = $repair->sale->layawayPayments()->sum('amount_paid');
-                    $balance = max(0, $repair->estimated_cost - $totalActuallyPaid);
+                    $balance = max(0, $effectiveEstimatedCost - $totalActuallyPaid);
 
                     if ($balance > 0 && $deliveryMethod === 'Cash' && !$activeDrawer) {
                         return redirect()->back()->withErrors(['error' => 'You must have an open cash drawer to collect cash payment upon delivery.']);
                     }
 
                     $repair->sale->update([
+                        'total_amount' => $effectiveEstimatedCost,
+                        'final_amount' => $effectiveEstimatedCost,
                         'payment_status' => 'Paid',
                     ]);
 
                     if ($balance > 0) {
-                        \App\Models\LayawayPayment::create([
+                        $layawayPayment = \App\Models\LayawayPayment::create([
                             'sale_id' => $repair->sale->id,
                             'cash_drawer_id' => ($deliveryMethod === 'Cash' && $activeDrawer) ? $activeDrawer->id : null,
                             'amount_paid' => $balance,
@@ -304,7 +316,7 @@ class RepairController extends Controller
                             $deliveryMethod,
                             floatval($balance),
                             'Repair Collection',
-                            $repair,
+                            $layawayPayment,
                             "Final Repair Payment for Ticket #{$repair->id} ({$deliveryMethod})",
                             null,
                             auth()->id()
