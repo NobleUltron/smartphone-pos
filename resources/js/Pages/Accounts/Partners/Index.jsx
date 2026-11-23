@@ -321,14 +321,14 @@ export default function PartnersIndex({ partners, metrics, paymentAccounts, unas
                     <div className="p-5 rounded-2xl bg-gradient-to-br from-indigo-900 via-purple-900 to-indigo-950 text-white shadow-lg shadow-indigo-950/20 relative overflow-hidden flex flex-col justify-between">
                         <div>
                             <div className="text-[11px] font-bold text-indigo-200 uppercase tracking-wider flex items-center gap-1.5">
-                                <Landmark size={14} /> Total Partner Funds Managed
+                                <Landmark size={14} /> Active Partner Funds Owed
                             </div>
                             <div className="text-2xl font-black mt-2">
-                                UGX {Number(metrics.total_invested || 0).toLocaleString()}
+                                UGX {Number((metrics.total_stock_cost || 0) + (metrics.total_cash_available || 0)).toLocaleString()}
                             </div>
                         </div>
-                        <div className="text-[10px] text-indigo-200/90 font-medium mt-3 pt-2 border-t border-indigo-800/60 flex items-center justify-between">
-                            <span>Across {metrics.partners_count} partner pool(s)</span>
+                        <div className="text-[10px] text-indigo-200/90 font-medium mt-3 pt-2 border-t border-indigo-800/60 flex items-center justify-between gap-2 flex-wrap">
+                            <span>Deposited: UGX {Number(metrics.total_invested || 0).toLocaleString()}</span>
                             <span className="text-emerald-300 font-bold">Disbursed: UGX {Number(metrics.total_payouts || 0).toLocaleString()}</span>
                         </div>
                     </div>
