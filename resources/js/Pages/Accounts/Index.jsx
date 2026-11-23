@@ -35,6 +35,8 @@ export default function AccountsIndex({ accounts = [], categories = [], metrics,
     const [showTransferModal, setShowTransferModal] = useState(false);
     const [showReconcileModal, setShowReconcileModal] = useState(false);
     const [selectedAccountForAudit, setSelectedAccountForAudit] = useState(null);
+    const [showTxModal, setShowTxModal] = useState(false);
+    const [txAccount, setTxAccount] = useState(null);
     const [walletTab, setWalletTab] = useState('all');
 
     // Filters state
@@ -77,6 +79,14 @@ export default function AccountsIndex({ accounts = [], categories = [], metrics,
     const reconcileForm = useForm({
         actual_balance: '',
         reason: '',
+    });
+
+    // Form: Direct Deposit / Withdrawal
+    const txForm = useForm({
+        type: 'deposit',
+        amount: '',
+        description: '',
+        reference: '',
     });
 
     const handleFilter = (newFilters = {}) => {
@@ -202,6 +212,41 @@ export default function AccountsIndex({ accounts = [], categories = [], metrics,
             },
             onError: (errs) => {
                 toast.error(errs.actual_balance || Object.values(errs)[0] || 'Reconciliation failed');
+            }
+        });
+    };
+
+    const openTxModal = (account, defaultType = 'deposit') => {
+        txForm.clearErrors();
+        setTxAccount(account);
+        txForm.setData({
+            type: defaultType,
+            amount: '',
+            description: '',
+            reference: '',
+        });
+        setShowTxModal(true);
+    };
+
+    const activeTxAccount = accounts.find(a => a.id === txAccount?.id) || txAccount;
+
+    const handleRecordTx = (e) => {
+        e.preventDefault();
+        if (!txAccount || txForm.processing) return;
+        txForm.post(route('accounts.transaction', txAccount.id), {
+            preserveScroll: true,
+            onSuccess: () => {
+                toast.success(
+                    txForm.data.type === 'deposit'
+                        ? `Deposited UGX ${Number(txForm.data.amount || 0).toLocaleString()} into ${txAccount.name}`
+                        : `Withdrew UGX ${Number(txForm.data.amount || 0).toLocaleString()} from ${txAccount.name}`
+                );
+                setShowTxModal(false);
+                txForm.reset();
+                setTxAccount(null);
+            },
+            onError: (errs) => {
+                toast.error(errs.amount || Object.values(errs)[0] || 'Transaction failed');
             }
         });
     };
@@ -703,12 +748,25 @@ export default function AccountsIndex({ accounts = [], categories = [], metrics,
                                     </div>
                                 </div>
 
-                                <div className="mt-5 pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center gap-2">
+                                <div className="mt-5 pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center gap-1.5">
+                                    <button
+                                        type="button"
+                                        onClick={() => openTxModal(acc, 'deposit')}
+                                        className={`flex-1 py-2 text-center rounded-xl text-xs font-bold transition-colors flex items-center justify-center gap-1 border ${
+                                            acc.is_personal
+                                                ? 'bg-purple-50 hover:bg-purple-100 dark:bg-purple-950/50 dark:hover:bg-purple-900/50 text-purple-700 dark:text-purple-300 border-purple-200 dark:border-purple-800'
+                                                : 'bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/50 dark:hover:bg-emerald-900/50 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800'
+                                        }`}
+                                        title={acc.is_personal ? 'Record Personal Deposit or Withdrawal' : 'Record External Deposit or Withdrawal'}
+                                    >
+                                        <Plus size={13} /> Deposit / Withdraw
+                                    </button>
                                     <Link
                                         href={route('accounts.show', acc.id)}
-                                        className="flex-1 py-2 text-center bg-slate-50 hover:bg-slate-100 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-xl text-xs font-bold transition-colors flex items-center justify-center gap-1 border border-slate-200/60 dark:border-slate-700"
+                                        className="p-2 bg-slate-50 hover:bg-slate-100 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 rounded-xl transition-colors border border-slate-200/60 dark:border-slate-700"
+                                        title="View Full Passbook"
                                     >
-                                        <FileText size={13} /> Passbook
+                                        <FileText size={15} />
                                     </Link>
                                     <button
                                         type="button"
@@ -1565,6 +1623,234 @@ export default function AccountsIndex({ accounts = [], categories = [], metrics,
                         </div>
                     </form>
                 </div>
+            </Modal>
+
+            {/* ── DIRECT DEPOSIT / WITHDRAWAL MODAL ─────────────────────────── */}
+            <Modal show={showTxModal} onClose={() => setShowTxModal(false)} maxWidth="md">
+                {(() => {
+                    const isDeposit = txForm.data.type === 'deposit';
+                    const isPersonal = Boolean(activeTxAccount?.is_personal);
+                    const currentBal = Number(activeTxAccount?.current_balance || 0);
+                    const enteredAmt = Number(txForm.data.amount || 0);
+                    const projectedBal = isDeposit ? currentBal + enteredAmt : currentBal - enteredAmt;
+                    const insufficientBalance = !isDeposit && enteredAmt > currentBal;
+
+                    return (
+                        <div className="p-6 bg-white dark:bg-slate-900 rounded-2xl">
+                            <div className="flex items-start justify-between mb-5 pb-4 border-b border-slate-100 dark:border-slate-800">
+                                <div className="flex items-center gap-3">
+                                    <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
+                                        isDeposit
+                                            ? 'bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
+                                            : 'bg-rose-50 dark:bg-rose-500/10 text-rose-600 dark:text-rose-400'
+                                    }`}>
+                                        {isDeposit ? <ArrowDownLeft size={20} /> : <ArrowUpRight size={20} />}
+                                    </div>
+                                    <div>
+                                        <div className="flex items-center gap-2 flex-wrap">
+                                            <h3 className="text-base font-black text-slate-900 dark:text-white tracking-tight">
+                                                {isDeposit ? 'Deposit Money' : 'Withdraw Money'}
+                                            </h3>
+                                            {isPersonal && (
+                                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-purple-100 text-purple-700 dark:bg-purple-500/20 dark:text-purple-300">
+                                                    <User size={10} /> Personal
+                                                </span>
+                                            )}
+                                        </div>
+                                        <p className="text-xs text-slate-500 dark:text-slate-400 font-medium mt-0.5">
+                                            {activeTxAccount?.name}
+                                            {activeTxAccount?.account_number ? ` • ${activeTxAccount.account_number}` : ''}
+                                        </p>
+                                    </div>
+                                </div>
+                                <button
+                                    type="button"
+                                    onClick={() => setShowTxModal(false)}
+                                    className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                                >
+                                    <X size={18} />
+                                </button>
+                            </div>
+
+                            <form onSubmit={handleRecordTx} className="space-y-4">
+                                {/* Deposit / Withdraw Toggle */}
+                                <div className="grid grid-cols-2 gap-2 p-1 bg-slate-100 dark:bg-slate-800/80 rounded-xl">
+                                    <button
+                                        type="button"
+                                        onClick={() => txForm.setData('type', 'deposit')}
+                                        className={`flex items-center justify-center gap-1.5 py-2 px-3 rounded-lg text-xs font-bold transition-all ${
+                                            isDeposit
+                                                ? 'bg-emerald-600 text-white shadow-sm'
+                                                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                                        }`}
+                                    >
+                                        <ArrowDownLeft size={14} /> Deposit (+ Add)
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => txForm.setData('type', 'withdrawal')}
+                                        className={`flex items-center justify-center gap-1.5 py-2 px-3 rounded-lg text-xs font-bold transition-all ${
+                                            !isDeposit
+                                                ? 'bg-rose-600 text-white shadow-sm'
+                                                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                                        }`}
+                                    >
+                                        <ArrowUpRight size={14} /> Withdraw (− Take Out)
+                                    </button>
+                                </div>
+
+                                {/* Contextual Accounting Note */}
+                                <div className={`p-3 rounded-xl border text-xs leading-relaxed ${
+                                    isPersonal
+                                        ? 'bg-purple-50/70 dark:bg-purple-500/10 border-purple-200/80 dark:border-purple-500/20 text-purple-800 dark:text-purple-200'
+                                        : 'bg-slate-50 dark:bg-slate-800/60 border-slate-200/80 dark:border-slate-700 text-slate-600 dark:text-slate-300'
+                                }`}>
+                                    {isPersonal ? (
+                                        <>
+                                            <span className="font-bold">Personal Account:</span> Logs a{' '}
+                                            <span className="font-bold">{isDeposit ? 'Personal Deposit' : 'Personal Withdrawal'}</span>{' '}
+                                            on this account only. Does not touch business cash or affect shop sales/profit reports.
+                                        </>
+                                    ) : (
+                                        <>
+                                            <span className="font-bold">Business Account:</span> Logs an external{' '}
+                                            <span className="font-bold">{isDeposit ? 'Capital Injection' : 'Owner Withdrawal'}</span>{' '}
+                                            without counting as a shop sale or operating expense.
+                                        </>
+                                    )}
+                                </div>
+
+                                {/* Amount */}
+                                <div className="space-y-1.5">
+                                    <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">
+                                        Amount (UGX) *
+                                    </label>
+                                    <div className="relative">
+                                        <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400">UGX</span>
+                                        <input
+                                            type="number"
+                                            min="1"
+                                            step="any"
+                                            placeholder="0"
+                                            className={`w-full pl-12 pr-3.5 py-2.5 text-base font-black text-slate-900 dark:text-white border border-slate-200 dark:border-slate-700 rounded-xl bg-slate-50 dark:bg-slate-800/80 focus:bg-white dark:focus:bg-slate-800 shadow-sm transition-all ${
+                                                isDeposit
+                                                    ? 'focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500'
+                                                    : 'focus:border-rose-500 focus:ring-1 focus:ring-rose-500'
+                                            }`}
+                                            value={txForm.data.amount}
+                                            onChange={e => txForm.setData('amount', e.target.value)}
+                                            required
+                                        />
+                                    </div>
+                                    {txForm.errors.amount && (
+                                        <p className="text-xs text-rose-500 font-bold">{txForm.errors.amount}</p>
+                                    )}
+                                </div>
+
+                                {/* Live Balance Preview */}
+                                <div className="p-3.5 bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700 rounded-xl text-xs space-y-1.5">
+                                    <div className="flex justify-between items-center">
+                                        <span className="text-slate-500 font-medium">Current Balance:</span>
+                                        <span className="font-bold text-slate-900 dark:text-white">
+                                            UGX {currentBal.toLocaleString()}
+                                        </span>
+                                    </div>
+                                    {enteredAmt > 0 && (
+                                        <>
+                                            <div className="flex justify-between items-center">
+                                                <span className="text-slate-500 font-medium">
+                                                    {isDeposit ? 'Adding:' : 'Withdrawing:'}
+                                                </span>
+                                                <span className={`font-bold ${isDeposit ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
+                                                    {isDeposit ? '+' : '−'}UGX {enteredAmt.toLocaleString()}
+                                                </span>
+                                            </div>
+                                            <div className="flex justify-between items-center pt-1.5 border-t border-slate-200/80 dark:border-slate-700">
+                                                <span className="font-bold text-slate-700 dark:text-slate-200">New Balance:</span>
+                                                <span className={`font-black text-sm ${
+                                                    insufficientBalance
+                                                        ? 'text-rose-600 dark:text-rose-400'
+                                                        : 'text-slate-900 dark:text-white'
+                                                }`}>
+                                                    UGX {projectedBal.toLocaleString()}
+                                                </span>
+                                            </div>
+                                            {insufficientBalance && (
+                                                <p className="text-[11px] font-bold text-rose-600 dark:text-rose-400 pt-1">
+                                                    Insufficient balance for this withdrawal.
+                                                </p>
+                                            )}
+                                        </>
+                                    )}
+                                </div>
+
+                                {/* Reference */}
+                                <div className="space-y-1.5">
+                                    <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">
+                                        Reference (Optional)
+                                    </label>
+                                    <input
+                                        type="text"
+                                        className="w-full px-3.5 py-2.5 text-sm font-semibold rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/80 text-slate-900 dark:text-white placeholder-slate-400 focus:bg-white dark:focus:bg-slate-800 focus:border-slate-400 focus:ring-1 focus:ring-slate-400 transition-all shadow-sm"
+                                        placeholder="e.g. Bank slip #, MoMo Tx ID"
+                                        value={txForm.data.reference}
+                                        onChange={e => txForm.setData('reference', e.target.value)}
+                                    />
+                                    {txForm.errors.reference && (
+                                        <p className="text-xs text-rose-500 font-bold">{txForm.errors.reference}</p>
+                                    )}
+                                </div>
+
+                                {/* Description */}
+                                <div className="space-y-1.5">
+                                    <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">
+                                        Note / Description (Optional)
+                                    </label>
+                                    <input
+                                        type="text"
+                                        className="w-full px-3.5 py-2.5 text-sm font-semibold rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/80 text-slate-900 dark:text-white placeholder-slate-400 focus:bg-white dark:focus:bg-slate-800 focus:border-slate-400 focus:ring-1 focus:ring-slate-400 transition-all shadow-sm"
+                                        placeholder={
+                                            isPersonal
+                                                ? (isDeposit ? 'e.g. Personal savings top-up from salary/side income' : 'e.g. Personal family expense')
+                                                : (isDeposit ? 'e.g. Owner capital top-up' : 'e.g. Owner personal draw')
+                                        }
+                                        value={txForm.data.description}
+                                        onChange={e => txForm.setData('description', e.target.value)}
+                                    />
+                                    {txForm.errors.description && (
+                                        <p className="text-xs text-rose-500 font-bold">{txForm.errors.description}</p>
+                                    )}
+                                </div>
+
+                                <div className="mt-6 flex items-center justify-end gap-2.5 pt-4 border-t border-slate-100 dark:border-slate-800">
+                                    <button
+                                        type="button"
+                                        onClick={() => setShowTxModal(false)}
+                                        className="px-4 py-2.5 text-xs font-bold text-slate-700 dark:text-slate-300 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 rounded-xl transition-colors"
+                                    >
+                                        Cancel
+                                    </button>
+                                    <button
+                                        type="submit"
+                                        disabled={txForm.processing || insufficientBalance || enteredAmt <= 0}
+                                        className={`px-5 py-2.5 text-xs font-bold text-white rounded-xl shadow-md transition-all disabled:opacity-50 flex items-center gap-2 ${
+                                            isDeposit
+                                                ? 'bg-emerald-600 hover:bg-emerald-700 shadow-emerald-500/20'
+                                                : 'bg-rose-600 hover:bg-rose-700 shadow-rose-500/20'
+                                        }`}
+                                    >
+                                        {txForm.processing && <RefreshCw size={14} className="animate-spin" />}
+                                        {txForm.processing
+                                            ? 'Recording...'
+                                            : isDeposit
+                                                ? 'Record Deposit'
+                                                : 'Record Withdrawal'}
+                                    </button>
+                                </div>
+                            </form>
+                        </div>
+                    );
+                })()}
             </Modal>
         </AuthenticatedLayout>
     );

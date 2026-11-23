@@ -336,6 +336,87 @@ class AccountController extends Controller
         }
     }
 
+    public function recordTransaction(PaymentAccount $account, Request $request)
+    {
+        $validated = $request->validate([
+            'type' => 'required|in:deposit,withdrawal',
+            'amount' => 'required|numeric|min:1',
+            'description' => 'nullable|string|max:255',
+            'reference' => 'nullable|string|max:100',
+        ]);
+
+        $amount = floatval($validated['amount']);
+        $isDeposit = $validated['type'] === 'deposit';
+
+        DB::transaction(function () use ($account, $validated, $amount, $isDeposit) {
+            $lockedAccount = PaymentAccount::where('id', $account->id)->lockForUpdate()->firstOrFail();
+
+            if (!$isDeposit && floatval($lockedAccount->current_balance) < $amount) {
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                    'amount' => "Insufficient balance in {$lockedAccount->name}. Available: UGX " . number_format($lockedAccount->current_balance) . ".",
+                ]);
+            }
+
+            if ($lockedAccount->is_personal) {
+                $category = $isDeposit ? 'Personal Deposit' : 'Personal Withdrawal';
+                $defaultDesc = $isDeposit
+                    ? "Personal (non-business) deposit into {$lockedAccount->name}"
+                    : "Personal withdrawal from {$lockedAccount->name}";
+            } else {
+                $category = $isDeposit ? 'Capital Injection' : 'Owner Withdrawal';
+                $defaultDesc = $isDeposit
+                    ? "External capital injection into {$lockedAccount->name}"
+                    : "Owner withdrawal from {$lockedAccount->name}";
+            }
+
+            $desc = !empty($validated['description'])
+                ? trim($validated['description'])
+                : $defaultDesc;
+            $ref = !empty($validated['reference']) ? trim($validated['reference']) : null;
+
+            if ($isDeposit) {
+                TreasuryService::recordInflow(
+                    $lockedAccount,
+                    $amount,
+                    $category,
+                    $lockedAccount,
+                    $desc,
+                    $ref,
+                    auth()->id()
+                );
+            } else {
+                TreasuryService::recordOutflow(
+                    $lockedAccount,
+                    $amount,
+                    $category,
+                    $lockedAccount,
+                    $desc,
+                    $ref,
+                    auth()->id()
+                );
+            }
+
+            \App\Models\ActivityLog::log(
+                $isDeposit ? 'account_deposit' : 'account_withdrawal',
+                'Accounts',
+                "{$category} of UGX " . number_format($amount) . ($isDeposit ? ' into ' : ' from ') . $lockedAccount->name,
+                [
+                    'payment_account_id' => $lockedAccount->id,
+                    'is_personal' => (bool) $lockedAccount->is_personal,
+                    'type' => $validated['type'],
+                    'amount' => $amount,
+                    'category' => $category,
+                ]
+            );
+        });
+
+        $label = $account->is_personal
+            ? ($isDeposit ? 'Personal deposit' : 'Personal withdrawal')
+            : ($isDeposit ? 'Deposit' : 'Withdrawal');
+
+        return redirect()->back()->with('success', "{$label} of UGX " . number_format($amount) . " recorded for {$account->name}.");
+    }
+
     public function reconcile(PaymentAccount $account, Request $request)
     {
         $validated = $request->validate([

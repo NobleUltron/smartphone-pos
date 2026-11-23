@@ -430,6 +430,7 @@ Route::middleware('auth')->group(function () {
         // Account wildcard routes
         Route::get('/accounts/{account}', [\App\Http\Controllers\AccountController::class, 'show'])->whereNumber('account')->name('accounts.show');
         Route::put('/accounts/{account}', [\App\Http\Controllers\AccountController::class, 'update'])->whereNumber('account')->name('accounts.update');
+        Route::post('/accounts/{account}/transaction', [\App\Http\Controllers\AccountController::class, 'recordTransaction'])->whereNumber('account')->name('accounts.transaction');
         Route::post('/accounts/{account}/reconcile', [\App\Http\Controllers\AccountController::class, 'reconcile'])->whereNumber('account')->name('accounts.reconcile');
         Route::delete('/accounts/{account}', [\App\Http\Controllers\AccountController::class, 'destroy'])->whereNumber('account')->name('accounts.destroy');
         Route::get('/accounts/{account}/statement', [\App\Http\Controllers\AccountController::class, 'statement'])->whereNumber('account')->name('accounts.statement');
