@@ -135,7 +135,6 @@ export default function AccountsIndex({ accounts = [], categories = [], metrics,
             onSuccess: () => {
                 setShowCreateModal(false);
                 createForm.reset();
-                toast.success('Payment account created successfully');
             },
             onError: (errs) => {
                 toast.error(Object.values(errs)[0] || 'Failed to create account');
@@ -164,7 +163,6 @@ export default function AccountsIndex({ accounts = [], categories = [], metrics,
             onSuccess: () => {
                 setShowEditModal(false);
                 setEditingAccount(null);
-                toast.success('Account updated successfully');
             },
             onError: (errs) => {
                 toast.error(Object.values(errs)[0] || 'Failed to update account');
@@ -179,7 +177,6 @@ export default function AccountsIndex({ accounts = [], categories = [], metrics,
             onSuccess: () => {
                 setShowTransferModal(false);
                 transferForm.reset();
-                toast.success('Inter-account transfer completed');
             },
             onError: (errs) => {
                 toast.error(errs.transfer || Object.values(errs)[0] || 'Transfer failed');
@@ -208,7 +205,6 @@ export default function AccountsIndex({ accounts = [], categories = [], metrics,
                 setShowReconcileModal(false);
                 reconcileForm.reset();
                 setSelectedAccountForAudit(null);
-                toast.success('Account balance reconciled');
             },
             onError: (errs) => {
                 toast.error(errs.actual_balance || Object.values(errs)[0] || 'Reconciliation failed');
@@ -236,11 +232,6 @@ export default function AccountsIndex({ accounts = [], categories = [], metrics,
         txForm.post(route('accounts.transaction', txAccount.id), {
             preserveScroll: true,
             onSuccess: () => {
-                toast.success(
-                    txForm.data.type === 'deposit'
-                        ? `Deposited UGX ${Number(txForm.data.amount || 0).toLocaleString()} into ${txAccount.name}`
-                        : `Withdrew UGX ${Number(txForm.data.amount || 0).toLocaleString()} from ${txAccount.name}`
-                );
                 setShowTxModal(false);
                 txForm.reset();
                 setTxAccount(null);
