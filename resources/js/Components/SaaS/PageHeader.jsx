@@ -33,7 +33,7 @@ export default function PageHeader({ title, breadcrumbs = [], actions = null }) 
                 <h1 className="text-2xl sm:text-3xl font-black text-white tracking-tight leading-tight">{title}</h1>
             </div>
             {actions && (
-                <div className="flex flex-wrap items-center gap-2.5 relative z-10 shrink-0">
+                <div className="flex flex-wrap items-center gap-2 relative z-10 min-w-0 md:justify-end">
                     {actions}
                 </div>
             )}
