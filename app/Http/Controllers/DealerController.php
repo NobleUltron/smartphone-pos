@@ -52,14 +52,14 @@ class DealerController extends Controller
             // Outward (Given to Dealers)
             'items_out' => $outwardQuery->clone()->where('status', 'Pending')->count(),
             'pending_value' => (float) $outwardQuery->clone()->where('status', 'Pending')
-                ->selectRaw("COALESCE(SUM(CASE WHEN type = 'serialized' THEN dealer_price ELSE dealer_price * GREATEST(quantity - quantity_sold - quantity_returned, 1) END), 0) as total")
+                ->selectRaw("COALESCE(SUM(CASE WHEN type = 'serialized' THEN dealer_price ELSE dealer_price * (CASE WHEN quantity - quantity_sold - quantity_returned > 1 THEN quantity - quantity_sold - quantity_returned ELSE 1 END) END), 0) as total")
                 ->value('total'),
             'sold_value' => (float) $outwardQuery->clone()->where('status', 'Sold')
-                ->selectRaw("COALESCE(SUM(CASE WHEN type = 'serialized' THEN dealer_price ELSE dealer_price * GREATEST(quantity_sold, 1) END), 0) as total")
+                ->selectRaw("COALESCE(SUM(CASE WHEN type = 'serialized' THEN dealer_price ELSE dealer_price * (CASE WHEN quantity_sold > 1 THEN quantity_sold ELSE 1 END) END), 0) as total")
                 ->value('total'),
             'items_sold' => $outwardQuery->clone()->where('status', 'Sold')->count(),
             'returned_value' => (float) $outwardQuery->clone()->where('status', 'Returned')
-                ->selectRaw("COALESCE(SUM(CASE WHEN type = 'serialized' THEN dealer_price ELSE dealer_price * GREATEST(quantity_returned, 1) END), 0) as total")
+                ->selectRaw("COALESCE(SUM(CASE WHEN type = 'serialized' THEN dealer_price ELSE dealer_price * (CASE WHEN quantity_returned > 1 THEN quantity_returned ELSE 1 END) END), 0) as total")
                 ->value('total'),
             'items_returned' => $outwardQuery->clone()->where('status', 'Returned')->count(),
             'overdue_items' => $outwardQuery->clone()->where('status', 'Pending')
@@ -104,7 +104,7 @@ class DealerController extends Controller
             $q->where(function ($d) {
                 $d->where('direction', 'outward')->orWhereNull('direction');
             })->where('status', 'Sold');
-        }], DB::raw("CASE WHEN type = 'serialized' THEN dealer_price ELSE dealer_price * GREATEST(quantity_sold, 1) END"))
+        }], DB::raw("CASE WHEN type = 'serialized' THEN dealer_price ELSE dealer_price * (CASE WHEN quantity_sold > 1 THEN quantity_sold ELSE 1 END) END"))
         ->withCount(['dealerItems as items_out_count' => function ($q) {
             $q->where(function ($d) {
                 $d->where('direction', 'outward')->orWhereNull('direction');
@@ -124,7 +124,7 @@ class DealerController extends Controller
                 ->where(function ($q) {
                     $q->where('direction', 'outward')->orWhereNull('direction');
                 })
-                ->selectRaw("COALESCE(SUM(CASE WHEN type = 'serialized' THEN dealer_price ELSE dealer_price * GREATEST(quantity, 1) END), 0) as total")
+                ->selectRaw("COALESCE(SUM(CASE WHEN type = 'serialized' THEN dealer_price ELSE dealer_price * (CASE WHEN quantity > 1 THEN quantity ELSE 1 END) END), 0) as total")
                 ->value('total');
 
             $soldValue = DealerItem::where('status', 'Sold')
@@ -138,7 +138,7 @@ class DealerController extends Controller
                              ->whereBetween('updated_at', [$startOfMonth, $endOfMonth]);
                       });
                 })
-                ->selectRaw("COALESCE(SUM(CASE WHEN type = 'serialized' THEN dealer_price ELSE dealer_price * GREATEST(quantity_sold, 1) END), 0) as total")
+                ->selectRaw("COALESCE(SUM(CASE WHEN type = 'serialized' THEN dealer_price ELSE dealer_price * (CASE WHEN quantity_sold > 1 THEN quantity_sold ELSE 1 END) END), 0) as total")
                 ->value('total');
 
             return [

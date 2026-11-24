@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Head, Link, router } from '@inertiajs/react';
 import { 
-    BarChart3, TrendingUp, DollarSign, Smartphone, Users2, Activity, Tags, Wallet, Package, Wrench, Sparkles, Handshake, Layers, ArrowUpRight, Receipt, CheckCircle 
+    BarChart3, TrendingUp, DollarSign, Smartphone, Users2, Activity, Tags, Wallet, Package, Wrench, Sparkles, Handshake, Layers, ArrowUpRight, Receipt, CheckCircle, FileSpreadsheet 
 } from 'lucide-react';
 import { PieChart, Pie, Cell, Tooltip, Legend, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Sector } from 'recharts';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
@@ -98,6 +98,20 @@ export default function ReportsIndex({
                 breadcrumbs={[{ label: 'Home', href: '/' }, { label: 'Reports' }]}
                 actions={
                     <div className="flex items-center gap-2 flex-wrap">
+                        <Link
+                            href="/reports/profit-loss"
+                            className="px-3.5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold shadow-sm transition-colors flex items-center gap-1.5"
+                        >
+                            <FileSpreadsheet size={14} />
+                            <span>Profit &amp; Loss (P&amp;L)</span>
+                        </Link>
+                        <Link
+                            href="/reports/daily-z-report"
+                            className="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-sm transition-colors flex items-center gap-1.5"
+                        >
+                            <TrendingUp size={14} />
+                            <span>Daily Z-Report</span>
+                        </Link>
                         <select 
                             className="bg-white/10 hover:bg-white/20 text-white border border-white/20 rounded-xl text-xs font-bold py-2 px-3 outline-none focus:ring-2 focus:ring-indigo-400/40 backdrop-blur-md transition-all cursor-pointer" 
                             value={period} 
@@ -629,9 +643,16 @@ export default function ReportsIndex({
                 {/* Cashier Performance */}
                 <div className="lg:col-span-2">
                     <Card noPadding className="h-full animate-slide-up" style={{ animationDelay: '0.6s' }}>
-                        <div className="px-6 py-4 border-b border-slate-100 dark:border-slate-800 flex items-center gap-2">
-                            <Users2 size={20} className="text-pink-500" />
-                            <h3 className="font-bold text-slate-900 dark:text-white">Staff Sales & Profit Performance</h3>
+                        <div className="px-6 py-4 border-b border-slate-100 dark:border-slate-800 flex flex-wrap items-center justify-between gap-2">
+                            <div className="flex items-center gap-2">
+                                <Users2 size={20} className="text-pink-500" />
+                                <h3 className="font-bold text-slate-900 dark:text-white">Staff Sales, Margin &amp; Commission Leaderboard</h3>
+                            </div>
+                            {cashierPerformance?.some(s => Number(s.commission_earned || 0) > 0) && (
+                                <span className="px-3 py-1 rounded-full text-xs font-extrabold bg-indigo-50 dark:bg-indigo-500/15 text-indigo-700 dark:text-indigo-300 border border-indigo-200/80 dark:border-indigo-500/30">
+                                    Total Commissions: UGX {cashierPerformance.reduce((sum, s) => sum + Number(s.commission_earned || 0), 0).toLocaleString()}
+                                </span>
+                            )}
                         </div>
                         <div className="overflow-x-auto">
                             <table className="saas-table w-full whitespace-nowrap">
@@ -639,11 +660,11 @@ export default function ReportsIndex({
                                     <tr>
                                         <th>Staff Name</th>
                                         <th>Role</th>
+                                        <th className="!text-center">Phones</th>
                                         <th className="!text-center">Txns</th>
                                         <th className="!text-right">Revenue</th>
-                                        <th className="!text-right">Discounts</th>
-                                        <th className="!text-right">Net Profit</th>
-                                        <th className="!text-right">Avg Ticket</th>
+                                        <th className="!text-right">Net Profit &amp; Margin</th>
+                                        <th className="!text-right">Commission</th>
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -654,7 +675,12 @@ export default function ReportsIndex({
                                                     <div className="w-8 h-8 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 flex items-center justify-center font-bold text-xs border border-slate-200 dark:border-slate-700">
                                                         {staff.name.charAt(0).toUpperCase()}
                                                     </div>
-                                                    {staff.name}
+                                                    <div>
+                                                        <div>{staff.name}</div>
+                                                        <div className="text-[11px] font-medium text-slate-400">
+                                                            Avg Ticket: {Number(staff.avg_basket || 0).toLocaleString()} UGX
+                                                        </div>
+                                                    </div>
                                                 </div>
                                             </td>
                                             <td>
@@ -666,18 +692,36 @@ export default function ReportsIndex({
                                                     <Badge variant="neutral">Cashier</Badge>
                                                 )}
                                             </td>
+                                            <td className="text-center font-bold text-indigo-600 dark:text-indigo-400">{staff.phones_sold ?? 0}</td>
                                             <td className="text-center text-slate-500 dark:text-slate-400 font-medium">{staff.sales_count}</td>
                                             <td className="text-right font-bold text-slate-900 dark:text-white">
                                                 {Number(staff.total_revenue).toLocaleString()} <span className="text-slate-500 dark:text-slate-400 font-normal text-xs">UGX</span>
                                             </td>
-                                            <td className="text-right font-semibold text-rose-600 dark:text-rose-400">
-                                                {Number(staff.total_discounts || 0).toLocaleString()} <span className="text-slate-400 font-normal text-xs">UGX</span>
+                                            <td className="text-right">
+                                                <div className="font-black text-emerald-600 dark:text-emerald-400">
+                                                    {Number(staff.net_profit || 0).toLocaleString()} <span className="text-slate-400 font-normal text-xs">UGX</span>
+                                                </div>
+                                                <div className="text-[11px] font-bold text-slate-500 dark:text-slate-400">
+                                                    {Number(staff.margin_pct || 0).toFixed(1)}% margin
+                                                </div>
                                             </td>
-                                            <td className="text-right font-black text-emerald-600 dark:text-emerald-400">
-                                                {Number(staff.net_profit || 0).toLocaleString()} <span className="text-slate-400 font-normal text-xs">UGX</span>
-                                            </td>
-                                            <td className="text-right font-medium text-slate-600 dark:text-slate-300">
-                                                {Number(staff.avg_basket || 0).toLocaleString()} <span className="text-slate-400 font-normal text-xs">UGX</span>
+                                            <td className="text-right">
+                                                {staff.commission_type && staff.commission_type !== 'none' ? (
+                                                    <div>
+                                                        <div className="font-black text-indigo-600 dark:text-indigo-400">
+                                                            {Number(staff.commission_earned || 0).toLocaleString()} <span className="text-slate-400 font-normal text-xs">UGX</span>
+                                                        </div>
+                                                        <div className="text-[10px] font-semibold text-slate-400">
+                                                            {staff.commission_type === 'per_phone'
+                                                                ? `${Number(staff.commission_rate).toLocaleString()} / phone`
+                                                                : staff.commission_type === 'profit_percent'
+                                                                    ? `${staff.commission_rate}% of profit`
+                                                                    : `${staff.commission_rate}% of revenue`}
+                                                        </div>
+                                                    </div>
+                                                ) : (
+                                                    <span className="text-xs text-slate-400">—</span>
+                                                )}
                                             </td>
                                         </tr>
                                     )) : (

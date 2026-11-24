@@ -110,6 +110,7 @@ class HandleInertiaRequests extends Middleware
             ...parent::share($request),
             'auth' => [
                 'user' => $request->user(),
+                'permissions' => $request->user() ? $request->user()->resolvedPermissions() : [],
             ],
             'permissions' => [
                 'allow_cashier_discounts' => (bool) \App\Models\Setting::get('allow_cashier_discounts', true),

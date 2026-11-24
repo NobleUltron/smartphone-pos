@@ -29,6 +29,7 @@ export default function Dashboard({
     shiftMetrics = {}
 }) {
     const COLORS = ['#F43F5E', '#6366F1', '#38BDF8', '#8B5CF6', '#10B981'];
+    const safeSalesData = Array.isArray(salesData) ? salesData : Object.values(salesData || {});
     const roleLabel = (auth?.user?.role || '').toLowerCase() === 'manager' ? 'Store Manager' : 'Store Owner';
     
     const [messages, setMessages] = useState([
@@ -181,13 +182,15 @@ export default function Dashboard({
                         <ShoppingCart size={16} />
                         <span>POS</span>
                     </Link>
-                    <Link 
-                        href="/accounts" 
-                        className="px-4 py-2.5 bg-white/5 hover:bg-white/10 border border-white/10 text-slate-200 font-semibold rounded-xl transition-all duration-300 flex items-center justify-center gap-2 backdrop-blur-md text-sm"
-                    >
-                        <Landmark size={16} />
-                        <span>Treasury</span>
-                    </Link>
+                    {auth?.permissions?.manage_accounts !== false && (
+                        <Link 
+                            href="/accounts" 
+                            className="px-4 py-2.5 bg-white/5 hover:bg-white/10 border border-white/10 text-slate-200 font-semibold rounded-xl transition-all duration-300 flex items-center justify-center gap-2 backdrop-blur-md text-sm"
+                        >
+                            <Landmark size={16} />
+                            <span>Treasury</span>
+                        </Link>
+                    )}
                     <Link 
                         href="/settings" 
                         className="px-4 py-2.5 bg-white/5 hover:bg-white/10 border border-white/10 text-slate-200 font-semibold rounded-xl transition-all duration-300 flex items-center justify-center gap-2 backdrop-blur-md text-sm"
@@ -195,14 +198,25 @@ export default function Dashboard({
                         <Settings size={16} />
                         <span>Settings</span>
                     </Link>
-                    <Link 
-                        href="/reports" 
-                        className="group px-5 py-2.5 bg-gradient-to-r from-indigo-500 to-blue-600 hover:from-indigo-400 hover:to-blue-500 text-white font-bold rounded-xl transition-all duration-300 flex items-center justify-center gap-2 shadow-lg shadow-indigo-500/25 hover:shadow-indigo-500/40 hover:-translate-y-0.5 text-sm"
-                    >
-                        <PieChartIcon size={16} className="transition-transform group-hover:scale-110" /> 
-                        <span>Reports</span> 
-                        <ArrowRight size={16} className="transition-transform group-hover:translate-x-1" />
-                    </Link>
+                    {auth?.permissions?.view_reports !== false && (
+                        <>
+                            <Link
+                                href="/reports/daily-z-report"
+                                className="px-4 py-2.5 bg-amber-500/20 hover:bg-amber-500/30 border border-amber-400/30 text-amber-200 font-semibold rounded-xl transition-all duration-300 flex items-center justify-center gap-2 backdrop-blur-md text-sm"
+                            >
+                                <Banknote size={16} />
+                                <span>Daily Z-Report</span>
+                            </Link>
+                            <Link 
+                                href="/reports" 
+                                className="group px-5 py-2.5 bg-gradient-to-r from-indigo-500 to-blue-600 hover:from-indigo-400 hover:to-blue-500 text-white font-bold rounded-xl transition-all duration-300 flex items-center justify-center gap-2 shadow-lg shadow-indigo-500/25 hover:shadow-indigo-500/40 hover:-translate-y-0.5 text-sm"
+                            >
+                                <PieChartIcon size={16} className="transition-transform group-hover:scale-110" /> 
+                                <span>Reports</span> 
+                                <ArrowRight size={16} className="transition-transform group-hover:translate-x-1" />
+                            </Link>
+                        </>
+                    )}
                 </div>
             </div>
 
@@ -215,7 +229,7 @@ export default function Dashboard({
                     completedRepairsToday={completedRepairsToday}
                     lowStockCount={lowStockCount}
                     inventoryValue={inventoryValue}
-                    salesData={salesData}
+                    salesData={safeSalesData}
                     onAskAi={(query) => {
                         setIsMinimized(false);
                         handleSend(query);
@@ -539,7 +553,7 @@ export default function Dashboard({
                         <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-6">7-Day Revenue Trend</h3>
                         <div className="h-[300px] w-full">
                             <ResponsiveContainer width="100%" height="100%">
-                                <AreaChart data={salesData} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
+                                <AreaChart data={safeSalesData} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
                                     <defs>
                                         <linearGradient id="colorSales" x1="0" y1="0" x2="0" y2="1">
                                             <stop offset="5%" stopColor="#F43F5E" stopOpacity={0.6}/>

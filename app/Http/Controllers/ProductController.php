@@ -273,6 +273,45 @@ class ProductController extends Controller
         }
     }
 
+    public function labelStudio(Request $request)
+    {
+        $devices = DeviceImei::with(['product.brand'])
+            ->whereIn('status', ['In Stock', 'In Transit'])
+            ->orderByRaw("CASE WHEN status = 'In Stock' THEN 0 ELSE 1 END")
+            ->orderByDesc('id')
+            ->get()
+            ->map(function ($d) {
+                $brand = $d->product?->brand?->name ?? '';
+                $model = $d->product?->model_name ?? 'Device';
+                return [
+                    'id' => $d->id,
+                    'imei' => $d->imei,
+                    'title' => trim("{$brand} {$model}"),
+                    'storage' => $d->storage_capacity ?: '',
+                    'color' => $d->color ?: '',
+                    'condition' => $d->condition ?: 'Brand New',
+                    'status' => $d->status,
+                    'price' => (float) ($d->selling_price ?? 0),
+                ];
+            })
+            ->values();
+
+        $preselectedIds = collect(explode(',', (string) $request->query('ids', '')))
+            ->map(fn($v) => (int) trim($v))
+            ->filter(fn($v) => $v > 0)
+            ->values()
+            ->all();
+
+        return Inertia::render('Inventory/LabelStudio', [
+            'devices' => $devices,
+            'preselectedIds' => $preselectedIds,
+            'settings' => [
+                'shop_name' => \App\Models\Setting::get('shop_name', 'SmartPOS'),
+                'currency_symbol' => \App\Models\Setting::get('currency_symbol', 'UGX'),
+            ],
+        ]);
+    }
+
     public function printLabel(Request $request)
     {
         $type = $request->input('type');

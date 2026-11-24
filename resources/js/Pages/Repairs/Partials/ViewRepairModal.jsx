@@ -15,7 +15,7 @@ import toast from 'react-hot-toast';
 export default function ViewRepairModal({ isOpen, onClose, repair, products, technicians = [] }) {
     if (!repair) return null;
 
-    const { errors: pageErrors, auth } = usePage().props;
+    const { errors: pageErrors, auth, store_settings: storeSettings } = usePage().props;
     const { data, setData, put, processing, errors } = useForm({
         status: repair.status,
         issue_description: repair.issue_description || '',
@@ -40,7 +40,7 @@ export default function ViewRepairModal({ isOpen, onClose, repair, products, tec
     };
 
     const getWhatsAppMessageText = (repair) => {
-        const businessName = "SmartPOS Kampala";
+        const businessName = storeSettings?.store_name || "SmartPOS";
         const balanceDue = Math.max(0, Number(repair.estimated_cost) - Number(repair.deposit));
         const cName = repair.customer?.name || repair.customer_name;
 

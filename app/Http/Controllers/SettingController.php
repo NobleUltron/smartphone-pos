@@ -81,11 +81,20 @@ class SettingController extends Controller
 
         $windowsPrinters = (new \App\Services\ReceiptPrinterService())->getWindowsPrinters();
 
+        $lastBackupLog = \App\Models\ActivityLog::where('action', 'database_backup_downloaded')
+            ->latest('created_at')
+            ->first();
+
         return Inertia::render('Settings/StoreSettings', [
             'settings' => $settings,
             'windowsPrinters' => $windowsPrinters,
             'isWindows' => $isWindows,
             'serverOs' => PHP_OS,
+            'backupMeta' => [
+                'driver' => \Illuminate\Support\Facades\DB::getDriverName(),
+                'last_backup_at' => $lastBackupLog?->created_at?->toIso8601String(),
+                'last_backup_by' => $lastBackupLog?->user?->name,
+            ],
         ]);
     }
 
@@ -177,5 +186,76 @@ class SettingController extends Controller
     public function store(Request $request)
     {
         return $this->updateSettings($request);
+    }
+
+    /**
+     * One-Click Full Database Backup Download (Admin-only).
+     * Works identically on SQLite, PostgreSQL (Supabase/Render), and MySQL.
+     */
+    public function downloadBackup()
+    {
+        if (strtolower(auth()->user()->role ?? '') !== 'admin') {
+            abort(403, 'Unauthorized action. Only administrators can download full database backups.');
+        }
+
+        $driver = \Illuminate\Support\Facades\DB::getDriverName();
+        $tableNames = [];
+
+        if ($driver === 'pgsql') {
+            $rows = \Illuminate\Support\Facades\DB::select("SELECT tablename FROM pg_tables WHERE schemaname = 'public' ORDER BY tablename");
+            $tableNames = array_map(fn($r) => $r->tablename, $rows);
+        } elseif ($driver === 'sqlite') {
+            $rows = \Illuminate\Support\Facades\DB::select("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' ORDER BY name");
+            $tableNames = array_map(fn($r) => $r->name, $rows);
+        } else {
+            $rows = \Illuminate\Support\Facades\DB::select('SHOW TABLES');
+            $tableNames = array_map(fn($r) => array_values((array) $r)[0], $rows);
+        }
+
+        $skip = ['cache', 'cache_locks', 'sessions', 'jobs', 'job_batches', 'failed_jobs', 'password_reset_tokens'];
+        $tables = [];
+        $counts = [];
+
+        foreach ($tableNames as $name) {
+            if (in_array($name, $skip, true)) {
+                continue;
+            }
+            $data = \Illuminate\Support\Facades\DB::table($name)->get()->toArray();
+            $tables[$name] = $data;
+            $counts[$name] = count($data);
+        }
+
+        $shopName = Setting::get('shop_name', 'SmartPOS');
+        $slug = \Illuminate\Support\Str::slug($shopName) ?: 'smartpos';
+        $filename = "{$slug}_backup_" . now()->format('Y-m-d_Hi') . '.json';
+
+        \App\Models\ActivityLog::log(
+            'database_backup_downloaded',
+            'Security',
+            "Downloaded full database backup ({$filename}, " . count($tables) . " tables, " . array_sum($counts) . " rows)",
+            ['filename' => $filename, 'driver' => $driver, 'tables_count' => count($tables), 'total_rows' => array_sum($counts)]
+        );
+
+        $payload = [
+            'meta' => [
+                'app' => 'SmartPOS',
+                'shop_name' => $shopName,
+                'driver' => $driver,
+                'exported_at' => now()->toIso8601String(),
+                'exported_by' => auth()->user()->name,
+                'tables_count' => count($tables),
+                'total_rows' => array_sum($counts),
+                'table_counts' => $counts,
+            ],
+            'tables' => $tables,
+        ];
+
+        $json = json_encode($payload, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
+
+        return response($json, 200, [
+            'Content-Type' => 'application/json',
+            'Content-Disposition' => 'attachment; filename="' . $filename . '"',
+            'Cache-Control' => 'no-store, no-cache',
+        ]);
     }
 }

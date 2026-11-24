@@ -16,6 +16,15 @@ use Barryvdh\DomPDF\Facade\Pdf;
 
 class PartnerInvestorController extends Controller
 {
+    public function callAction($method, $parameters)
+    {
+        if (!(auth()->user()?->hasPermission('manage_accounts'))) {
+            abort(403, 'You do not have permission to access Partner & Family Capital.');
+        }
+
+        return $this->{$method}(...array_values($parameters));
+    }
+
     public function index(Request $request)
     {
         $partners = PartnerInvestor::with(['transactions'])

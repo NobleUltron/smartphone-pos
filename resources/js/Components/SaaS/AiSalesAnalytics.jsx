@@ -14,7 +14,8 @@ export default function AiSalesAnalytics({
     onAskAi = null 
 }) {
     // 1. Calculate 7-day average sales from salesData
-    const validSales = salesData?.filter(d => typeof d.sales === 'number') || [];
+    const salesArray = Array.isArray(salesData) ? salesData : Object.values(salesData || {});
+    const validSales = salesArray.filter(d => d && typeof d.sales === 'number');
     const avgWeeklySales = validSales.length > 0
         ? Math.round(validSales.reduce((acc, curr) => acc + curr.sales, 0) / validSales.length)
         : 0;

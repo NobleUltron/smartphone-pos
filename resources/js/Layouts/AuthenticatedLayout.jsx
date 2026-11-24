@@ -26,13 +26,15 @@ import {
     Moon,
     Landmark,
     FileSpreadsheet,
-    FileText
+    FileText,
+    Search
 } from 'lucide-react';
 import Dropdown from '@/Components/Dropdown';
 import { Toaster, toast } from 'react-hot-toast';
 import { ThemeProvider, useTheme } from '@/Contexts/ThemeContext';
 import OfflineStatusIndicator from '@/Components/OfflineStatusIndicator';
 import PwaInstallPrompt from '@/Components/PwaInstallPrompt';
+import GlobalSearchModal from '@/Components/SaaS/GlobalSearchModal';
 
 function LayoutInner({ children }) {
     const { isDark, toggleTheme } = useTheme();
@@ -42,6 +44,19 @@ function LayoutInner({ children }) {
     const user = auth?.user;
     const [isSidebarOpen, setIsSidebarOpen] = useState(false);
     const [isMobile, setIsMobile] = useState(false);
+    const [isSearchOpen, setIsSearchOpen] = useState(false);
+
+    // Global Ctrl+K / Cmd+K Command Palette shortcut
+    useEffect(() => {
+        const onKeyDown = (e) => {
+            if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+                e.preventDefault();
+                setIsSearchOpen((prev) => !prev);
+            }
+        };
+        window.addEventListener('keydown', onKeyDown);
+        return () => window.removeEventListener('keydown', onKeyDown);
+    }, []);
 
     useEffect(() => {
         if (errors && errors.error) {
@@ -76,6 +91,11 @@ function LayoutInner({ children }) {
     const isAdminOrManager = userRole === 'admin' || userRole === 'manager';
     const isAdmin = userRole === 'admin';
     const isTechnician = userRole === 'technician';
+    const perms = auth?.permissions || {};
+    const canManageAccounts = isAdmin || perms.manage_accounts === true;
+    const canManageExpenses = isAdmin || perms.manage_expenses === true;
+    const canManageInventory = isAdmin || perms.manage_inventory === true;
+    const canViewReports = isAdmin || perms.view_reports === true;
 
     let dashboardLink = { name: 'Cashier Portal', href: route('cashier.index'), icon: LayoutDashboard, active: route().current('cashier.*') };
     if (isAdminOrManager) {
@@ -90,20 +110,20 @@ function LayoutInner({ children }) {
             items: [
                 dashboardLink,
                 !isTechnician ? { name: 'POS Checkout', href: route('pos.index'), icon: ShoppingCart, active: route().current('pos.*') } : null,
-                isAdminOrManager ? { name: 'Money & Accounts', href: route('accounts.index'), icon: Landmark, active: route().current('accounts.*') || route().current('partners.*') } : null,
+                canManageAccounts ? { name: 'Money & Accounts', href: route('accounts.index'), icon: Landmark, active: route().current('accounts.*') || route().current('partners.*') } : null,
                 !isTechnician ? { name: 'Shift Management', href: route('cash-drawer.index'), icon: Wallet, active: route().current('cash-drawer.*') } : null,
-                !isTechnician ? { name: 'Expenses', href: route('expenses.index'), icon: Receipt, active: route().current('expenses.*') } : null,
+                canManageExpenses ? { name: 'Expenses', href: route('expenses.index'), icon: Receipt, active: route().current('expenses.*') } : null,
             ].filter(Boolean)
         },
         {
             title: 'INVENTORY & SALES',
             items: [
-                isAdminOrManager ? { name: 'Inventory', href: route('inventory.index'), icon: Smartphone, active: route().current('inventory.*') } : null,
+                canManageInventory ? { name: 'Inventory', href: route('inventory.index'), icon: Smartphone, active: route().current('inventory.*') } : null,
                 !isTechnician ? { name: 'Quotations / Proforma', href: route('quotations.index'), icon: FileSpreadsheet, active: route().current('quotations.*') } : null,
                 !isTechnician ? { name: 'Invoices & Credit', href: route('invoices.index'), icon: FileText, active: route().current('invoices.*') } : null,
                 !isTechnician ? { name: 'Issued Receipts', href: route('receipts.index'), icon: Receipt, active: route().current('receipts.*') } : null,
                 !isTechnician ? { name: 'Layaways & Installments', href: route('layaways.index'), icon: Clock, active: route().current('layaways.*') } : null,
-                isAdminOrManager ? { name: 'Suppliers', href: route('suppliers.index'), icon: Package, active: route().current('suppliers.*') || route().current('purchases.*') } : null,
+                canManageInventory ? { name: 'Suppliers', href: route('suppliers.index'), icon: Package, active: route().current('suppliers.*') || route().current('purchases.*') } : null,
             ].filter(Boolean)
         },
         {
@@ -119,7 +139,7 @@ function LayoutInner({ children }) {
             title: 'MANAGEMENT & REPORTS',
             items: [
                 isAdmin ? { name: 'Staff / Users', href: route('users.index'), icon: Users, active: route().current('users.*') } : null,
-                isAdminOrManager ? { name: 'Business Reports', href: route('reports.index'), icon: BarChart3, active: route().current('reports.*') } : null,
+                canViewReports ? { name: 'Business Reports', href: route('reports.index'), icon: BarChart3, active: route().current('reports.*') } : null,
                 isAdminOrManager ? { name: 'Audit Trail Log', href: route('activity-logs.index'), icon: ShieldCheck, active: route().current('activity-logs.*') } : null,
             ].filter(Boolean)
         }
@@ -272,6 +292,7 @@ function LayoutInner({ children }) {
 
             {/* Main Content Area */}
             <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
+                <GlobalSearchModal isOpen={isSearchOpen} onClose={() => setIsSearchOpen(false)} />
                 <PwaInstallPrompt />
                 
                 {/* Top Navbar */}
@@ -293,6 +314,26 @@ function LayoutInner({ children }) {
                                 <ShoppingCart size={15} /> Quick Checkout
                             </Link>
                         )}
+                        <button
+                            type="button"
+                            onClick={() => setIsSearchOpen(true)}
+                            className={`flex items-center gap-2.5 px-3 py-2 rounded-xl border text-xs font-semibold transition-all ${
+                                isDark
+                                    ? 'bg-slate-800/80 border-slate-700/80 text-slate-400 hover:text-slate-200 hover:border-slate-600'
+                                    : 'bg-slate-50 border-slate-200 text-slate-500 hover:text-slate-800 hover:border-slate-300'
+                            }`}
+                            title="Global Search (Ctrl + K)"
+                        >
+                            <Search size={14} className="shrink-0" />
+                            <span className="hidden md:inline">Search IMEI, customer, receipt...</span>
+                            <span className={`hidden sm:inline-flex items-center px-1.5 py-0.5 text-[10px] font-mono font-bold rounded border ${
+                                isDark
+                                    ? 'bg-slate-900 border-slate-700 text-slate-300'
+                                    : 'bg-white border-slate-300 text-slate-600'
+                            }`}>
+                                Ctrl K
+                            </span>
+                        </button>
                     </div>
 
                     <div className="flex items-center gap-3 sm:gap-5 z-50">

@@ -371,6 +371,7 @@ export default function Inventory({ auth, products, allProducts = [], categories
                             <FileSpreadsheet size={15} /> Export Excel
                         </a>
                         <Button variant="glass" className="text-xs" onClick={() => router.visit(route('inventory.audits.index'))} icon={Scan}>Stock Audit</Button>
+                        <Button variant="glass" className="text-xs" onClick={() => router.visit(route('inventory.labels.studio'))} icon={Printer}>IMEI Labels</Button>
                         <Button variant="glass" className="text-xs" onClick={() => {
                             setIsEditingProduct(false);
                             setNewProduct({ id: null, category_id: '', brand_id: '', model_name: '', type: 'serialized' });

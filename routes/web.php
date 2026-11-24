@@ -234,6 +234,7 @@ Route::middleware('auth')->group(function () {
         Route::get('/pos/receipt/{sale}', [POSController::class, 'receipt'])->name('pos.receipt');
         Route::get('/receipts', [ReceiptHistoryController::class, 'index'])->name('receipts.index');
         Route::post('/api/receipts/{sale}/refund', [ReceiptHistoryController::class, 'refund']);
+        Route::post('/api/receipts/{sale}/exchange', [ReceiptHistoryController::class, 'exchange'])->name('receipts.exchange');
         Route::post('/api/receipts/{sale}/print', [ReceiptPrintController::class, 'print'])->name('receipts.print');
         Route::post('/api/receipts/test-print', [ReceiptPrintController::class, 'testPrint'])->name('receipts.test-print');
         Route::get('/api/receipts/{sale}/pdf', [ReceiptPrintController::class, 'pdf'])->name('receipts.pdf');
@@ -371,6 +372,7 @@ Route::middleware('auth')->group(function () {
 
         // Inventory
         Route::get('/inventory', [ProductController::class, 'index'])->name('inventory.index');
+        Route::get('/inventory/labels', [ProductController::class, 'labelStudio'])->name('inventory.labels.studio');
         Route::get('/inventory/labels/print', [ProductController::class, 'printLabel'])->name('inventory.labels.print');
         Route::post('/api/products', [ProductController::class, 'store']);
         Route::post('/api/products/{product}', [ProductController::class, 'update']);
@@ -407,6 +409,11 @@ Route::middleware('auth')->group(function () {
     Route::middleware(['role:admin,manager'])->group(function () {
         Route::get('/activity-logs', [ActivityLogController::class, 'index'])->name('activity-logs.index');
         Route::get('/reports', [ReportController::class, 'index'])->name('reports.index');
+        Route::get('/reports/profit-loss', [ReportController::class, 'profitLoss'])->name('reports.profit-loss');
+        Route::get('/reports/profit-loss/export', [ReportController::class, 'exportProfitLoss'])->name('reports.profit-loss.export');
+        Route::get('/reports/daily-z-report', [ReportController::class, 'dailyZReportPage'])->name('reports.daily-z-report.page');
+        Route::get('/api/reports/daily-z-report', [ReportController::class, 'dailyZReport'])->name('reports.daily-z-report');
+        Route::get('/api/global-search', [\App\Http\Controllers\GlobalSearchController::class, 'search'])->name('api.global-search');
         Route::get('/api/export/inventory', [\App\Http\Controllers\ExportController::class, 'exportInventory'])->name('export.inventory');
         Route::get('/api/export/sales', [\App\Http\Controllers\ExportController::class, 'exportSales'])->name('export.sales');
 
@@ -438,6 +445,7 @@ Route::middleware('auth')->group(function () {
         // Store & Thermal Printing Settings
         Route::get('/settings', [SettingController::class, 'index'])->name('settings.index');
         Route::post('/api/settings', [SettingController::class, 'store']);
+        Route::get('/settings/backup/download', [SettingController::class, 'downloadBackup'])->name('settings.backup.download');
     });
 
     // Admin Only Routes (Staff Management)

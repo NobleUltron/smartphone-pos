@@ -21,6 +21,11 @@ class DeviceImei extends Model
         'color',
         'selling_price',
         'partner_investor_id',
+        'trade_in_inspection',
+    ];
+
+    protected $casts = [
+        'trade_in_inspection' => 'array',
     ];
 
     protected static function booted(): void

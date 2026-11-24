@@ -37,18 +37,32 @@ export default function POSIndex({ auth, customers = [], hasActiveDrawer }) {
     const [isSearchingInventory, setIsSearchingInventory] = useState(false);
     const [selectedProductForImei, setSelectedProductForImei] = useState(null);
 
-    const [showTradeInModal, setShowTradeInModal] = useState(false);
-    const [tradeIn, setTradeIn] = useState(null); // { brand, model_name, imei, condition, storage_capacity, color, value, selling_price }
-    const [tradeInForm, setTradeInForm] = useState({ 
-        brand: '', 
-        model_name: '', 
-        imei: '', 
+    const defaultTradeInForm = {
+        brand: '',
+        model_name: '',
+        imei: '',
         condition: 'Used Grade A',
         storage_capacity: '',
         color: '',
         value: '',
-        selling_price: ''
-    });
+        selling_price: '',
+        battery_health: '88',
+        face_id_ok: true,
+        true_tone_ok: true,
+        icloud_removed: true,
+        cameras_audio_ok: true,
+        screen_grade: 'Flawless',
+        body_grade: 'Clean',
+        seller_id_type: 'National ID (NIN)',
+        seller_id_number: '',
+        seller_name: '',
+        seller_phone: '',
+        notes: '',
+    };
+
+    const [showTradeInModal, setShowTradeInModal] = useState(false);
+    const [tradeIn, setTradeIn] = useState(null);
+    const [tradeInForm, setTradeInForm] = useState(defaultTradeInForm);
 
     const filteredCustomers = useMemo(() => {
         const q = customerSearch.trim().toLowerCase();
@@ -161,6 +175,9 @@ export default function POSIndex({ auth, customers = [], hasActiveDrawer }) {
         if (!tradeInForm.brand || !tradeInForm.model_name || isNaN(appraised) || appraised <= 0) {
             return toast.error("Please fill in brand, model, and a valid appraised value");
         }
+        if (!tradeInForm.icloud_removed) {
+            return toast.error("Anti-Theft Check: Confirm Find My / iCloud / Google FRP is removed before accepting trade-in.");
+        }
         setTradeIn({
             brand: tradeInForm.brand.trim(),
             model_name: tradeInForm.model_name.trim(),
@@ -169,11 +186,25 @@ export default function POSIndex({ auth, customers = [], hasActiveDrawer }) {
             storage_capacity: tradeInForm.storage_capacity.trim(),
             color: tradeInForm.color.trim(),
             value: appraised,
-            selling_price: tradeInForm.selling_price
+            selling_price: tradeInForm.selling_price,
+            inspection: {
+                battery_health: tradeInForm.battery_health,
+                face_id_ok: Boolean(tradeInForm.face_id_ok),
+                true_tone_ok: Boolean(tradeInForm.true_tone_ok),
+                icloud_removed: Boolean(tradeInForm.icloud_removed),
+                cameras_audio_ok: Boolean(tradeInForm.cameras_audio_ok),
+                screen_grade: tradeInForm.screen_grade,
+                body_grade: tradeInForm.body_grade,
+                seller_id_type: tradeInForm.seller_id_type,
+                seller_id_number: tradeInForm.seller_id_number.trim(),
+                seller_name: tradeInForm.seller_name.trim(),
+                seller_phone: tradeInForm.seller_phone.trim(),
+                notes: tradeInForm.notes.trim(),
+            }
         });
         setShowTradeInModal(false);
-        setTradeInForm({ brand: '', model_name: '', imei: '', condition: 'Used Grade A', storage_capacity: '', color: '', value: '', selling_price: '' });
-        toast.success("Trade-in applied!");
+        setTradeInForm(defaultTradeInForm);
+        toast.success("Trade-in verified & applied! Device will auto-add to In Stock on checkout.");
     };
 
     const total = cart.reduce((sum, item) => sum + (parseFloat(item.price || 0) * (item.quantity || 1)), 0);
@@ -837,129 +868,308 @@ export default function POSIndex({ auth, customers = [], hasActiveDrawer }) {
                 </div>
             </Modal>
 
-            {/* Trade-In Modal */}
-            <Modal show={showTradeInModal} onClose={() => setShowTradeInModal(false)} maxWidth="lg">
-                <div className="p-6 dark:bg-slate-900">
-                    <div className="flex justify-between items-center mb-6 pb-3 border-b border-slate-100 dark:border-slate-700">
-                        <div>
-                            <h3 className="text-lg font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
-                                <RefreshCw className="text-emerald-600 dark:text-emerald-400" size={20} /> Trade-In Device (Swap & Valuation)
-                            </h3>
-                            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                                Valuate customer device to give immediate store credit towards their purchase.
-                            </p>
-                        </div>
-                        <button type="button" onClick={() => setShowTradeInModal(false)} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">
-                            <X size={20} />
-                        </button>
-                    </div>
-                    <form onSubmit={handleAddTradeIn} className="space-y-4">
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                            <div>
-                                <label className="saas-label">Brand *</label>
-                                <input 
-                                    type="text" 
-                                    className="saas-input" 
-                                    placeholder="e.g. Apple, Samsung" 
-                                    value={tradeInForm.brand}
-                                    onChange={e => setTradeInForm({...tradeInForm, brand: e.target.value})}
-                                    required
-                                />
-                            </div>
-                            <div>
-                                <label className="saas-label">Model Name *</label>
-                                <input 
-                                    type="text" 
-                                    className="saas-input" 
-                                    placeholder="e.g. iPhone XS, S21" 
-                                    value={tradeInForm.model_name}
-                                    onChange={e => setTradeInForm({...tradeInForm, model_name: e.target.value})}
-                                    required
-                                />
-                            </div>
-                        </div>
+            {/* Guided Trade-In Intake & Anti-Theft Checklist Modal */}
+            <Modal show={showTradeInModal} onClose={() => setShowTradeInModal(false)} maxWidth="2xl">
+                {(() => {
+                    const appraisedVal = Number(tradeInForm.value || 0);
+                    const targetSellVal = Number(tradeInForm.selling_price || 0);
+                    const estProfit = targetSellVal > 0 && appraisedVal > 0 ? targetSellVal - appraisedVal : 0;
+                    const estMarginPct = targetSellVal > 0 && appraisedVal > 0 ? Math.round((estProfit / targetSellVal) * 100) : 0;
+                    const batNum = Number(tradeInForm.battery_health || 0);
 
-                        <div>
-                            <label className="saas-label">IMEI / Serial (Optional)</label>
-                            <input 
-                                type="text" 
-                                className="saas-input" 
-                                placeholder="Enter IMEI (or leave blank to auto-generate)" 
-                                value={tradeInForm.imei}
-                                onChange={e => setTradeInForm({...tradeInForm, imei: e.target.value})}
-                            />
-                        </div>
+                    return (
+                        <div className="p-6 dark:bg-slate-900 max-h-[88vh] overflow-y-auto">
+                            <div className="flex justify-between items-center mb-5 pb-3 border-b border-slate-100 dark:border-slate-700">
+                                <div>
+                                    <h3 className="text-lg font-black text-slate-900 dark:text-slate-100 flex items-center gap-2">
+                                        <RefreshCw className="text-emerald-600 dark:text-emerald-400" size={20} /> Guided Trade-In Intake &amp; Valuation
+                                    </h3>
+                                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                                        Complete hardware &amp; anti-theft checks. Device automatically enters In-Stock inventory at its exact trade-in cost basis.
+                                    </p>
+                                </div>
+                                <button type="button" onClick={() => setShowTradeInModal(false)} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">
+                                    <X size={20} />
+                                </button>
+                            </div>
 
-                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                            <div>
-                                <label className="saas-label">Condition *</label>
-                                <select 
-                                    className="saas-input" 
-                                    value={tradeInForm.condition}
-                                    onChange={e => setTradeInForm({...tradeInForm, condition: e.target.value})}
-                                >
-                                    <option value="Used Grade A">Used Grade A</option>
-                                    <option value="Used Grade B">Used Grade B</option>
-                                    <option value="Refurbished">Refurbished</option>
-                                    <option value="Brand New">Brand New</option>
-                                </select>
-                            </div>
-                            <div>
-                                <label className="saas-label">Storage Capacity</label>
-                                <input 
-                                    type="text" 
-                                    className="saas-input" 
-                                    placeholder="e.g. 256GB, 64GB" 
-                                    value={tradeInForm.storage_capacity}
-                                    onChange={e => setTradeInForm({...tradeInForm, storage_capacity: e.target.value})}
-                                />
-                            </div>
-                            <div>
-                                <label className="saas-label">Color</label>
-                                <input 
-                                    type="text" 
-                                    className="saas-input" 
-                                    placeholder="e.g. Space Gray, Silver" 
-                                    value={tradeInForm.color}
-                                    onChange={e => setTradeInForm({...tradeInForm, color: e.target.value})}
-                                />
-                            </div>
-                        </div>
+                            <form onSubmit={handleAddTradeIn} className="space-y-5">
+                                {/* 1. Device Identity */}
+                                <div className="space-y-3">
+                                    <div className="text-[11px] font-extrabold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                                        1. Device Identity
+                                    </div>
+                                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                                        <div>
+                                            <label className="saas-label">Brand *</label>
+                                            <input 
+                                                type="text" 
+                                                className="saas-input" 
+                                                placeholder="e.g. Apple, Samsung" 
+                                                value={tradeInForm.brand}
+                                                onChange={e => setTradeInForm({...tradeInForm, brand: e.target.value})}
+                                                required
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="saas-label">Model Name *</label>
+                                            <input 
+                                                type="text" 
+                                                className="saas-input" 
+                                                placeholder="e.g. iPhone 13 Pro" 
+                                                value={tradeInForm.model_name}
+                                                onChange={e => setTradeInForm({...tradeInForm, model_name: e.target.value})}
+                                                required
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="saas-label">IMEI / Serial *</label>
+                                            <input 
+                                                type="text" 
+                                                className="saas-input font-mono" 
+                                                placeholder="15-digit IMEI" 
+                                                value={tradeInForm.imei}
+                                                onChange={e => setTradeInForm({...tradeInForm, imei: e.target.value})}
+                                                required
+                                            />
+                                        </div>
+                                    </div>
 
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                            <div>
-                                <label className="saas-label">Appraised Credit Value (UGX) *</label>
-                                <input 
-                                    type="number" 
-                                    min="1"
-                                    className="saas-input font-bold text-emerald-600 dark:text-emerald-400" 
-                                    placeholder="0" 
-                                    value={tradeInForm.value}
-                                    onChange={e => setTradeInForm({...tradeInForm, value: e.target.value})}
-                                    required
-                                />
-                                <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">Deducted from customer total (Cost Price).</p>
-                            </div>
-                            <div>
-                                <label className="saas-label">Target Selling Price (UGX)</label>
-                                <input 
-                                    type="number" 
-                                    min="0"
-                                    className="saas-input font-bold text-indigo-600 dark:text-indigo-400" 
-                                    placeholder="e.g. Resale Price" 
-                                    value={tradeInForm.selling_price}
-                                    onChange={e => setTradeInForm({...tradeInForm, selling_price: e.target.value})}
-                                />
-                                <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">Expected resale price in shop inventory.</p>
-                            </div>
-                        </div>
+                                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                                        <div>
+                                            <label className="saas-label">Overall Grade *</label>
+                                            <select 
+                                                className="saas-input" 
+                                                value={tradeInForm.condition}
+                                                onChange={e => setTradeInForm({...tradeInForm, condition: e.target.value})}
+                                            >
+                                                <option value="Used Grade A">Used Grade A (Mint)</option>
+                                                <option value="Used Grade B">Used Grade B (Good)</option>
+                                                <option value="Used Grade C">Used Grade C (Fair)</option>
+                                                <option value="Refurbished">Refurbished</option>
+                                                <option value="Brand New">Brand New</option>
+                                            </select>
+                                        </div>
+                                        <div>
+                                            <label className="saas-label">Storage Capacity</label>
+                                            <input 
+                                                type="text" 
+                                                className="saas-input" 
+                                                placeholder="e.g. 128GB, 256GB" 
+                                                value={tradeInForm.storage_capacity}
+                                                onChange={e => setTradeInForm({...tradeInForm, storage_capacity: e.target.value})}
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="saas-label">Color</label>
+                                            <input 
+                                                type="text" 
+                                                className="saas-input" 
+                                                placeholder="e.g. Graphite, White" 
+                                                value={tradeInForm.color}
+                                                onChange={e => setTradeInForm({...tradeInForm, color: e.target.value})}
+                                            />
+                                        </div>
+                                    </div>
+                                </div>
 
-                        <div className="pt-4 flex justify-end gap-3 border-t border-slate-100 dark:border-slate-700">
-                            <Button variant="secondary" type="button" onClick={() => setShowTradeInModal(false)}>Cancel</Button>
-                            <Button variant="emerald" icon={RefreshCw} type="submit">Apply Trade-In Credit</Button>
+                                {/* 2. Hardware Inspection Checklist */}
+                                <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700 space-y-3">
+                                    <div className="text-[11px] font-extrabold uppercase tracking-wider text-indigo-600 dark:text-indigo-400">
+                                        2. Hardware Diagnostic Checklist
+                                    </div>
+
+                                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                                        <div>
+                                            <div className="flex items-center justify-between mb-1">
+                                                <label className="saas-label !mb-0">Battery Health</label>
+                                                <span className={`text-xs font-black px-1.5 py-0.5 rounded-md ${
+                                                    batNum >= 85
+                                                        ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-300'
+                                                        : batNum >= 75
+                                                            ? 'bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-300'
+                                                            : 'bg-rose-100 text-rose-700 dark:bg-rose-500/20 dark:text-rose-300'
+                                                }`}>
+                                                    {tradeInForm.battery_health || 0}%
+                                                </span>
+                                            </div>
+                                            <div className="relative">
+                                                <input
+                                                    type="number"
+                                                    min="1"
+                                                    max="100"
+                                                    className="saas-input font-bold pr-8"
+                                                    value={tradeInForm.battery_health}
+                                                    onChange={e => setTradeInForm({...tradeInForm, battery_health: e.target.value})}
+                                                />
+                                                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400 pointer-events-none">%</span>
+                                            </div>
+                                        </div>
+                                        <div>
+                                            <label className="saas-label">Screen Condition</label>
+                                            <select
+                                                className="saas-input"
+                                                value={tradeInForm.screen_grade}
+                                                onChange={e => setTradeInForm({...tradeInForm, screen_grade: e.target.value})}
+                                            >
+                                                <option value="Flawless">Flawless (No scratches)</option>
+                                                <option value="Minor Scratches">Minor Scratches</option>
+                                                <option value="Cracked / Damaged">Cracked / Needs Screen</option>
+                                            </select>
+                                        </div>
+                                        <div>
+                                            <label className="saas-label">Body / Frame Grade</label>
+                                            <select
+                                                className="saas-input"
+                                                value={tradeInForm.body_grade}
+                                                onChange={e => setTradeInForm({...tradeInForm, body_grade: e.target.value})}
+                                            >
+                                                <option value="Clean">Clean / Like New</option>
+                                                <option value="Light Wear">Light Wear</option>
+                                                <option value="Dents / Scuffs">Dents / Heavy Scuffs</option>
+                                            </select>
+                                        </div>
+                                    </div>
+
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
+                                        {[
+                                            { key: 'face_id_ok', label: 'FaceID / TouchID Working' },
+                                            { key: 'true_tone_ok', label: 'TrueTone / Original Display' },
+                                            { key: 'cameras_audio_ok', label: 'Cameras, Speakers & Mic OK' },
+                                            { key: 'icloud_removed', label: 'Find My / iCloud / FRP Removed (Required)', critical: true },
+                                        ].map((chk) => {
+                                            const checked = Boolean(tradeInForm[chk.key]);
+                                            return (
+                                                <label
+                                                    key={chk.key}
+                                                    className={`flex items-center justify-between gap-2 px-3 py-2 rounded-xl border text-xs font-bold cursor-pointer transition-all ${
+                                                        checked
+                                                            ? 'bg-emerald-50 dark:bg-emerald-500/10 border-emerald-200 dark:border-emerald-500/30 text-emerald-800 dark:text-emerald-200'
+                                                            : chk.critical
+                                                                ? 'bg-rose-50 dark:bg-rose-500/10 border-rose-300 dark:border-rose-500/40 text-rose-700 dark:text-rose-300'
+                                                                : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300'
+                                                    }`}
+                                                >
+                                                    <span>{chk.label}</span>
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={checked}
+                                                        onChange={e => setTradeInForm({ ...tradeInForm, [chk.key]: e.target.checked })}
+                                                        className="rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
+                                                    />
+                                                </label>
+                                            );
+                                        })}
+                                    </div>
+                                </div>
+
+                                {/* 3. Anti-Theft Ownership & ID Capture */}
+                                <div className="p-4 rounded-xl bg-amber-50/60 dark:bg-amber-500/10 border border-amber-200/80 dark:border-amber-500/20 space-y-3">
+                                    <div className="text-[11px] font-extrabold uppercase tracking-wider text-amber-700 dark:text-amber-300">
+                                        3. Anti-Theft Seller ID &amp; Ownership Record
+                                    </div>
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                        <div>
+                                            <label className="saas-label">ID Document Type</label>
+                                            <select
+                                                className="saas-input"
+                                                value={tradeInForm.seller_id_type}
+                                                onChange={e => setTradeInForm({...tradeInForm, seller_id_type: e.target.value})}
+                                            >
+                                                <option value="National ID (NIN)">National ID (NIN)</option>
+                                                <option value="Passport">Passport</option>
+                                                <option value="Driving Permit">Driving Permit</option>
+                                                <option value="Other ID">Other Official ID</option>
+                                            </select>
+                                        </div>
+                                        <div>
+                                            <label className="saas-label">ID / NIN Number (Recommended)</label>
+                                            <input
+                                                type="text"
+                                                className="saas-input font-mono uppercase"
+                                                placeholder="e.g. CM980123456789"
+                                                value={tradeInForm.seller_id_number}
+                                                onChange={e => setTradeInForm({...tradeInForm, seller_id_number: e.target.value})}
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="saas-label">Seller Full Name</label>
+                                            <input
+                                                type="text"
+                                                className="saas-input"
+                                                placeholder="As shown on ID"
+                                                value={tradeInForm.seller_name}
+                                                onChange={e => setTradeInForm({...tradeInForm, seller_name: e.target.value})}
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="saas-label">Seller Phone</label>
+                                            <input
+                                                type="text"
+                                                className="saas-input"
+                                                placeholder="e.g. 0772123456"
+                                                value={tradeInForm.seller_phone}
+                                                onChange={e => setTradeInForm({...tradeInForm, seller_phone: e.target.value})}
+                                            />
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* 4. Valuation & Resale Margin */}
+                                <div className="space-y-3">
+                                    <div className="text-[11px] font-extrabold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                                        4. Valuation &amp; Resale Margin
+                                    </div>
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                        <div>
+                                            <label className="saas-label">Appraised Trade-In Value (UGX) *</label>
+                                            <input 
+                                                type="number" 
+                                                min="1"
+                                                className="saas-input font-black text-emerald-600 dark:text-emerald-400" 
+                                                placeholder="0" 
+                                                value={tradeInForm.value}
+                                                onChange={e => setTradeInForm({...tradeInForm, value: e.target.value})}
+                                                required
+                                            />
+                                            <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">Deducted from customer total &amp; saved as Inventory Cost Basis.</p>
+                                        </div>
+                                        <div>
+                                            <label className="saas-label">Target Resale Price (UGX)</label>
+                                            <input 
+                                                type="number" 
+                                                min="0"
+                                                className="saas-input font-black text-indigo-600 dark:text-indigo-400" 
+                                                placeholder="Leave blank for +20% default" 
+                                                value={tradeInForm.selling_price}
+                                                onChange={e => setTradeInForm({...tradeInForm, selling_price: e.target.value})}
+                                            />
+                                            <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">Selling price when listed in In-Stock inventory.</p>
+                                        </div>
+                                    </div>
+
+                                    {appraisedVal > 0 && targetSellVal > 0 && (
+                                        <div className={`px-3.5 py-2.5 rounded-xl border text-xs font-bold flex items-center justify-between ${
+                                            estProfit >= 0
+                                                ? 'bg-emerald-50 dark:bg-emerald-500/10 border-emerald-200 dark:border-emerald-500/30 text-emerald-700 dark:text-emerald-300'
+                                                : 'bg-rose-50 dark:bg-rose-500/10 border-rose-200 dark:border-rose-500/30 text-rose-700 dark:text-rose-300'
+                                        }`}>
+                                            <span>Projected Resale Profit:</span>
+                                            <span>
+                                                {estProfit >= 0 ? '+' : ''}UGX {estProfit.toLocaleString()} ({estMarginPct}% margin)
+                                            </span>
+                                        </div>
+                                    )}
+                                </div>
+
+                                <div className="pt-4 flex justify-end gap-3 border-t border-slate-100 dark:border-slate-700">
+                                    <Button variant="secondary" type="button" onClick={() => setShowTradeInModal(false)}>Cancel</Button>
+                                    <Button variant="emerald" icon={RefreshCw} type="submit">Apply Verified Trade-In</Button>
+                                </div>
+                            </form>
                         </div>
-                    </form>
-                </div>
+                    );
+                })()}
             </Modal>
 
             {/* Mobile Floating Checkout Dock */}

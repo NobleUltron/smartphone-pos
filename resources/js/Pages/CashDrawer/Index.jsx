@@ -16,6 +16,7 @@ import toast from 'react-hot-toast';
 
 export default function Index({ auth, activeDrawer, accounts = [] }) {
     const [showConfirmClose, setShowConfirmClose] = useState(false);
+    const canViewZReport = auth?.permissions?.view_reports === true;
 
     // Identify counter till (Main Cash Register) vs funding accounts (Shop Safe, Bank, MTN, Airtel)
     const tillAccount = accounts.find(a => a.name === 'Main Cash Register') 
@@ -117,13 +118,24 @@ export default function Index({ auth, activeDrawer, accounts = [] }) {
                         { label: 'Shift Management' }
                     ]}
                     actions={
-                        <Link 
-                            href={route('cash-drawer.history')} 
-                            className="saas-btn saas-btn-glass"
-                        >
-                            <HistoryIcon size={16} />
-                            <span>Shift History</span>
-                        </Link>
+                        <div className="flex items-center gap-2">
+                            {canViewZReport && (
+                                <Link
+                                    href="/reports/daily-z-report"
+                                    className="px-3.5 py-2 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm transition-colors flex items-center gap-1.5"
+                                >
+                                    <TrendingUp size={15} />
+                                    <span>Daily Z-Report</span>
+                                </Link>
+                            )}
+                            <Link 
+                                href={route('cash-drawer.history')} 
+                                className="saas-btn saas-btn-glass"
+                            >
+                                <HistoryIcon size={16} />
+                                <span>Shift History</span>
+                            </Link>
+                        </div>
                     }
                 />
 

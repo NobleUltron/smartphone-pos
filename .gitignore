@@ -26,6 +26,8 @@ Homestead.json
 Homestead.yaml
 Thumbs.db
 /scratch
+database/*.sqlite
+database/*.sqlite-journal
 test_receipt.php
 test_sale.php
 

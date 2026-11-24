@@ -12,9 +12,11 @@ import {
     ExternalLink,
     Store,
     ShieldCheck,
-    ArrowLeft
+    ArrowLeft,
+    MessageCircle
 } from 'lucide-react';
 import ThermalPrintService from '@/Services/ThermalPrintService';
+import { buildSaleReceiptMessage, openWhatsApp } from '@/Utils/whatsapp';
 import Modal from '@/Components/Modal';
 import Button from '@/Components/SaaS/Button';
 import toast from 'react-hot-toast';
@@ -247,7 +249,21 @@ export default function Receipt({ sale, settings }) {
                             className="flex-1 min-w-[160px] font-bold py-2.5 px-4 rounded-xl shadow-sm border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 hover:bg-slate-50 dark:hover:bg-slate-800 transition-all flex items-center justify-center gap-2 cursor-pointer"
                         >
                             <FileText size={18} className="text-slate-600 dark:text-slate-300" />
-                            <span>Print A4 Invoice (Browser)</span>
+                            <span>Print A4 Invoice</span>
+                        </button>
+
+                        {/* WhatsApp Share Receipt Button */}
+                        <button
+                            type="button"
+                            onClick={() => {
+                                const phone = sale?.customer?.phone || sale?.dealer_item?.[0]?.dealer?.phone || '';
+                                openWhatsApp(phone, buildSaleReceiptMessage(sale, settings));
+                            }}
+                            className="font-bold py-2.5 px-4 rounded-xl shadow-sm border border-emerald-600 bg-emerald-600 hover:bg-emerald-700 text-white transition-all flex items-center justify-center gap-2 cursor-pointer shrink-0"
+                            title="Send digital receipt to customer via WhatsApp"
+                        >
+                            <MessageCircle size={18} />
+                            <span>WhatsApp</span>
                         </button>
 
                         {/* Back to POS / Repairs */}

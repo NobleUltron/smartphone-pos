@@ -3,7 +3,8 @@ import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import { Head, Link, router } from '@inertiajs/react';
 import toast from 'react-hot-toast';
 import axios from 'axios';
-import { Scan, CheckCircle, AlertTriangle, HelpCircle, FileText, Check, ArrowLeft, RefreshCcw, Volume2, ShieldCheck } from 'lucide-react';
+import { Scan, CheckCircle, AlertTriangle, HelpCircle, FileText, Check, ArrowLeft, RefreshCcw, Volume2, VolumeX, ShieldCheck, Camera, CameraOff } from 'lucide-react';
+import { Html5Qrcode, Html5QrcodeSupportedFormats } from 'html5-qrcode';
 import dayjs from 'dayjs';
 import PageHeader from '@/Components/SaaS/PageHeader';
 import Card from '@/Components/SaaS/Card';
@@ -18,22 +19,65 @@ export default function Show({ audit, unscannedDevices = [] }) {
     const [itemsList, setItemsList] = useState(audit.items || []);
     const [unscannedList, setUnscannedList] = useState(unscannedDevices);
     const [scannedCount, setScannedCount] = useState(audit.total_scanned || 0);
+    const [soundEnabled, setSoundEnabled] = useState(true);
+    const [cameraActive, setCameraActive] = useState(false);
+    const [cameraError, setCameraError] = useState('');
 
     const inputRef = useRef(null);
+    const scannerRef = useRef(null);
+    const audioCtxRef = useRef(null);
+    const lastCameraScanRef = useRef({ code: '', time: 0 });
+    const scanningRef = useRef(false);
+
+    // Web Audio API Scanner Beeps (zero external audio files needed)
+    const playBeep = (type = 'success') => {
+        if (!soundEnabled || typeof window === 'undefined') return;
+        try {
+            const AudioCtx = window.AudioContext || window.webkitAudioContext;
+            if (!AudioCtx) return;
+            if (!audioCtxRef.current) audioCtxRef.current = new AudioCtx();
+            const ctx = audioCtxRef.current;
+            if (ctx.state === 'suspended') ctx.resume();
+
+            const playTone = (freq, startOffset, duration, wave = 'sine', gainVal = 0.18) => {
+                const osc = ctx.createOscillator();
+                const gain = ctx.createGain();
+                osc.type = wave;
+                osc.frequency.setValueAtTime(freq, ctx.currentTime + startOffset);
+                gain.gain.setValueAtTime(gainVal, ctx.currentTime + startOffset);
+                gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + startOffset + duration);
+                osc.connect(gain);
+                gain.connect(ctx.destination);
+                osc.start(ctx.currentTime + startOffset);
+                osc.stop(ctx.currentTime + startOffset + duration);
+            };
+
+            if (type === 'success') {
+                playTone(920, 0, 0.08, 'sine', 0.2);
+                playTone(1380, 0.09, 0.11, 'sine', 0.22);
+            } else if (type === 'warning') {
+                playTone(540, 0, 0.1, 'triangle', 0.18);
+                playTone(540, 0.13, 0.1, 'triangle', 0.18);
+            } else {
+                playTone(220, 0, 0.28, 'sawtooth', 0.16);
+            }
+        } catch {
+            // Ignore audio errors on restricted devices
+        }
+    };
 
     // Auto-focus barcode scanner input field on load and after scans
     useEffect(() => {
-        if (inputRef.current && audit.status === 'In Progress') {
+        if (inputRef.current && audit.status === 'In Progress' && !cameraActive) {
             inputRef.current.focus();
         }
-    }, [audit.status]);
+    }, [audit.status, cameraActive]);
 
-    const handleScanSubmit = async (e) => {
-        e.preventDefault();
-        if (!scanCode.trim() || scanning) return;
+    const processScanCode = async (rawCode) => {
+        const codeToScan = (rawCode || '').trim();
+        if (!codeToScan || scanningRef.current) return;
 
-        const codeToScan = scanCode.trim();
-        setScanCode('');
+        scanningRef.current = true;
         setScanning(true);
 
         try {
@@ -41,23 +85,121 @@ export default function Show({ audit, unscannedDevices = [] }) {
             const data = response.data;
 
             if (data.result === 'duplicate') {
+                playBeep('warning');
                 toast.error(data.message, { icon: '⚠️' });
             } else if (data.result === 'found') {
+                playBeep('success');
                 toast.success(data.message, { icon: '✅' });
                 setItemsList(prev => [data.item, ...prev]);
                 setUnscannedList(prev => prev.filter(d => d.imei !== codeToScan));
                 setScannedCount(prev => prev + 1);
             } else if (data.result === 'unmatched') {
+                playBeep('error');
                 toast.error(data.message, { icon: '❓' });
                 setItemsList(prev => [data.item, ...prev]);
             }
         } catch (error) {
+            playBeep('error');
             toast.error(error.response?.data?.message || 'Error processing scan input');
         } finally {
+            scanningRef.current = false;
             setScanning(false);
-            if (inputRef.current) inputRef.current.focus();
+            if (inputRef.current && !cameraActive) inputRef.current.focus();
         }
     };
+
+    const handleScanSubmit = async (e) => {
+        e.preventDefault();
+        if (!scanCode.trim() || scanning) return;
+        const code = scanCode.trim();
+        setScanCode('');
+        await processScanCode(code);
+    };
+
+    // Start / Stop Live Phone / Webcam Barcode Scanner
+    const stopCamera = async () => {
+        if (scannerRef.current) {
+            try {
+                if (scannerRef.current.isScanning) {
+                    await scannerRef.current.stop();
+                }
+                scannerRef.current.clear();
+            } catch {
+                // Ignore cleanup errors
+            }
+            scannerRef.current = null;
+        }
+        setCameraActive(false);
+    };
+
+    const toggleCamera = async () => {
+        if (cameraActive) {
+            await stopCamera();
+            return;
+        }
+        setCameraError('');
+        setCameraActive(true);
+    };
+
+    useEffect(() => {
+        if (!cameraActive || audit.status !== 'In Progress') return;
+
+        let cancelled = false;
+        const startScanner = async () => {
+            try {
+                const html5QrCode = new Html5Qrcode('audit-camera-reader', {
+                    formatsToSupport: [
+                        Html5QrcodeSupportedFormats.CODE_128,
+                        Html5QrcodeSupportedFormats.CODE_39,
+                        Html5QrcodeSupportedFormats.EAN_13,
+                        Html5QrcodeSupportedFormats.EAN_8,
+                        Html5QrcodeSupportedFormats.UPC_A,
+                        Html5QrcodeSupportedFormats.QR_CODE,
+                    ],
+                    verbose: false,
+                });
+                scannerRef.current = html5QrCode;
+
+                await html5QrCode.start(
+                    { facingMode: 'environment' },
+                    {
+                        fps: 12,
+                        qrbox: { width: 280, height: 110 },
+                        aspectRatio: 1.777,
+                    },
+                    (decodedText) => {
+                        const now = Date.now();
+                        // 2-second cooldown on same barcode to prevent rapid duplicate fires
+                        if (
+                            lastCameraScanRef.current.code === decodedText &&
+                            now - lastCameraScanRef.current.time < 2200
+                        ) {
+                            return;
+                        }
+                        lastCameraScanRef.current = { code: decodedText, time: now };
+                        processScanCode(decodedText);
+                    },
+                    () => {}
+                );
+            } catch (err) {
+                if (!cancelled) {
+                    const msg = typeof err === 'string'
+                        ? err
+                        : (err?.message || 'Camera permission denied or no camera found. (Note: Mobile browsers require HTTPS or localhost.)');
+                    setCameraError(msg);
+                    setCameraActive(false);
+                }
+            }
+        };
+
+        // Wait a tick for #audit-camera-reader div to mount
+        const t = setTimeout(startScanner, 80);
+        return () => {
+            cancelled = true;
+            clearTimeout(t);
+            stopCamera();
+        };
+    }, [cameraActive, audit.status]);
 
     const [showCompleteModal, setShowCompleteModal] = useState(false);
 
@@ -161,11 +303,11 @@ export default function Show({ audit, unscannedDevices = [] }) {
                 </div>
             </div>
 
-            {/* Barcode Scanner Input Box */}
+            {/* Barcode Scanner Input Box + Live Phone Camera Scanner */}
             {audit.status === 'In Progress' && (
-                <Card className="mb-8 border-2 border-indigo-500/30 bg-indigo-50/10">
-                    <form onSubmit={handleScanSubmit} className="flex gap-3 items-center">
-                        <div className="relative flex-1">
+                <Card className="mb-8 border-2 border-indigo-500/30 bg-indigo-50/10 space-y-4">
+                    <form onSubmit={handleScanSubmit} className="flex flex-wrap gap-2.5 items-center">
+                        <div className="relative flex-1 min-w-[220px]">
                             <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-indigo-600">
                                 <Scan size={20} />
                             </div>
@@ -179,10 +321,53 @@ export default function Show({ audit, unscannedDevices = [] }) {
                                 disabled={scanning}
                             />
                         </div>
-                        <Button variant="primary" type="submit" disabled={scanning || !scanCode.trim()} className="px-6 py-3.5">
+                        <Button variant="primary" type="submit" disabled={scanning || !scanCode.trim()} className="px-5 py-3.5">
                             Verify Scan
                         </Button>
+                        <button
+                            type="button"
+                            onClick={toggleCamera}
+                            className={`px-4 py-3.5 rounded-xl text-xs font-bold flex items-center gap-2 transition-all shadow-sm cursor-pointer ${
+                                cameraActive
+                                    ? 'bg-rose-600 hover:bg-rose-700 text-white'
+                                    : 'bg-emerald-600 hover:bg-emerald-700 text-white'
+                            }`}
+                        >
+                            {cameraActive ? <CameraOff size={16} /> : <Camera size={16} />}
+                            <span>{cameraActive ? 'Stop Camera' : 'Phone Camera'}</span>
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => setSoundEnabled(prev => !prev)}
+                            title={soundEnabled ? 'Mute scanner beeps' : 'Enable scanner beeps'}
+                            className={`p-3.5 rounded-xl border text-xs font-bold transition-colors cursor-pointer ${
+                                soundEnabled
+                                    ? 'bg-indigo-50 dark:bg-indigo-500/15 border-indigo-200 dark:border-indigo-500/30 text-indigo-600 dark:text-indigo-300'
+                                    : 'bg-slate-100 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-400'
+                            }`}
+                        >
+                            {soundEnabled ? <Volume2 size={18} /> : <VolumeX size={18} />}
+                        </button>
                     </form>
+
+                    {cameraError && (
+                        <div className="p-3 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 text-xs font-bold text-rose-700 dark:text-rose-300">
+                            Camera Error: {cameraError}
+                        </div>
+                    )}
+
+                    {cameraActive && (
+                        <div className="rounded-xl overflow-hidden border border-slate-200 dark:border-slate-700 bg-slate-950 p-3">
+                            <div className="flex items-center justify-between text-xs text-slate-300 mb-2 px-1">
+                                <span className="font-bold flex items-center gap-1.5">
+                                    <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                                    Point camera at IMEI barcode sticker (CODE128 / QR)
+                                </span>
+                                <span className="text-[11px] text-slate-400">Auto-beeps on match</span>
+                            </div>
+                            <div id="audit-camera-reader" className="w-full max-w-md mx-auto rounded-lg overflow-hidden" />
+                        </div>
+                    )}
                 </Card>
             )}
 

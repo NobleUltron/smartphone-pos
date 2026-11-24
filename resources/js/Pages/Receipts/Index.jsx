@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import toast from 'react-hot-toast';
 import { Head, Link, router, useForm } from '@inertiajs/react';
-import { Receipt, Eye, Printer, Search, DollarSign, TrendingUp, Tag, FileSpreadsheet, Store, X } from 'lucide-react';
+import { Receipt, Eye, Printer, Search, DollarSign, TrendingUp, Tag, FileSpreadsheet, Store, X, MessageCircle, ArrowLeftRight } from 'lucide-react';
+import { buildSaleReceiptMessage, openWhatsApp } from '@/Utils/whatsapp';
 import Barcode from 'react-barcode';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import Card from '@/Components/SaaS/Card';
@@ -9,7 +10,7 @@ import Badge from '@/Components/SaaS/Badge';
 import Button from '@/Components/SaaS/Button';
 import PageHeader from '@/Components/SaaS/PageHeader';
 
-export default function ReceiptsIndex({ auth, sales, summary, filters, settings }) {
+export default function ReceiptsIndex({ auth, sales, summary, filters, settings, inStockDevices = [] }) {
     const [search, setSearch] = useState(filters?.search || '');
     const [paymentMethod, setPaymentMethod] = useState(filters?.payment_method || 'all');
     const [paymentStatus, setPaymentStatus] = useState(filters?.payment_status || 'all');
@@ -18,12 +19,59 @@ export default function ReceiptsIndex({ auth, sales, summary, filters, settings 
     const [showPreviewModal, setShowPreviewModal] = useState(false);
     const [selectedRefundSale, setSelectedRefundSale] = useState(null);
     const [showRefundModal, setShowRefundModal] = useState(false);
+    const [selectedExchangeSale, setSelectedExchangeSale] = useState(null);
+    const [showExchangeModal, setShowExchangeModal] = useState(false);
 
     const refundForm = useForm({
         restock_action: 'restock',
         refund_method: 'Cash',
         notes: ''
     });
+
+    const exchangeForm = useForm({
+        sale_item_id: '',
+        replacement_imei_id: '',
+        replacement_price: '',
+        return_action: 'restock',
+        payment_method: 'Cash',
+        notes: ''
+    });
+
+    const openExchangeModal = (sale) => {
+        const serializedItems = (sale.sale_items || []).filter(i => i.device_imei_id);
+        if (serializedItems.length === 0) {
+            toast.error('This receipt has no serialized smartphones to exchange.');
+            return;
+        }
+        exchangeForm.clearErrors();
+        setSelectedExchangeSale(sale);
+        const firstReplacement = inStockDevices[0] || null;
+        exchangeForm.setData({
+            sale_item_id: serializedItems[0].id,
+            replacement_imei_id: firstReplacement ? firstReplacement.id : '',
+            replacement_price: firstReplacement ? firstReplacement.selling_price : '',
+            return_action: 'restock',
+            payment_method: sale.payment_method && sale.payment_method !== 'Layaway' ? sale.payment_method : 'Cash',
+            notes: ''
+        });
+        setShowExchangeModal(true);
+    };
+
+    const handleExchangeSubmit = (e) => {
+        e.preventDefault();
+        if (!selectedExchangeSale) return;
+        exchangeForm.post(`/api/receipts/${selectedExchangeSale.id}/exchange`, {
+            preserveScroll: true,
+            onSuccess: () => {
+                setShowExchangeModal(false);
+                setSelectedExchangeSale(null);
+                exchangeForm.reset();
+            },
+            onError: (errs) => {
+                toast.error(errs.exchange || errs.replacement_imei_id || Object.values(errs)[0] || 'Exchange failed');
+            }
+        });
+    };
 
     const getRefundableAmount = (sale) => {
         if (!sale) return 0;
@@ -382,7 +430,28 @@ export default function ReceiptsIndex({ auth, sales, summary, filters, settings 
                                                 >
                                                     <Printer size={16} />
                                                 </a>
-                                                {sale.payment_status !== 'Refunded' && (
+                                                <button
+                                                    type="button"
+                                                    className="p-2 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-900/30 rounded-lg transition-colors"
+                                                    title="Send Receipt via WhatsApp"
+                                                    onClick={() => {
+                                                        const phone = sale.customer?.phone || sale.dealer_item?.[0]?.dealer?.phone || '';
+                                                        openWhatsApp(phone, buildSaleReceiptMessage(sale, settings));
+                                                    }}
+                                                >
+                                                    <MessageCircle size={16} />
+                                                </button>
+                                                {sale.payment_status === 'Paid' && sale.sale_items?.some(i => i.device_imei_id) && auth?.permissions?.issue_refunds !== false && (
+                                                    <button
+                                                        type="button"
+                                                        className="p-2 text-slate-400 hover:text-purple-600 hover:bg-purple-50 dark:hover:bg-purple-900/30 rounded-lg transition-colors"
+                                                        title="Exchange / Swap Device"
+                                                        onClick={() => openExchangeModal(sale)}
+                                                    >
+                                                        <ArrowLeftRight size={16} />
+                                                    </button>
+                                                )}
+                                                {sale.payment_status !== 'Refunded' && auth?.permissions?.issue_refunds !== false && (
                                                     <button 
                                                         type="button"
                                                         className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-900/30 rounded-lg transition-colors"
@@ -831,6 +900,179 @@ export default function ReceiptsIndex({ auth, sales, summary, filters, settings 
                     </div>
                 </div>
             )}
+
+            {/* One-Step Device Exchange (Swap) Modal */}
+            {showExchangeModal && selectedExchangeSale && (() => {
+                const serializedItems = (selectedExchangeSale.sale_items || []).filter(i => i.device_imei_id);
+                const selectedItem = serializedItems.find(i => Number(i.id) === Number(exchangeForm.data.sale_item_id)) || serializedItems[0];
+                const origPrice = Number(selectedItem?.price || 0);
+                const replPrice = Number(exchangeForm.data.replacement_price || 0);
+                const priceDiff = replPrice - origPrice;
+
+                return (
+                    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fade-in">
+                        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-xl w-full max-w-lg overflow-hidden">
+                            <div className="px-6 py-4 border-b border-purple-100 dark:border-purple-900/50 bg-purple-50 dark:bg-purple-950/40 flex items-center justify-between">
+                                <h3 className="font-bold text-purple-800 dark:text-purple-200 flex items-center gap-2">
+                                    <ArrowLeftRight size={18} /> Device Exchange — Receipt #{selectedExchangeSale.id}
+                                </h3>
+                                <button type="button" onClick={() => setShowExchangeModal(false)} className="text-purple-400 hover:text-purple-600 dark:hover:text-purple-200">
+                                    <X size={18} />
+                                </button>
+                            </div>
+
+                            <form onSubmit={handleExchangeSubmit}>
+                                <div className="p-6 space-y-4 max-h-[75vh] overflow-y-auto">
+                                    {exchangeForm.errors.exchange && (
+                                        <div className="p-3 rounded-xl bg-rose-50 dark:bg-rose-950/50 border border-rose-200 dark:border-rose-800 text-xs font-bold text-rose-700 dark:text-rose-300">
+                                            {exchangeForm.errors.exchange}
+                                        </div>
+                                    )}
+
+                                    <div>
+                                        <label className="saas-label">Phone Being Returned</label>
+                                        <select
+                                            className="saas-input"
+                                            value={exchangeForm.data.sale_item_id}
+                                            onChange={(e) => exchangeForm.setData('sale_item_id', e.target.value)}
+                                        >
+                                            {serializedItems.map((it) => (
+                                                <option key={it.id} value={it.id}>
+                                                    {it.device_imei?.product?.brand?.name} {it.device_imei?.product?.model_name} (IMEI: {it.device_imei?.imei}) — UGX {Number(it.price).toLocaleString()}
+                                                </option>
+                                            ))}
+                                        </select>
+                                    </div>
+
+                                    <div>
+                                        <label className="saas-label">Returned Phone Condition</label>
+                                        <select
+                                            className="saas-input"
+                                            value={exchangeForm.data.return_action}
+                                            onChange={(e) => exchangeForm.setData('return_action', e.target.value)}
+                                        >
+                                            <option value="restock">Return to In-Stock (Resellable)</option>
+                                            <option value="defective">Mark as Defective (Damaged / Needs Repair)</option>
+                                        </select>
+                                    </div>
+
+                                    <div>
+                                        <label className="saas-label">Replacement Phone (In Stock) *</label>
+                                        {inStockDevices.length > 0 ? (
+                                            <select
+                                                className="saas-input"
+                                                value={exchangeForm.data.replacement_imei_id}
+                                                onChange={(e) => {
+                                                    const chosen = inStockDevices.find(d => String(d.id) === String(e.target.value));
+                                                    exchangeForm.setData({
+                                                        ...exchangeForm.data,
+                                                        replacement_imei_id: e.target.value,
+                                                        replacement_price: chosen ? chosen.selling_price : exchangeForm.data.replacement_price,
+                                                    });
+                                                }}
+                                                required
+                                            >
+                                                <option value="">Select replacement phone...</option>
+                                                {inStockDevices.map((d) => (
+                                                    <option key={d.id} value={d.id}>
+                                                        {d.label} (UGX {Number(d.selling_price).toLocaleString()})
+                                                    </option>
+                                                ))}
+                                            </select>
+                                        ) : (
+                                            <div className="p-3 rounded-xl bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 text-xs font-bold">
+                                                No In-Stock serialized phones available for exchange.
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                        <div>
+                                            <label className="saas-label">Replacement Price (UGX) *</label>
+                                            <input
+                                                type="number"
+                                                min="0"
+                                                step="any"
+                                                required
+                                                className="saas-input font-bold"
+                                                value={exchangeForm.data.replacement_price}
+                                                onChange={(e) => exchangeForm.setData('replacement_price', e.target.value)}
+                                            />
+                                        </div>
+
+                                        {Math.abs(priceDiff) > 0 && (
+                                            <div>
+                                                <label className="saas-label">
+                                                    {priceDiff > 0 ? 'Top-Up Payment Method' : 'Difference Refund Method'}
+                                                </label>
+                                                <select
+                                                    className="saas-input"
+                                                    value={exchangeForm.data.payment_method}
+                                                    onChange={(e) => exchangeForm.setData('payment_method', e.target.value)}
+                                                >
+                                                    <option value="Cash">Cash (Active Shift Drawer)</option>
+                                                    <option value="MTN MoMo">MTN MoMo</option>
+                                                    <option value="Airtel Money">Airtel Money</option>
+                                                    <option value="Bank Transfer">Bank Transfer</option>
+                                                </select>
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    {/* Live Price Difference Summary */}
+                                    <div className={`p-3.5 rounded-xl border text-xs space-y-1 ${
+                                        priceDiff > 0
+                                            ? 'bg-emerald-50 dark:bg-emerald-500/10 border-emerald-200 dark:border-emerald-500/30 text-emerald-800 dark:text-emerald-200'
+                                            : priceDiff < 0
+                                                ? 'bg-rose-50 dark:bg-rose-500/10 border-rose-200 dark:border-rose-500/30 text-rose-800 dark:text-rose-200'
+                                                : 'bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200'
+                                    }`}>
+                                        <div className="flex justify-between">
+                                            <span>Returned Device Value:</span>
+                                            <span className="font-bold">UGX {origPrice.toLocaleString()}</span>
+                                        </div>
+                                        <div className="flex justify-between">
+                                            <span>Replacement Device Price:</span>
+                                            <span className="font-bold">UGX {replPrice.toLocaleString()}</span>
+                                        </div>
+                                        <div className="flex justify-between pt-1.5 border-t border-current/20 text-sm font-black">
+                                            <span>
+                                                {priceDiff > 0 ? 'Customer Pays Extra:' : priceDiff < 0 ? 'Shop Refunds Customer:' : 'Even Swap (No Cash Movement):'}
+                                            </span>
+                                            <span>
+                                                {priceDiff > 0 ? '+' : priceDiff < 0 ? '−' : ''}UGX {Math.abs(priceDiff).toLocaleString()}
+                                            </span>
+                                        </div>
+                                    </div>
+
+                                    <div>
+                                        <label className="saas-label">Exchange Notes / Reason</label>
+                                        <textarea
+                                            className="saas-input"
+                                            rows="2"
+                                            placeholder="e.g. Customer upgraded from 128GB to 256GB..."
+                                            value={exchangeForm.data.notes}
+                                            onChange={(e) => exchangeForm.setData('notes', e.target.value)}
+                                        ></textarea>
+                                    </div>
+                                </div>
+
+                                <div className="px-6 py-4 border-t border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/50 flex gap-3 justify-end">
+                                    <Button variant="secondary" type="button" onClick={() => setShowExchangeModal(false)}>Cancel</Button>
+                                    <Button
+                                        variant="primary"
+                                        type="submit"
+                                        isLoading={exchangeForm.processing}
+                                        disabled={!exchangeForm.data.replacement_imei_id || inStockDevices.length === 0}
+                                    >
+                                        Confirm Exchange
+                                    </Button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                );
+            })()}
         </AuthenticatedLayout>
     );
 }

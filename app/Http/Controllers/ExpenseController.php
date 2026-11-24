@@ -18,6 +18,15 @@ use Inertia\Inertia;
 
 class ExpenseController extends Controller
 {
+    public function callAction($method, $parameters)
+    {
+        if (!(auth()->user()?->hasPermission('manage_expenses'))) {
+            abort(403, 'You do not have permission to access Expenses.');
+        }
+
+        return $this->{$method}(...array_values($parameters));
+    }
+
     private const PROTECTED_CATEGORIES = [
         'Dealer Settlement',
         'Supplier Payment',

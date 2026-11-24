@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
-import { Head, Link, router, useForm } from '@inertiajs/react';
+import { Head, Link, router, useForm, usePage } from '@inertiajs/react';
 import PageHeader from '@/Components/SaaS/PageHeader';
 import Card from '@/Components/SaaS/Card';
 import Badge from '@/Components/SaaS/Badge';
@@ -9,11 +9,13 @@ import Modal from '@/Components/Modal';
 import {
     Clock, CheckCircle2, FileText, DollarSign,
     Calendar, X, CreditCard, User, Package,
-    Wallet, Search, AlertTriangle, Wrench
+    Wallet, Search, AlertTriangle, Wrench, MessageCircle
 } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { buildLayawayReminderMessage, openWhatsApp } from '@/Utils/whatsapp';
 
 export default function LayawaysIndex({ auth, layaways, summary, filters = {}, hasActiveDrawer = true }) {
+    const { store_settings: storeSettings } = usePage().props;
     const [selectedSale, setSelectedSale] = useState(null);
     const [searchQuery, setSearchQuery] = useState(filters.search || '');
     const [statusFilter, setStatusFilter] = useState(filters.status || 'active');
@@ -327,14 +329,27 @@ export default function LayawaysIndex({ auth, layaways, summary, filters = {}, h
                                                 )}
                                             </td>
                                             <td className="px-6 py-4 text-right">
-                                                <button
-                                                    type="button"
-                                                    onClick={() => openSaleModal(sale)}
-                                                    className="px-3.5 py-2 bg-slate-900 dark:bg-indigo-600 hover:bg-slate-800 dark:hover:bg-indigo-500 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 ml-auto shadow-sm transition-all"
-                                                >
-                                                    <CreditCard size={14} />
-                                                    {isPaid ? 'View History' : 'Manage Payments'}
-                                                </button>
+                                                <div className="flex items-center justify-end gap-2">
+                                                    {!isPaid && (
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => openWhatsApp(sale.customer?.phone || '', buildLayawayReminderMessage(sale, storeSettings))}
+                                                            className="px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-sm transition-all"
+                                                            title="Send WhatsApp balance reminder"
+                                                        >
+                                                            <MessageCircle size={14} />
+                                                            Remind
+                                                        </button>
+                                                    )}
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => openSaleModal(sale)}
+                                                        className="px-3.5 py-2 bg-slate-900 dark:bg-indigo-600 hover:bg-slate-800 dark:hover:bg-indigo-500 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-sm transition-all"
+                                                    >
+                                                        <CreditCard size={14} />
+                                                        {isPaid ? 'View History' : 'Manage Payments'}
+                                                    </button>
+                                                </div>
                                             </td>
                                         </tr>
                                     );

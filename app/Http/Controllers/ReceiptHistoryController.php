@@ -94,9 +94,28 @@ class ReceiptHistoryController extends Controller
             'terms_conditions' => \App\Models\Setting::getTermsConditions(),
         ];
 
+        $inStockDevices = \App\Models\DeviceImei::with('product.brand')
+            ->where('status', 'In Stock')
+            ->orderByDesc('id')
+            ->get()
+            ->map(function ($d) {
+                $brand = $d->product?->brand?->name ?? '';
+                $model = $d->product?->model_name ?? 'Device';
+                $spec = trim(($d->storage_capacity ?? '') . ' ' . ($d->color ?? ''));
+                return [
+                    'id' => $d->id,
+                    'imei' => $d->imei,
+                    'label' => trim("{$brand} {$model}" . ($spec ? " ({$spec})" : '')) . " — IMEI: {$d->imei}",
+                    'selling_price' => (float) ($d->selling_price ?? 0),
+                    'condition' => $d->condition ?? 'Brand New',
+                ];
+            })
+            ->values();
+
         return Inertia::render('Receipts/Index', [
             'sales' => $sales,
             'settings' => $settings,
+            'inStockDevices' => $inStockDevices,
             'summary' => [
                 'total_receipts' => $totalReceipts,
                 'total_revenue' => $totalRevenue,
@@ -111,6 +130,10 @@ class ReceiptHistoryController extends Controller
 
     public function refund(Request $request, Sale $sale)
     {
+        if (!(auth()->user()?->hasPermission('issue_refunds'))) {
+            abort(403, 'You do not have permission to process sales refunds.');
+        }
+
         $validated = $request->validate([
             'restock_action' => 'required|in:restock,defective',
             'refund_method' => 'nullable|in:Cash,MTN MoMo,Airtel Money,Bank Transfer',
@@ -272,5 +295,196 @@ class ReceiptHistoryController extends Controller
         \Illuminate\Support\Facades\Cache::forget('inventory_stats');
 
         return redirect()->back()->with('success', "Receipt #{$sale->id} has been refunded successfully.");
+    }
+
+    /**
+     * One-Step Device Exchange (Swap a sold serialized phone for another In-Stock phone).
+     * Automatically collects or refunds only the price difference, updates inventory statuses,
+     * and keeps Partner Profit Share 100% accurate.
+     */
+    public function exchange(Request $request, Sale $sale)
+    {
+        if (!(auth()->user()?->hasPermission('issue_refunds'))) {
+            abort(403, 'You do not have permission to process device exchanges.');
+        }
+
+        $validated = $request->validate([
+            'sale_item_id' => 'required|integer|exists:sale_items,id',
+            'replacement_imei_id' => 'required|integer|exists:device_imeis,id',
+            'replacement_price' => 'required|numeric|min:0',
+            'return_action' => 'required|in:restock,defective',
+            'payment_method' => 'nullable|in:Cash,MTN MoMo,Airtel Money,Bank Transfer',
+            'notes' => 'nullable|string|max:500',
+        ]);
+
+        $summaryMsg = '';
+
+        \Illuminate\Support\Facades\DB::transaction(function () use ($sale, $validated, &$summaryMsg) {
+            $lockedSale = Sale::where('id', $sale->id)->lockForUpdate()->firstOrFail();
+
+            if ($lockedSale->payment_status !== 'Paid') {
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                    'exchange' => "Only fully Paid receipts can be exchanged directly. Receipt #{$lockedSale->id} is '{$lockedSale->payment_status}'.",
+                ]);
+            }
+
+            $saleItem = \App\Models\SaleItem::where('id', $validated['sale_item_id'])
+                ->where('sale_id', $lockedSale->id)
+                ->lockForUpdate()
+                ->firstOrFail();
+
+            if (!$saleItem->device_imei_id) {
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                    'exchange' => 'Selected item is not a serialized smartphone.',
+                ]);
+            }
+
+            if ((int) $saleItem->device_imei_id === (int) $validated['replacement_imei_id']) {
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                    'replacement_imei_id' => 'Replacement device must be different from the returned device.',
+                ]);
+            }
+
+            $oldDevice = \App\Models\DeviceImei::with('product.brand')
+                ->where('id', $saleItem->device_imei_id)
+                ->lockForUpdate()
+                ->firstOrFail();
+
+            $newDevice = \App\Models\DeviceImei::with('product.brand')
+                ->where('id', $validated['replacement_imei_id'])
+                ->lockForUpdate()
+                ->firstOrFail();
+
+            if ($newDevice->status !== 'In Stock') {
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                    'replacement_imei_id' => "Replacement IMEI {$newDevice->imei} is no longer In Stock (current status: {$newDevice->status}).",
+                ]);
+            }
+
+            $originalPrice = (float) $saleItem->price;
+            $replacementPrice = (float) $validated['replacement_price'];
+            $priceDiff = $replacementPrice - $originalPrice;
+            $method = $validated['payment_method'] ?: ($lockedSale->payment_method !== 'Layaway' ? $lockedSale->payment_method : 'Cash');
+            $returnStatus = $validated['return_action'] === 'restock' ? 'In Stock' : 'Defective';
+
+            // Validate & record wallet movement if there is a price difference
+            $activeDrawer = null;
+            if (abs($priceDiff) > 0.001) {
+                $targetAccount = $method === 'Cash'
+                    ? \App\Services\TreasuryService::getTillAccount()
+                    : \App\Models\PaymentAccount::getForMethod($method);
+
+                if ($priceDiff < 0 && $method === 'Cash') {
+                    $refundDiff = abs($priceDiff);
+                    $activeDrawer = \App\Models\CashDrawer::where('user_id', auth()->id())
+                        ->where('status', 'open')
+                        ->first();
+
+                    if (!$activeDrawer) {
+                        throw \Illuminate\Validation\ValidationException::withMessages([
+                            'exchange' => 'You must have an open shift (active cash drawer) to refund a Cash price difference.',
+                        ]);
+                    }
+                    $expectedCash = $activeDrawer->calculateExpectedCash();
+                    if ($expectedCash < $refundDiff) {
+                        throw \Illuminate\Validation\ValidationException::withMessages([
+                            'exchange' => 'Insufficient cash in active drawer (' . number_format($expectedCash) . ' UGX) to refund difference of ' . number_format($refundDiff) . ' UGX.',
+                        ]);
+                    }
+                }
+
+                if ($priceDiff > 0) {
+                    \App\Services\TreasuryService::recordInflow(
+                        $targetAccount,
+                        $priceDiff,
+                        'Sale',
+                        $lockedSale,
+                        "Device Exchange Top-Up ({$method}) on Receipt #{$lockedSale->id}: {$oldDevice->imei} → {$newDevice->imei}",
+                        'EXC-' . $lockedSale->id,
+                        auth()->id()
+                    );
+                } else {
+                    $refundDiff = abs($priceDiff);
+                    \App\Models\Expense::create([
+                        'cash_drawer_id' => $activeDrawer?->id,
+                        'payment_account_id' => $targetAccount?->id,
+                        'user_id' => auth()->id(),
+                        'category' => 'Refund',
+                        'amount' => $refundDiff,
+                        'expense_date' => now(),
+                        'description' => "Device Exchange Difference Refund ({$method}) on Receipt #{$lockedSale->id}: {$oldDevice->imei} → {$newDevice->imei}",
+                        'recorded_by' => auth()->id(),
+                    ]);
+
+                    \App\Services\TreasuryService::recordOutflow(
+                        $targetAccount,
+                        $refundDiff,
+                        'Refund',
+                        $lockedSale,
+                        "Device Exchange Refund ({$method}) on Receipt #{$lockedSale->id}: {$oldDevice->imei} → {$newDevice->imei}",
+                        'EXC-REF-' . $lockedSale->id,
+                        auth()->id()
+                    );
+                }
+            }
+
+            // Update inventory statuses
+            $oldDevice->update(['status' => $returnStatus]);
+            $newDevice->update(['status' => 'Sold']);
+
+            // Update SaleItem & Sale totals so Receipt + Partner Profit recalculate cleanly
+            $exchangeNote = "Exchanged from IMEI {$oldDevice->imei} (" . number_format($originalPrice) . " UGX) on " . now()->format('Y-m-d');
+            if (!empty($validated['notes'])) {
+                $exchangeNote .= " — " . trim($validated['notes']);
+            }
+            $saleItem->update([
+                'device_imei_id' => $newDevice->id,
+                'price' => $replacementPrice,
+                'notes' => trim(($saleItem->notes ? $saleItem->notes . ' | ' : '') . $exchangeNote),
+            ]);
+
+            $lockedSale->update([
+                'total_amount' => max(0, (float) $lockedSale->total_amount + $priceDiff),
+                'final_amount' => max(0, (float) $lockedSale->final_amount + $priceDiff),
+            ]);
+
+            // Audit trail in WarrantyClaim & ActivityLog
+            $diffLabel = $priceDiff > 0
+                ? 'Customer paid extra UGX ' . number_format($priceDiff) . " via {$method}"
+                : ($priceDiff < 0
+                    ? 'Refunded difference UGX ' . number_format(abs($priceDiff)) . " via {$method}"
+                    : 'Even swap (UGX 0 difference)');
+
+            \App\Models\WarrantyClaim::create([
+                'sale_item_id' => $saleItem->id,
+                'device_imei_id' => $oldDevice->id,
+                'customer_id' => $lockedSale->customer_id,
+                'claim_type' => 'Replacement',
+                'issue_description' => $validated['notes'] ?: 'Direct Device Exchange processed on Issued Receipts.',
+                'status' => 'Completed',
+                'resolution_notes' => "Swapped IMEI {$oldDevice->imei} ({$returnStatus}) for IMEI {$newDevice->imei}. {$diffLabel}.",
+            ]);
+
+            \App\Models\ActivityLog::log(
+                'device_exchange',
+                'Receipts',
+                "Exchanged Receipt #{$lockedSale->id}: {$oldDevice->imei} ({$returnStatus}) → {$newDevice->imei}. {$diffLabel}.",
+                [
+                    'sale_id' => $lockedSale->id,
+                    'old_imei' => $oldDevice->imei,
+                    'new_imei' => $newDevice->imei,
+                    'return_status' => $returnStatus,
+                    'price_difference' => $priceDiff,
+                    'payment_method' => $method,
+                ]
+            );
+
+            $summaryMsg = "Device exchanged on Receipt #{$lockedSale->id} ({$diffLabel}).";
+        });
+
+        \Illuminate\Support\Facades\Cache::forget('global_low_stock_count');
+        \Illuminate\Support\Facades\Cache::forget('inventory_stats');
+
+        return redirect()->back()->with('success', $summaryMsg);
     }
 }

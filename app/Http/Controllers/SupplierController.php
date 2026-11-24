@@ -43,7 +43,7 @@ class SupplierController extends Controller
         $totalSuppliers = Supplier::count();
         $pendingOrders = \App\Models\Purchase::where('status', 'Pending')->count();
         $totalSpend = (float) \App\Models\Purchase::sum('total_amount');
-        $totalPayable = (float) \App\Models\Purchase::selectRaw('COALESCE(SUM(GREATEST(total_amount - paid_amount, 0)), 0) as total')->value('total');
+        $totalPayable = (float) \App\Models\Purchase::selectRaw('COALESCE(SUM(CASE WHEN total_amount - paid_amount > 0 THEN total_amount - paid_amount ELSE 0 END), 0) as total')->value('total');
 
         return Inertia::render('Suppliers/Index', [
             'suppliers' => $suppliers,

@@ -295,17 +295,55 @@ class POSController extends Controller
                     $imeiStr .= '-TR' . rand(100, 999);
                 }
 
+                $inspection = null;
+                if (!empty($tradeIn['inspection']) && is_array($tradeIn['inspection'])) {
+                    $ins = $tradeIn['inspection'];
+                    $inspection = [
+                        'battery_health' => isset($ins['battery_health']) && $ins['battery_health'] !== '' ? (int) $ins['battery_health'] : null,
+                        'face_id_ok' => (bool) ($ins['face_id_ok'] ?? true),
+                        'true_tone_ok' => (bool) ($ins['true_tone_ok'] ?? true),
+                        'icloud_removed' => (bool) ($ins['icloud_removed'] ?? false),
+                        'cameras_audio_ok' => (bool) ($ins['cameras_audio_ok'] ?? true),
+                        'screen_grade' => $ins['screen_grade'] ?? 'Flawless',
+                        'body_grade' => $ins['body_grade'] ?? 'Clean',
+                        'seller_id_type' => $ins['seller_id_type'] ?? 'National ID (NIN)',
+                        'seller_id_number' => !empty($ins['seller_id_number']) ? trim($ins['seller_id_number']) : null,
+                        'seller_name' => !empty($ins['seller_name']) ? trim($ins['seller_name']) : null,
+                        'seller_phone' => !empty($ins['seller_phone']) ? trim($ins['seller_phone']) : null,
+                        'notes' => !empty($ins['notes']) ? trim($ins['notes']) : null,
+                        'inspected_by' => auth()->user()?->name,
+                        'inspected_at' => now()->toIso8601String(),
+                    ];
+                }
+
                 $tradeInDevice = \App\Models\DeviceImei::create([
                     'product_id' => $product->id,
                     'imei' => $imeiStr,
                     'condition' => !empty($tradeIn['condition']) ? $tradeIn['condition'] : 'Used Grade A',
                     'status' => 'In Stock',
                     'cost_price' => $tradeInValue,
+                    'initial_cost_price' => $tradeInValue,
                     'selling_price' => $resalePrice,
                     'storage_capacity' => !empty($tradeIn['storage_capacity']) ? $tradeIn['storage_capacity'] : 'Unknown',
                     'color' => !empty($tradeIn['color']) ? $tradeIn['color'] : 'Unknown',
+                    'trade_in_inspection' => $inspection,
                 ]);
                 $sale->update(['trade_in_imei_id' => $tradeInDevice->id]);
+
+                \App\Models\ActivityLog::log(
+                    'trade_in_intake',
+                    'POS',
+                    "Trade-in received into In Stock: {$brand->name} {$tradeIn['model_name']} (IMEI: {$imeiStr}) at UGX " . number_format($tradeInValue)
+                        . ($inspection && $inspection['seller_id_number'] ? " • ID ({$inspection['seller_id_type']}): {$inspection['seller_id_number']}" : ''),
+                    [
+                        'sale_id' => $sale->id,
+                        'device_imei_id' => $tradeInDevice->id,
+                        'imei' => $imeiStr,
+                        'cost_price' => $tradeInValue,
+                        'selling_price' => $resalePrice,
+                        'inspection' => $inspection,
+                    ]
+                );
             }
 
             foreach ($request->items as $item) {

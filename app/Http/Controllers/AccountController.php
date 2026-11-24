@@ -23,6 +23,15 @@ class AccountController extends Controller
         TreasuryService::ensureDefaultAccounts();
     }
 
+    public function callAction($method, $parameters)
+    {
+        if (!(auth()->user()?->hasPermission('manage_accounts'))) {
+            abort(403, 'You do not have permission to access Money & Accounts.');
+        }
+
+        return $this->{$method}(...array_values($parameters));
+    }
+
     public function index(Request $request)
     {
         // Lazy auto-backfill if no transactions exist yet
@@ -30,8 +39,16 @@ class AccountController extends Controller
             TreasuryService::syncHistorical();
         }
 
-        $accounts = PaymentAccount::withCount('transactions')
-            ->where('is_active', true)
+        $canViewPersonal = auth()->user()?->hasPermission('view_personal_accounts') ?? false;
+
+        $accountsQuery = PaymentAccount::withCount('transactions')
+            ->where('is_active', true);
+
+        if (!$canViewPersonal) {
+            $accountsQuery->where('is_personal', false);
+        }
+
+        $accounts = $accountsQuery
             ->orderBy('is_personal')
             ->orderBy('type')
             ->orderBy('id')
@@ -79,11 +96,11 @@ class AccountController extends Controller
             ->sum(fn($s) => max(0, (float) $s->final_amount - (float) ($s->layaway_payments_sum_amount_paid ?? 0)));
         $invoiceReceivables = (float) \App\Models\Invoice::whereIn('payment_status', ['Unpaid', 'Partial'])
             ->where('status', '!=', 'Cancelled')
-            ->selectRaw('COALESCE(SUM(GREATEST(total_amount - paid_amount, 0)), 0) as total')
+            ->selectRaw('COALESCE(SUM(CASE WHEN total_amount - paid_amount > 0 THEN total_amount - paid_amount ELSE 0 END), 0) as total')
             ->value('total');
         $totalReceivables = $layawayReceivables + $invoiceReceivables;
 
-        $supplierPayables = (float) \App\Models\Purchase::selectRaw('COALESCE(SUM(GREATEST(total_amount - paid_amount, 0)), 0) as total')
+        $supplierPayables = (float) \App\Models\Purchase::selectRaw('COALESCE(SUM(CASE WHEN total_amount - paid_amount > 0 THEN total_amount - paid_amount ELSE 0 END), 0) as total')
             ->value('total');
         $dealerPayables = (float) \App\Models\DealerItem::where('direction', 'inward')
             ->where('quantity_sold', '>', 0)
@@ -93,6 +110,10 @@ class AccountController extends Controller
         $adjustedNetWorth = $ownerNetWorth + $totalReceivables - $totalPayables;
 
         $query = AccountTransaction::with(['account', 'user']);
+
+        if (!$canViewPersonal) {
+            $query->whereHas('account', fn($q) => $q->where('is_personal', false));
+        }
 
         if ($request->filled('account_id') && $request->account_id !== 'all') {
             $query->where('payment_account_id', $request->account_id);
@@ -338,6 +359,10 @@ class AccountController extends Controller
 
     public function recordTransaction(PaymentAccount $account, Request $request)
     {
+        if ($account->is_personal && !(auth()->user()?->hasPermission('view_personal_accounts'))) {
+            abort(403, 'You do not have permission to access owner personal accounts.');
+        }
+
         $validated = $request->validate([
             'type' => 'required|in:deposit,withdrawal',
             'amount' => 'required|numeric|min:1',

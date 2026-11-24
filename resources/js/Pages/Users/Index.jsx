@@ -10,16 +10,29 @@ import Button from '@/Components/SaaS/Button';
 import Badge from '@/Components/SaaS/Badge';
 import Modal from '@/Components/Modal';
 
-export default function UsersIndex({ auth, users = {}, filters = {}, summary }) {
+export default function UsersIndex({ auth, users = {}, filters = {}, summary, permissionDefinitions = [], roleDefaults = {} }) {
     const [showModal, setShowModal] = useState(false);
     const [isEditing, setIsEditing] = useState(false);
     const [deletingUser, setDeletingUser] = useState(null);
     const [isDeleting, setIsDeleting] = useState(false);
+    const resolveRolePermissions = (role, existing = null) => {
+        const base = { ...(roleDefaults[role] || roleDefaults.cashier || {}) };
+        if (existing && typeof existing === 'object') {
+            Object.keys(base).forEach((k) => {
+                if (Object.prototype.hasOwnProperty.call(existing, k)) {
+                    base[k] = Boolean(existing[k]);
+                }
+            });
+        }
+        return base;
+    };
     const [formData, setFormData] = useState({ 
         id: null, name: '', email: '', role: 'cashier', 
         phone: '', address: '', emergency_contact_name: '', emergency_contact_phone: '',
         hire_date: '', status: 'active', nin: '', next_of_kin_name: '', next_of_kin_phone: '',
-        password: '', password_confirmation: '' 
+        password: '', password_confirmation: '',
+        commission_type: 'none', commission_rate: 0,
+        permissions: resolveRolePermissions('cashier'),
     });
     const [loading, setLoading] = useState(false);
     
@@ -94,7 +107,10 @@ export default function UsersIndex({ auth, users = {}, filters = {}, summary }) 
             next_of_kin_name: user.next_of_kin_name || '',
             next_of_kin_phone: user.next_of_kin_phone || '',
             password: '',
-            password_confirmation: ''
+            password_confirmation: '',
+            commission_type: user.commission_type || 'none',
+            commission_rate: user.commission_rate ?? 0,
+            permissions: resolveRolePermissions(user.role, user.permissions),
         });
         setIsEditing(true);
         setShowModal(true);
@@ -143,7 +159,9 @@ export default function UsersIndex({ auth, users = {}, filters = {}, summary }) 
                                 id: null, name: '', email: '', role: 'cashier', status: 'active',
                                 phone: '', address: '', emergency_contact_name: '', emergency_contact_phone: '',
                                 hire_date: '', nin: '', next_of_kin_name: '', next_of_kin_phone: '',
-                                password: '', password_confirmation: '' 
+                                password: '', password_confirmation: '',
+                                commission_type: 'none', commission_rate: 0,
+                                permissions: resolveRolePermissions('cashier'),
                             });
                             setShowModal(true);
                         }}
@@ -509,7 +527,14 @@ export default function UsersIndex({ auth, users = {}, filters = {}, summary }) 
                                         <select 
                                             className="saas-input w-full disabled:opacity-60" 
                                             value={formData.role} 
-                                            onChange={e => setFormData({...formData, role: e.target.value})}
+                                            onChange={e => {
+                                                const newRole = e.target.value;
+                                                setFormData({
+                                                    ...formData,
+                                                    role: newRole,
+                                                    permissions: resolveRolePermissions(newRole),
+                                                });
+                                            }}
                                             disabled={isEditingSelf}
                                             required
                                         >
@@ -546,6 +571,43 @@ export default function UsersIndex({ auth, users = {}, filters = {}, summary }) 
                                         onChange={e => setFormData({...formData, hire_date: e.target.value})} 
                                     />
                                 </div>
+
+                                {/* Sales Commission Structure */}
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                                    <div>
+                                        <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">Sales Commission</label>
+                                        <select
+                                            className="saas-input w-full"
+                                            value={formData.commission_type || 'none'}
+                                            onChange={e => setFormData({
+                                                ...formData,
+                                                commission_type: e.target.value,
+                                                commission_rate: e.target.value === 'none' ? 0 : formData.commission_rate,
+                                            })}
+                                        >
+                                            <option value="none">None (Salary Only)</option>
+                                            <option value="per_phone">Fixed UGX / Phone Sold</option>
+                                            <option value="profit_percent">% of Net Profit</option>
+                                            <option value="revenue_percent">% of Sales Revenue</option>
+                                        </select>
+                                    </div>
+                                    {formData.commission_type && formData.commission_type !== 'none' && (
+                                        <div>
+                                            <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                                                {formData.commission_type === 'per_phone' ? 'Rate (UGX / Phone)' : 'Commission Rate (%)'}
+                                            </label>
+                                            <input
+                                                type="number"
+                                                min="0"
+                                                step="any"
+                                                className="saas-input w-full font-bold"
+                                                placeholder={formData.commission_type === 'per_phone' ? 'e.g. 20000' : 'e.g. 5'}
+                                                value={formData.commission_rate}
+                                                onChange={e => setFormData({ ...formData, commission_rate: e.target.value })}
+                                            />
+                                        </div>
+                                    )}
+                                </div>
                                 
                                 <div className="pt-2">
                                     <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1 flex items-center gap-2">
@@ -573,6 +635,70 @@ export default function UsersIndex({ auth, users = {}, filters = {}, summary }) 
                                 </div>
                             </div>
                         </div>
+
+                        {/* Granular Staff Permissions Section */}
+                        {permissionDefinitions.length > 0 && (
+                            <div className="pt-4 border-t border-slate-100 dark:border-slate-800">
+                                <div className="flex items-center justify-between gap-2 mb-3">
+                                    <div>
+                                        <h4 className="text-xs font-bold text-slate-700 dark:text-slate-200 uppercase tracking-wider flex items-center gap-1.5">
+                                            <ShieldCheck size={14} className="text-indigo-500" /> Granular Permissions
+                                        </h4>
+                                        <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+                                            Fine-tune exactly what this staff member can view or perform.
+                                        </p>
+                                    </div>
+                                    {formData.role !== 'admin' && (
+                                        <button
+                                            type="button"
+                                            onClick={() => setFormData({ ...formData, permissions: resolveRolePermissions(formData.role) })}
+                                            className="text-[11px] font-bold text-indigo-600 dark:text-indigo-400 hover:underline flex items-center gap-1 shrink-0"
+                                        >
+                                            <RotateCcw size={12} /> Reset to Role Defaults
+                                        </button>
+                                    )}
+                                </div>
+
+                                {formData.role === 'admin' ? (
+                                    <div className="p-3 rounded-xl bg-indigo-50/70 dark:bg-indigo-500/10 border border-indigo-200/80 dark:border-indigo-500/20 text-xs text-indigo-700 dark:text-indigo-300 font-semibold">
+                                        Administrators always have full, unrestricted access to all modules, cost prices, reports, and personal accounts.
+                                    </div>
+                                ) : (
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                                        {permissionDefinitions.map((perm) => {
+                                            const enabled = Boolean(formData.permissions?.[perm.key]);
+                                            return (
+                                                <label
+                                                    key={perm.key}
+                                                    className={`flex items-start justify-between gap-3 p-3 rounded-xl border cursor-pointer transition-all ${
+                                                        enabled
+                                                            ? 'bg-emerald-50/60 dark:bg-emerald-500/10 border-emerald-200 dark:border-emerald-500/30'
+                                                            : 'bg-slate-50 dark:bg-slate-800/50 border-slate-200/80 dark:border-slate-700/80'
+                                                    }`}
+                                                >
+                                                    <div className="min-w-0">
+                                                        <div className="text-xs font-bold text-slate-800 dark:text-slate-100">{perm.label}</div>
+                                                        <div className="text-[11px] text-slate-500 dark:text-slate-400 leading-snug mt-0.5">{perm.description}</div>
+                                                    </div>
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={enabled}
+                                                        onChange={(e) => setFormData({
+                                                            ...formData,
+                                                            permissions: {
+                                                                ...(formData.permissions || {}),
+                                                                [perm.key]: e.target.checked,
+                                                            },
+                                                        })}
+                                                        className="mt-0.5 h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 shrink-0"
+                                                    />
+                                                </label>
+                                            );
+                                        })}
+                                    </div>
+                                )}
+                            </div>
+                        )}
 
                         {/* Emergency / Next of Kin Section */}
                         <div className="pt-4 border-t border-slate-100 dark:border-slate-800">

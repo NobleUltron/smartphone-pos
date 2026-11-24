@@ -50,6 +50,8 @@ class UserController extends Controller
         return Inertia::render('Users/Index', [
             'users' => $users,
             'filters' => $request->only(['search', 'role', 'status']),
+            'permissionDefinitions' => User::PERMISSION_DEFINITIONS,
+            'roleDefaults' => User::ROLE_DEFAULT_PERMISSIONS,
             'summary' => [
                 'total_staff' => $totalStaff,
                 'cashiers' => $cashiers,
@@ -76,13 +78,30 @@ class UserController extends Controller
             'nin' => 'nullable|string|max:255',
             'next_of_kin_name' => 'nullable|string|max:255',
             'next_of_kin_phone' => 'nullable|string|max:255',
+            'permissions' => 'nullable|array',
+            'commission_type' => 'nullable|in:none,per_phone,profit_percent,revenue_percent',
+            'commission_rate' => 'nullable|numeric|min:0',
         ]);
+
+        $allowedKeys = array_column(User::PERMISSION_DEFINITIONS, 'key');
+        $cleanPermissions = null;
+        if ($validated['role'] !== 'admin' && is_array($request->input('permissions'))) {
+            $cleanPermissions = [];
+            foreach ($allowedKeys as $k) {
+                if (array_key_exists($k, $request->input('permissions'))) {
+                    $cleanPermissions[$k] = (bool) $request->input("permissions.{$k}");
+                }
+            }
+        }
 
         $user = User::create([
             'name' => $validated['name'],
             'email' => $validated['email'],
             'password' => Hash::make($validated['password']),
             'role' => $validated['role'],
+            'permissions' => $cleanPermissions,
+            'commission_type' => $validated['commission_type'] ?? 'none',
+            'commission_rate' => ($validated['commission_type'] ?? 'none') === 'none' ? 0 : floatval($validated['commission_rate'] ?? 0),
             'phone' => $validated['phone'] ?? null,
             'address' => $validated['address'] ?? null,
             'emergency_contact_name' => $validated['emergency_contact_name'] ?? null,
@@ -121,6 +140,9 @@ class UserController extends Controller
             'next_of_kin_name' => 'nullable|string|max:255',
             'next_of_kin_phone' => 'nullable|string|max:255',
             'password' => ['nullable', 'confirmed', Rules\Password::defaults()],
+            'permissions' => 'nullable|array',
+            'commission_type' => 'nullable|in:none,per_phone,profit_percent,revenue_percent',
+            'commission_rate' => 'nullable|numeric|min:0',
         ]);
 
         if ((int) $user->id === (int) auth()->id()) {
@@ -132,10 +154,33 @@ class UserController extends Controller
             }
         }
 
+        $allowedKeys = array_column(User::PERMISSION_DEFINITIONS, 'key');
+        $cleanPermissions = $user->permissions;
+        if ($validated['role'] === 'admin') {
+            $cleanPermissions = null;
+        } elseif ($request->has('permissions')) {
+            $inputPerms = $request->input('permissions');
+            if (is_array($inputPerms)) {
+                $cleanPermissions = [];
+                foreach ($allowedKeys as $k) {
+                    if (array_key_exists($k, $inputPerms)) {
+                        $cleanPermissions[$k] = (bool) $inputPerms[$k];
+                    }
+                }
+            } else {
+                $cleanPermissions = null;
+            }
+        }
+
         $updateData = [
             'name' => $validated['name'],
             'email' => $validated['email'],
             'role' => $validated['role'],
+            'permissions' => $cleanPermissions,
+            'commission_type' => $validated['commission_type'] ?? ($user->commission_type ?? 'none'),
+            'commission_rate' => ($validated['commission_type'] ?? ($user->commission_type ?? 'none')) === 'none'
+                ? 0
+                : floatval($validated['commission_rate'] ?? ($user->commission_rate ?? 0)),
             'phone' => $validated['phone'] ?? null,
             'address' => $validated['address'] ?? null,
             'emergency_contact_name' => $validated['emergency_contact_name'] ?? null,
