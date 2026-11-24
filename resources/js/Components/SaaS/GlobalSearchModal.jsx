@@ -20,6 +20,8 @@ import {
     Settings,
     Users,
     CornerDownLeft,
+    FileText,
+    FileSpreadsheet,
 } from 'lucide-react';
 
 export default function GlobalSearchModal({ isOpen, onClose }) {
@@ -41,6 +43,8 @@ export default function GlobalSearchModal({ isOpen, onClose }) {
         products: [],
         customers: [],
         receipts: [],
+        invoices: [],
+        quotations: [],
         repairs: [],
     });
 
@@ -53,6 +57,8 @@ export default function GlobalSearchModal({ isOpen, onClose }) {
             canManageInventory && { id: 'nav-inventory', group: 'Quick Jump', title: 'Inventory & IMEIs', subtitle: 'Manage phones, stock & pricing', url: '/inventory', icon: Smartphone },
             canManageInventory && { id: 'nav-labels', group: 'Quick Jump', title: 'IMEI Barcode Label Studio', subtitle: 'Print box & shelf stickers (A4 or 50×30mm)', url: '/inventory/labels', icon: Package },
             !isTechnician && { id: 'nav-receipts', group: 'Quick Jump', title: 'Issued Receipts', subtitle: 'Search, reprint, WhatsApp or refund', url: '/receipts', icon: Receipt },
+            !isTechnician && { id: 'nav-invoices', group: 'Quick Jump', title: 'Corporate Invoices & Credit', subtitle: 'Track B2B credit invoices & collect payments', url: '/invoices', icon: FileText },
+            !isTechnician && { id: 'nav-quotations', group: 'Quick Jump', title: 'Corporate Quotations', subtitle: 'Prepare proformas & convert to invoices', url: '/quotations', icon: FileSpreadsheet },
             !isTechnician && { id: 'nav-layaways', group: 'Quick Jump', title: 'Layaways & Installments', subtitle: 'Collect balances & send reminders', url: '/layaways', icon: Clock },
             !isTechnician && { id: 'nav-drawer', group: 'Quick Jump', title: 'Shift Management', subtitle: 'Open/close cash drawer shifts', url: '/cash-drawer', icon: Wallet },
             { id: 'nav-repairs', group: 'Quick Jump', title: 'Repairs Workbench', subtitle: 'Track repair tickets & status updates', url: '/repairs', icon: Wrench },
@@ -123,6 +129,8 @@ export default function GlobalSearchModal({ isOpen, onClose }) {
             pushGroup(results.imeis || [], 'Phones / IMEIs', Smartphone);
             pushGroup(results.customers || [], 'Customers', UserSquare);
             pushGroup(results.receipts || [], 'Receipts', Receipt);
+            pushGroup(results.invoices || [], 'Corporate Invoices', FileText);
+            pushGroup(results.quotations || [], 'Quotations', FileSpreadsheet);
             pushGroup(results.repairs || [], 'Repair Tickets', Wrench);
             pushGroup(results.products || [], 'Catalog / Products', Package);
             quickPages.slice(0, 4).forEach((p) => list.push(p));

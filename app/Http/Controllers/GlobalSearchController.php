@@ -8,6 +8,8 @@ use App\Models\Product;
 use App\Models\Customer;
 use App\Models\Sale;
 use App\Models\Repair;
+use App\Models\Invoice;
+use App\Models\Quotation;
 
 class GlobalSearchController extends Controller
 {
@@ -20,6 +22,8 @@ class GlobalSearchController extends Controller
                 'products' => [],
                 'customers' => [],
                 'receipts' => [],
+                'invoices' => [],
+                'quotations' => [],
                 'repairs' => [],
             ]);
         }
@@ -154,11 +158,61 @@ class GlobalSearchController extends Controller
             ])
             ->values();
 
+        // 6. Corporate Invoices & Quotations (Hidden from technicians)
+        $invoices = collect();
+        $quotations = collect();
+        if (!$isTechnician) {
+            $invoices = Invoice::with('customer:id,name,company_name')
+                ->where(function ($query) use ($like) {
+                    $query->whereRaw('LOWER(COALESCE(invoice_number, \'\')) LIKE ?', [$like])
+                        ->orWhereRaw('LOWER(COALESCE(po_number, \'\')) LIKE ?', [$like])
+                        ->orWhereHas('customer', function ($cq) use ($like) {
+                            $cq->whereRaw('LOWER(name) LIKE ?', [$like])
+                               ->orWhereRaw('LOWER(COALESCE(company_name, \'\')) LIKE ?', [$like]);
+                        });
+                })
+                ->orderByDesc('id')
+                ->limit(5)
+                ->get()
+                ->map(fn($inv) => [
+                    'id' => $inv->id,
+                    'title' => "{$inv->invoice_number} — " . ($inv->customer?->company_name ?: $inv->customer?->name ?: 'Corporate Buyer'),
+                    'subtitle' => ($inv->po_number ? "PO: {$inv->po_number} • " : '') . 'Due: ' . ($inv->due_date ? date('d M Y', strtotime($inv->due_date)) : '—'),
+                    'badge' => $inv->payment_status ?: 'Unpaid',
+                    'price' => (float) ($inv->total_amount ?? 0),
+                    'url' => "/invoices/{$inv->id}",
+                ])
+                ->values();
+
+            $quotations = Quotation::with('customer:id,name,company_name')
+                ->where(function ($query) use ($like) {
+                    $query->whereRaw('LOWER(COALESCE(quotation_number, \'\')) LIKE ?', [$like])
+                        ->orWhereHas('customer', function ($cq) use ($like) {
+                            $cq->whereRaw('LOWER(name) LIKE ?', [$like])
+                               ->orWhereRaw('LOWER(COALESCE(company_name, \'\')) LIKE ?', [$like]);
+                        });
+                })
+                ->orderByDesc('id')
+                ->limit(5)
+                ->get()
+                ->map(fn($qt) => [
+                    'id' => $qt->id,
+                    'title' => "{$qt->quotation_number} — " . ($qt->customer?->company_name ?: $qt->customer?->name ?: 'Corporate Client'),
+                    'subtitle' => 'Valid until: ' . ($qt->valid_until ? date('d M Y', strtotime($qt->valid_until)) : '—'),
+                    'badge' => $qt->status ?: 'Draft',
+                    'price' => (float) ($qt->total_amount ?? 0),
+                    'url' => "/quotations/{$qt->id}",
+                ])
+                ->values();
+        }
+
         return response()->json([
             'imeis' => $imeis,
             'products' => $products,
             'customers' => $customers,
             'receipts' => $receipts,
+            'invoices' => $invoices,
+            'quotations' => $quotations,
             'repairs' => $repairs,
         ]);
     }

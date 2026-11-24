@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
-import { Head, Link, router } from '@inertiajs/react';
+import { Head, Link, router, usePage } from '@inertiajs/react';
 import Modal from '@/Components/Modal';
+import PageHeader from '@/Components/SaaS/PageHeader';
 import toast from 'react-hot-toast';
 import { 
     FileText, 
@@ -17,11 +18,14 @@ import {
     FileSpreadsheet,
     Ban,
     Trash2,
-    X
+    X,
+    MessageCircle
 } from 'lucide-react';
 import dayjs from 'dayjs';
+import { buildInvoiceReminderMessage, openWhatsApp } from '@/Utils/whatsapp';
 
 export default function InvoicesIndex({ invoices, filters, metrics }) {
+    const { store_settings: storeSettings } = usePage().props;
     const [search, setSearch] = useState(filters.search || '');
     const [paymentStatus, setPaymentStatus] = useState(filters.payment_status || 'all');
     const isInitialRender = useRef(true);
@@ -108,38 +112,31 @@ export default function InvoicesIndex({ invoices, filters, metrics }) {
         <AuthenticatedLayout>
             <Head title="Corporate Invoices & Credit Sales" />
 
-            <div className="space-y-6 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-                {/* Header */}
-                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 bg-white dark:bg-slate-900 p-6 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-sm">
-                    <div>
-                        <div className="flex items-center gap-2">
-                            <span className="p-2 bg-indigo-50 dark:bg-indigo-950/50 text-indigo-600 dark:text-indigo-400 rounded-xl">
-                                <FileText size={22} />
-                            </span>
-                            <h1 className="text-2xl font-black text-slate-900 dark:text-white tracking-tight">
-                                Corporate Invoices & Credit
-                            </h1>
-                        </div>
-                        <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-                            Manage B2B orders taken on credit, dispatch stock, track payment terms, and collect receivables.
-                        </p>
-                    </div>
-
-                    <div className="flex items-center gap-2.5">
+            <PageHeader
+                title="Corporate Invoices & Credit"
+                breadcrumbs={[
+                    { label: 'Home', href: '/' },
+                    { label: 'Invoices & Credit' },
+                ]}
+                actions={
+                    <>
                         <Link
                             href={route('quotations.index')}
-                            className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5"
+                            className="saas-btn saas-btn-glass text-xs"
                         >
-                            <FileSpreadsheet size={16} /> Quotations
+                            <FileSpreadsheet size={15} /> Quotations
                         </Link>
                         <Link
                             href={route('invoices.create')}
-                            className="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold transition-all flex items-center gap-2 shadow-md shadow-indigo-500/20"
+                            className="saas-btn saas-btn-primary text-xs"
                         >
-                            <Plus size={16} /> New Tax Invoice
+                            <Plus size={15} /> New Tax Invoice
                         </Link>
-                    </div>
-                </div>
+                    </>
+                }
+            />
+
+            <div className="space-y-6">
 
                 {/* 4 Metrics Strip */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -326,6 +323,16 @@ export default function InvoicesIndex({ invoices, filters, metrics }) {
                                                     >
                                                         <Eye size={15} />
                                                     </Link>
+                                                    {!isCancelled && (
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => openWhatsApp(inv.customer?.phone || '', buildInvoiceReminderMessage(inv, storeSettings))}
+                                                            className="p-1.5 text-slate-500 hover:text-emerald-600 hover:bg-emerald-50 dark:hover:bg-slate-800 rounded-lg transition-colors"
+                                                            title="Send Invoice / Balance Reminder via WhatsApp"
+                                                        >
+                                                            <MessageCircle size={15} />
+                                                        </button>
+                                                    )}
                                                     <a
                                                         href={route('invoices.pdf', inv.id)}
                                                         target="_blank"

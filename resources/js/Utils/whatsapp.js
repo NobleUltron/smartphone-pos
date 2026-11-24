@@ -195,3 +195,52 @@ export function buildDailyZReportMessage(report, storeSettings = {}) {
     lines.push(`────────────────────`, `Generated via SmartPOS`);
     return lines.join('\n');
 }
+
+export function buildQuotationMessage(quote, storeSettings = {}) {
+    const storeName = storeSettings?.shop_name || storeSettings?.store_name || 'SmartPOS';
+    const storePhone = storeSettings?.shop_phone || storeSettings?.store_phone || '';
+    const client = quote?.customer?.company_name || quote?.customer?.name || 'Valued Client';
+    const validStr = quote?.valid_until ? new Date(quote.valid_until).toLocaleDateString() : 'N/A';
+
+    const lines = [
+        `📄 *QUOTATION / PROFORMA ${quote.quotation_number}*`,
+        `*${storeName}*`,
+        `────────────────────`,
+        `🏢 Client: ${client}`,
+        `💰 Total Amount: *${fmtUGX(quote.total_amount)}*`,
+        `📅 Valid Until: ${validStr}`,
+        `📌 Status: ${quote.status || 'Draft'}`,
+        ``,
+        `Please let us know if you would like us to convert this quotation into an official Tax Invoice and dispatch your order. Thank you! 🙏`,
+    ];
+    if (storePhone) lines.push(`📞 ${storePhone}`);
+    return lines.join('\n');
+}
+
+export function buildInvoiceReminderMessage(inv, storeSettings = {}) {
+    const storeName = storeSettings?.shop_name || storeSettings?.store_name || 'SmartPOS';
+    const storePhone = storeSettings?.shop_phone || storeSettings?.store_phone || '';
+    const client = inv?.customer?.company_name || inv?.customer?.name || 'Valued Client';
+    const total = Number(inv?.total_amount || 0);
+    const paid = Number(inv?.paid_amount || 0);
+    const balance = Math.max(0, total - paid);
+    const dueStr = inv?.due_date ? new Date(inv.due_date).toLocaleDateString() : 'N/A';
+
+    const lines = [
+        `🧾 *TAX INVOICE ${inv.invoice_number}*`,
+        `*${storeName}*`,
+        `────────────────────`,
+        `🏢 Client: ${client}`,
+        inv.po_number ? `🔖 PO Ref: ${inv.po_number}` : null,
+        `💰 Invoiced Total: ${fmtUGX(total)}`,
+        `✅ Paid So Far: ${fmtUGX(paid)}`,
+        balance > 0 ? `⏳ *Balance Due: ${fmtUGX(balance)}*` : `✅ *PAID IN FULL*`,
+        `📅 Due Date: ${dueStr}`,
+        ``,
+        balance > 0
+            ? `Kindly arrange settlement of the remaining balance at your earliest convenience. Thank you for your business! 🙏`
+            : `Thank you for your prompt payment and continued partnership! 🙏`,
+    ].filter(Boolean);
+    if (storePhone) lines.push(`📞 ${storePhone}`);
+    return lines.join('\n');
+}

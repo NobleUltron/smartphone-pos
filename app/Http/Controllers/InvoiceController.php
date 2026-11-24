@@ -80,7 +80,7 @@ class InvoiceController extends Controller
             ->withCount(['deviceImeis as in_stock_imeis_count' => fn($q) => $q->where('status', 'In Stock')])
             ->orderBy('model_name')
             ->get();
-        $paymentAccounts = PaymentAccount::where('is_active', true)->orderBy('name')->get();
+        $paymentAccounts = PaymentAccount::where('is_active', true)->where('is_personal', false)->orderBy('name')->get();
 
         $defaultTerms = Setting::get('invoice_terms', "1. Payment is strictly due according to agreed credit terms.\n2. Remit wire transfers to our official bank account stated on this invoice.\n3. Goods once received in good condition cannot be returned.\n4. For any billing queries, contact our finance department.");
 
@@ -206,7 +206,7 @@ class InvoiceController extends Controller
     public function show(Invoice $invoice)
     {
         $invoice->load(['customer', 'user', 'quotation', 'items.product.brand', 'payments.paymentAccount', 'payments.user']);
-        $paymentAccounts = PaymentAccount::where('is_active', true)->orderBy('type')->orderBy('name')->get();
+        $paymentAccounts = PaymentAccount::where('is_active', true)->where('is_personal', false)->orderBy('type')->orderBy('name')->get();
 
         return Inertia::render('Invoices/Show', [
             'invoice' => $invoice,
@@ -248,7 +248,7 @@ class InvoiceController extends Controller
                 ]);
             }
 
-            $paymentAccount = PaymentAccount::findOrFail($validated['payment_account_id']);
+            $paymentAccount = PaymentAccount::where('is_personal', false)->findOrFail($validated['payment_account_id']);
             $receiptNumber = InvoicePayment::generateReceiptNumber();
             $method = $validated['payment_method'] ?: $paymentAccount->name;
 
