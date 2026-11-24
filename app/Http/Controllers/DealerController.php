@@ -157,7 +157,7 @@ class DealerController extends Controller
             ->where('status', 'open')
             ->first();
         $activeDrawerCash = $userActiveDrawer ? floatval($userActiveDrawer->calculateExpectedCash()) : 0;
-        $paymentAccounts = \App\Models\PaymentAccount::where('is_active', true)->get(['id', 'name', 'type', 'provider', 'current_balance']);
+        $paymentAccounts = \App\Models\PaymentAccount::where('is_active', true)->where('is_personal', false)->get(['id', 'name', 'type', 'provider', 'current_balance']);
 
         return Inertia::render('Dealers/Dashboard', [
             'metrics' => $metrics,
@@ -401,7 +401,7 @@ class DealerController extends Controller
             ->where('status', 'open')
             ->first();
         $activeDrawerCash = $userActiveDrawer ? floatval($userActiveDrawer->calculateExpectedCash()) : 0;
-        $paymentAccounts = \App\Models\PaymentAccount::where('is_active', true)->get(['id', 'name', 'type', 'provider', 'current_balance']);
+        $paymentAccounts = \App\Models\PaymentAccount::where('is_active', true)->where('is_personal', false)->get(['id', 'name', 'type', 'provider', 'current_balance']);
 
         return Inertia::render('Dealers/Show', [
             'dealer' => $dealer,

@@ -198,7 +198,7 @@ class ProductController extends Controller
                 'inventory_value' => $totalInventoryValue,
             ],
             'partners' => \App\Models\PartnerInvestor::where('is_active', true)->select('id', 'name', 'profit_share_percentage')->get(),
-            'paymentAccounts' => PaymentAccount::where('is_active', true)->orderBy('id')->get(['id', 'name', 'type', 'current_balance']),
+            'paymentAccounts' => PaymentAccount::where('is_active', true)->where('is_personal', false)->orderBy('id')->get(['id', 'name', 'type', 'current_balance']),
         ]);
     }
 

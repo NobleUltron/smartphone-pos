@@ -87,7 +87,7 @@ class CashDrawerController extends Controller
             $activeDrawer->is_stale = $openedAt->diffInHours(now()) >= 24;
         }
 
-        $accounts = PaymentAccount::where('is_active', true)->get(['id', 'name', 'type', 'current_balance', 'provider']);
+        $accounts = PaymentAccount::where('is_active', true)->where('is_personal', false)->get(['id', 'name', 'type', 'current_balance', 'provider']);
 
         return Inertia::render('CashDrawer/Index', [
             'activeDrawer' => $activeDrawer,

@@ -79,7 +79,7 @@ class SupplierController extends Controller
             $query->orderBy('purchase_date', 'desc')->with('items.product.brand');
         }]);
 
-        $paymentAccounts = \App\Models\PaymentAccount::where('is_active', true)
+        $paymentAccounts = \App\Models\PaymentAccount::where('is_active', true)->where('is_personal', false)
             ->orderBy('type')
             ->orderBy('name')
             ->get();

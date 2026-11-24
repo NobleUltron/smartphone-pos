@@ -113,7 +113,7 @@ class ExpenseController extends Controller
             ? User::select('id', 'name')->orderBy('name')->get()
             : [];
 
-        $accounts = PaymentAccount::where('is_active', true)->orderBy('name')->get(['id', 'name', 'type', 'current_balance', 'provider']);
+        $accounts = PaymentAccount::where('is_active', true)->where('is_personal', false)->orderBy('name')->get(['id', 'name', 'type', 'current_balance', 'provider']);
 
         return Inertia::render('Expenses/Index', [
             'expenses'  => $expenses,

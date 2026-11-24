@@ -202,7 +202,7 @@ class PurchaseController extends Controller
         $suppliers = Supplier::orderBy('name')->get();
         // Eager load brand so we can show proper names
         $products = Product::with('brand')->orderBy('model_name')->get();
-        $paymentAccounts = \App\Models\PaymentAccount::where('is_active', true)->get();
+        $paymentAccounts = \App\Models\PaymentAccount::where('is_active', true)->where('is_personal', false)->get();
         
         return Inertia::render('Purchases/Create', [
             'suppliers' => $suppliers,

@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Head, Link, router, useForm, usePage } from '@inertiajs/react';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
+import PageHeader from '@/Components/SaaS/PageHeader';
 import Modal from '@/Components/Modal';
 import { 
     Users, 
@@ -258,48 +259,36 @@ export default function PartnersIndex({ partners, metrics, paymentAccounts, unas
         <AuthenticatedLayout>
             <Head title="Partner & Family Capital Management" />
 
-            <div className="space-y-6 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-                
-                {/* Header & Tabs */}
-                <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-sm space-y-4">
-                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-                        <div className="flex items-center gap-3">
-                            <div className="p-3 bg-gradient-to-br from-purple-600 to-indigo-600 rounded-xl text-white shadow-md shadow-purple-500/20">
-                                <Users size={24} />
-                            </div>
-                            <div>
-                                <h1 className="text-2xl font-black text-slate-900 dark:text-white tracking-tight">
-                                    Partner & Family Capital Pools
-                                </h1>
-                                <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                                    Separate friend/family investment pools, track stock bought with their money, and automatically compute profits on sale.
-                                </p>
-                            </div>
-                        </div>
+            <PageHeader
+                title="Partner & Family Capital Pools"
+                breadcrumbs={[
+                    { label: 'Home', href: '/' },
+                    { label: 'Money & Accounts', href: route('accounts.index') },
+                    { label: 'Partner Capital' },
+                ]}
+                actions={
+                    <button
+                        type="button"
+                        onClick={() => setShowCreateModal(true)}
+                        className="saas-btn saas-btn-primary text-xs"
+                    >
+                        <Plus size={15} /> New Partner Profile
+                    </button>
+                }
+            />
 
-                        <div className="flex items-center gap-3 flex-wrap">
-                            <button
-                                type="button"
-                                onClick={() => setShowCreateModal(true)}
-                                className="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold transition-all flex items-center gap-2 shadow-md shadow-indigo-500/20"
-                            >
-                                <Plus size={16} /> New Partner Profile
-                            </button>
-                        </div>
-                    </div>
-
-                    {/* Navigation Tabs */}
-                    <div className="flex items-center gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
-                        <Link
-                            href={route('accounts.index')}
-                            className="px-4 py-2 rounded-xl text-xs font-bold text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition-all flex items-center gap-2"
-                        >
-                            <Wallet size={16} /> Business Wallets & Accounts
-                        </Link>
-                        <span className="px-4 py-2 rounded-xl text-xs font-bold bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 border border-indigo-200/80 dark:border-indigo-800 flex items-center gap-2">
-                            <Users size={16} /> Partner & Family Capital ({metrics.partners_count})
-                        </span>
-                    </div>
+            <div className="space-y-6">
+                {/* Navigation Tabs */}
+                <div className="flex items-center gap-2 flex-wrap">
+                    <Link
+                        href={route('accounts.index')}
+                        className="px-4 py-2 rounded-xl text-xs font-bold bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-all flex items-center gap-2"
+                    >
+                        <Wallet size={15} /> Business Wallets &amp; Accounts
+                    </Link>
+                    <span className="px-4 py-2 rounded-xl text-xs font-bold bg-indigo-600 text-white shadow-sm flex items-center gap-2">
+                        <Users size={15} /> Partner &amp; Family Capital ({metrics.partners_count})
+                    </span>
                 </div>
 
                 {/* Flash Messages */}

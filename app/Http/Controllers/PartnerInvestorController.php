@@ -39,7 +39,11 @@ class PartnerInvestorController extends Controller
         $totalProfitEarned = $summaries->sum('partner_profit_earned');
         $totalPayouts = $summaries->sum('total_payouts');
 
-        $paymentAccounts = PaymentAccount::where('is_active', true)->get();
+        $paymentAccountsQuery = PaymentAccount::where('is_active', true);
+        if (!(auth()->user()?->hasPermission('view_personal_accounts'))) {
+            $paymentAccountsQuery->where('is_personal', false);
+        }
+        $paymentAccounts = $paymentAccountsQuery->get();
 
         // Also fetch active in-stock devices not yet assigned to any partner (for quick-assigning)
         $unassignedDevices = DeviceImei::with('product.brand')
