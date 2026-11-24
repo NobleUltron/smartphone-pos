@@ -1,8 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import toast from 'react-hot-toast';
 import { Head, Link, router } from '@inertiajs/react';
 import axios from 'axios';
-import { Search, Plus, Pencil, Trash2, Smartphone, Printer, Package, Layers, AlertTriangle, DollarSign, Scan, FileSpreadsheet, X, Wrench } from 'lucide-react';
+import { Search, Plus, Pencil, Trash2, Smartphone, Printer, Package, Layers, AlertTriangle, DollarSign, Scan, FileSpreadsheet, X, Wrench, MoreHorizontal, ChevronDown } from 'lucide-react';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import Card from '@/Components/SaaS/Card';
 import Badge from '@/Components/SaaS/Badge';
@@ -77,6 +77,19 @@ export default function Inventory({ auth, products, allProducts = [], categories
 
     // Delete Confirmation State
     const [deleteConfirm, setDeleteConfirm] = useState({ isOpen: false, title: '', message: '', onConfirm: null });
+    const [showMoreMenu, setShowMoreMenu] = useState(false);
+    const moreMenuRef = useRef(null);
+
+    useEffect(() => {
+        if (!showMoreMenu) return;
+        const handleClickOutside = (e) => {
+            if (moreMenuRef.current && !moreMenuRef.current.contains(e.target)) {
+                setShowMoreMenu(false);
+            }
+        };
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, [showMoreMenu]);
 
     useEffect(() => {
         if (isInitialRender) {
@@ -371,14 +384,69 @@ export default function Inventory({ auth, products, allProducts = [], categories
                             <FileSpreadsheet size={15} /> Export Excel
                         </a>
                         <Button variant="glass" className="text-xs" onClick={() => router.visit(route('inventory.audits.index'))} icon={Scan}>Stock Audit</Button>
-                        <Button variant="glass" className="text-xs" onClick={() => router.visit(route('inventory.labels.studio'))} icon={Printer}>IMEI Labels</Button>
-                        <Button variant="glass" className="text-xs" onClick={() => {
-                            setIsEditingProduct(false);
-                            setNewProduct({ id: null, category_id: '', brand_id: '', model_name: '', type: 'serialized' });
-                            setShowAddProductModal(true);
-                        }} icon={Plus}>Product Model</Button>
-                        <Button variant="glass" className="text-xs" onClick={() => setShowAddBrandModal(true)} icon={Plus}>Brand</Button>
-                        <Button variant="glass" className="text-xs" onClick={() => setShowAddCategoryModal(true)} icon={Plus}>Category</Button>
+                        <div className="relative" ref={moreMenuRef}>
+                            <button
+                                type="button"
+                                onClick={() => setShowMoreMenu((prev) => !prev)}
+                                className="saas-btn saas-btn-glass text-xs flex items-center gap-1.5"
+                            >
+                                <MoreHorizontal size={15} />
+                                <span>More</span>
+                                <ChevronDown size={14} className={`transition-transform duration-150 ${showMoreMenu ? 'rotate-180' : ''}`} />
+                            </button>
+
+                            {showMoreMenu && (
+                                <div className="absolute right-0 mt-2 w-52 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 shadow-2xl py-1.5 z-50 text-left animate-fade-in">
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            setShowMoreMenu(false);
+                                            router.visit(route('inventory.labels.studio'));
+                                        }}
+                                        className="w-full px-3.5 py-2.5 text-xs font-bold text-slate-700 dark:text-slate-200 hover:bg-indigo-50 dark:hover:bg-indigo-500/10 hover:text-indigo-600 dark:hover:text-indigo-300 flex items-center gap-2.5 transition-colors"
+                                    >
+                                        <Printer size={15} className="text-indigo-500 shrink-0" />
+                                        <span>IMEI Labels</span>
+                                    </button>
+                                    <div className="my-1 border-t border-slate-100 dark:border-slate-800" />
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            setShowMoreMenu(false);
+                                            setIsEditingProduct(false);
+                                            setNewProduct({ id: null, category_id: '', brand_id: '', model_name: '', type: 'serialized' });
+                                            setShowAddProductModal(true);
+                                        }}
+                                        className="w-full px-3.5 py-2.5 text-xs font-bold text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 flex items-center gap-2.5 transition-colors"
+                                    >
+                                        <Plus size={15} className="text-slate-400 shrink-0" />
+                                        <span>Add Product Model</span>
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            setShowMoreMenu(false);
+                                            setShowAddBrandModal(true);
+                                        }}
+                                        className="w-full px-3.5 py-2.5 text-xs font-bold text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 flex items-center gap-2.5 transition-colors"
+                                    >
+                                        <Plus size={15} className="text-slate-400 shrink-0" />
+                                        <span>Add Brand</span>
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            setShowMoreMenu(false);
+                                            setShowAddCategoryModal(true);
+                                        }}
+                                        className="w-full px-3.5 py-2.5 text-xs font-bold text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 flex items-center gap-2.5 transition-colors"
+                                    >
+                                        <Plus size={15} className="text-slate-400 shrink-0" />
+                                        <span>Add Category</span>
+                                    </button>
+                                </div>
+                            )}
+                        </div>
                     </>
                 }
             />

@@ -4,13 +4,14 @@ import { Link } from '@inertiajs/react';
 
 export default function PageHeader({ title, breadcrumbs = [], actions = null }) {
     return (
-        <div className="mb-8 p-5 sm:p-6 bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 rounded-3xl text-white flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-2xl relative overflow-hidden animate-slide-up border border-slate-700/60">
-            {/* Background Glow & Sparkle Effects */}
-            <div className="absolute top-0 right-0 w-72 h-72 bg-indigo-500/15 rounded-full blur-3xl -mr-20 -mt-20 pointer-events-none"></div>
-            <div className="absolute bottom-0 left-32 w-56 h-56 bg-emerald-500/10 rounded-full blur-3xl -mb-20 pointer-events-none"></div>
-            
-            <div className="absolute -top-4 right-4 p-6 opacity-10 pointer-events-none text-indigo-300">
-                <Sparkles size={130} strokeWidth={1} />
+        <div className="mb-8 p-5 sm:p-6 bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 rounded-3xl text-white flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-2xl relative z-20 animate-slide-up border border-slate-700/60">
+            {/* Background Glow & Sparkle Effects (clipped inside inner wrapper so action dropdowns never clip) */}
+            <div className="absolute inset-0 rounded-3xl overflow-hidden pointer-events-none">
+                <div className="absolute top-0 right-0 w-72 h-72 bg-indigo-500/15 rounded-full blur-3xl -mr-20 -mt-20"></div>
+                <div className="absolute bottom-0 left-32 w-56 h-56 bg-emerald-500/10 rounded-full blur-3xl -mb-20"></div>
+                <div className="absolute -top-4 right-4 p-6 opacity-10 text-indigo-300">
+                    <Sparkles size={130} strokeWidth={1} />
+                </div>
             </div>
 
             <div className="relative z-10 shrink-0">
