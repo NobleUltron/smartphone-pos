@@ -236,7 +236,8 @@ export default function PurchasesCreate({ auth, suppliers, products, paymentAcco
                                                     <SearchableSelect 
                                                         options={products.map(p => ({
                                                             value: p.id,
-                                                            label: `${p.brand?.name} ${p.model_name} ${p.sku ? `(${p.sku})` : ''} - ${p.type}`
+                                                            label: `${p.brand?.name || ''} ${p.model_name}${p.sku ? ` (${p.sku})` : ''}`.trim(),
+                                                            badge: p.type === 'serialized' ? 'Phone' : 'Bulk'
                                                         }))}
                                                         value={item.product_id}
                                                         onChange={value => handleProductChange(index, value)}
