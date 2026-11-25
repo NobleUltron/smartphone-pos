@@ -10,9 +10,9 @@ class SupplierController extends Controller
 {
     public function index(Request $request)
     {
-        $query = Supplier::withCount('purchases')
-            ->withSum('purchases', 'total_amount')
-            ->withSum('purchases', 'paid_amount')
+        $query = Supplier::withCount(['purchases' => fn($q) => $q->where('status', '!=', 'Cancelled')])
+            ->withSum(['purchases' => fn($q) => $q->where('status', '!=', 'Cancelled')], 'total_amount')
+            ->withSum(['purchases' => fn($q) => $q->where('status', '!=', 'Cancelled')], 'paid_amount')
             ->withMax('purchases', 'purchase_date');
 
         if ($request->filled('search')) {
@@ -28,9 +28,11 @@ class SupplierController extends Controller
 
         $balanceFilter = $request->input('balance_filter', 'all');
         if ($balanceFilter === 'owing') {
-            $query->whereRaw('COALESCE((SELECT SUM(total_amount - paid_amount) FROM purchases WHERE purchases.supplier_id = suppliers.id), 0) > 0');
+            $query->whereRaw("COALESCE((SELECT SUM(total_amount - paid_amount) FROM purchases WHERE purchases.supplier_id = suppliers.id AND purchases.status != 'Cancelled'), 0) > 0");
         } elseif ($balanceFilter === 'settled') {
-            $query->whereRaw('COALESCE((SELECT SUM(total_amount - paid_amount) FROM purchases WHERE purchases.supplier_id = suppliers.id), 0) <= 0');
+            $query->whereRaw("COALESCE((SELECT SUM(total_amount - paid_amount) FROM purchases WHERE purchases.supplier_id = suppliers.id AND purchases.status != 'Cancelled'), 0) <= 0");
+        } elseif ($balanceFilter === 'has_credit') {
+            $query->where('credit_balance', '>', 0);
         }
 
         $suppliers = $query->orderBy('name')->paginate(10)->through(function($supplier) {
@@ -42,8 +44,11 @@ class SupplierController extends Controller
 
         $totalSuppliers = Supplier::count();
         $pendingOrders = \App\Models\Purchase::where('status', 'Pending')->count();
-        $totalSpend = (float) \App\Models\Purchase::sum('total_amount');
-        $totalPayable = (float) \App\Models\Purchase::selectRaw('COALESCE(SUM(CASE WHEN total_amount - paid_amount > 0 THEN total_amount - paid_amount ELSE 0 END), 0) as total')->value('total');
+        $totalSpend = (float) \App\Models\Purchase::where('status', '!=', 'Cancelled')->sum('total_amount');
+        $totalPayable = (float) \App\Models\Purchase::where('status', '!=', 'Cancelled')
+            ->selectRaw('COALESCE(SUM(CASE WHEN total_amount - paid_amount > 0 THEN total_amount - paid_amount ELSE 0 END), 0) as total')
+            ->value('total');
+        $totalCredit = (float) Supplier::sum('credit_balance');
 
         return Inertia::render('Suppliers/Index', [
             'suppliers' => $suppliers,
@@ -53,6 +58,7 @@ class SupplierController extends Controller
                 'pending_orders' => $pendingOrders,
                 'total_spend' => $totalSpend,
                 'total_payable' => $totalPayable,
+                'total_credit' => $totalCredit,
             ]
         ]);
     }
@@ -75,9 +81,15 @@ class SupplierController extends Controller
     {
         $supplier->recalculateBalance();
 
-        $supplier->load(['purchases' => function($query) {
-            $query->orderBy('purchase_date', 'desc')->with('items.product.brand');
-        }]);
+        $supplier->load([
+            'purchases' => function($query) {
+                $query->orderBy('purchase_date', 'desc')->with('items.product.brand');
+            },
+            'supplierReturns' => function($query) {
+                $query->orderBy('created_at', 'desc')
+                    ->with(['purchase', 'deviceImei.product.brand', 'replacementImei.product.brand', 'paymentAccount', 'user']);
+            },
+        ]);
 
         $paymentAccounts = \App\Models\PaymentAccount::where('is_active', true)->where('is_personal', false)
             ->orderBy('type')

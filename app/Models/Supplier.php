@@ -15,7 +15,13 @@ class Supplier extends Model
         'phone',
         'email',
         'address',
-        'balance'
+        'balance',
+        'credit_balance',
+    ];
+
+    protected $casts = [
+        'balance' => 'float',
+        'credit_balance' => 'float',
     ];
 
     public function purchases()
@@ -23,10 +29,16 @@ class Supplier extends Model
         return $this->hasMany(Purchase::class);
     }
 
+    public function supplierReturns()
+    {
+        return $this->hasMany(SupplierReturn::class);
+    }
+
     public function recalculateBalance()
     {
         $remaining = $this->purchases()
-            ->selectRaw('SUM(total_amount - paid_amount) as remaining')
+            ->where('status', '!=', 'Cancelled')
+            ->selectRaw('SUM(CASE WHEN total_amount - paid_amount > 0 THEN total_amount - paid_amount ELSE 0 END) as remaining')
             ->value('remaining') ?? 0;
 
         $this->balance = max(0, (float)$remaining);

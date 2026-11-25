@@ -305,6 +305,9 @@ class PurchaseController extends Controller
         if ($purchase->status === 'Received') {
             return redirect()->back()->withErrors(['error' => 'Purchase is already received.']);
         }
+        if ($purchase->status === 'Cancelled') {
+            return redirect()->back()->withErrors(['error' => 'Cannot mark a cancelled purchase as received.']);
+        }
 
         try {
             DB::transaction(function () use ($purchase) {
@@ -335,8 +338,139 @@ class PurchaseController extends Controller
         }
     }
 
+    public function cancel(Request $request, Purchase $purchase)
+    {
+        if ($purchase->status !== 'Pending') {
+            return redirect()->back()->withErrors(['error' => 'Only Pending (undelivered) purchase orders can be cancelled.']);
+        }
+
+        $paidAmount = (float) ($purchase->paid_amount ?? 0);
+
+        $rules = [
+            'reason' => 'required|string|max:1000',
+            'notes' => 'nullable|string|max:1000',
+        ];
+
+        if ($paidAmount > 0) {
+            $rules['resolution'] = 'required|in:refund,supplier_credit,forfeited';
+            $rules['payment_account_id'] = 'required_if:resolution,refund|nullable|exists:payment_accounts,id';
+        } else {
+            $rules['resolution'] = 'nullable|in:none,refund,supplier_credit,forfeited';
+        }
+
+        $validated = $request->validate($rules, [
+            'payment_account_id.required_if' => 'Please select the business wallet that received the supplier refund.',
+        ]);
+
+        $resolution = $paidAmount > 0 ? $validated['resolution'] : 'none';
+
+        try {
+            DB::transaction(function () use ($purchase, $validated, $paidAmount, $resolution) {
+                $lockedPurchase = Purchase::with(['items.product', 'supplier'])->lockForUpdate()->findOrFail($purchase->id);
+
+                if ($lockedPurchase->status !== 'Pending') {
+                    throw new \RuntimeException('This purchase order is no longer Pending.');
+                }
+
+                // Cancel any In Transit IMEIs attached to this undelivered purchase
+                foreach ($lockedPurchase->items as $item) {
+                    if ($item->product && $item->product->type === 'serialized' && is_array($item->imeis) && count($item->imeis) > 0) {
+                        DeviceImei::where('product_id', $item->product->id)
+                            ->whereIn('imei', $item->imeis)
+                            ->where('status', 'In Transit')
+                            ->update(['status' => 'Cancelled']);
+                    }
+                }
+
+                $lockedPurchase->status = 'Cancelled';
+                $lockedPurchase->payment_status = match ($resolution) {
+                    'refund' => 'Refunded',
+                    'supplier_credit' => 'Credited',
+                    'forfeited' => 'Forfeited',
+                    default => 'Cancelled',
+                };
+                $lockedPurchase->save();
+
+                $paymentAccountId = null;
+
+                if ($paidAmount > 0) {
+                    $supplierName = $lockedPurchase->supplier->name ?? 'Supplier';
+
+                    if ($resolution === 'refund') {
+                        $account = \App\Models\PaymentAccount::where('is_active', true)
+                            ->where('is_personal', false)
+                            ->lockForUpdate()
+                            ->findOrFail($validated['payment_account_id']);
+                        $paymentAccountId = $account->id;
+
+                        \App\Services\TreasuryService::recordInflow(
+                            $account,
+                            $paidAmount,
+                            'Supplier Refund',
+                            $lockedPurchase,
+                            "Refund for cancelled Purchase #{$lockedPurchase->id} ({$supplierName}): {$validated['reason']}",
+                            $lockedPurchase->reference_no,
+                            auth()->id()
+                        );
+                    } elseif ($resolution === 'supplier_credit') {
+                        $lockedPurchase->supplier?->increment('credit_balance', $paidAmount);
+                    } elseif ($resolution === 'forfeited') {
+                        \App\Models\Expense::create([
+                            'cash_drawer_id' => null,
+                            'payment_account_id' => null,
+                            'user_id' => auth()->id(),
+                            'recorded_by' => auth()->id(),
+                            'category' => 'Supplier Write-Off',
+                            'amount' => $paidAmount,
+                            'description' => "Forfeited deposit on cancelled Purchase #{$lockedPurchase->id} ({$supplierName}): {$validated['reason']}",
+                            'expense_date' => now(),
+                        ]);
+                    }
+                }
+
+                $fullReason = trim($validated['reason']) . (!empty($validated['notes']) ? ' — ' . trim($validated['notes']) : '');
+
+                \App\Models\SupplierReturn::create([
+                    'supplier_id' => $lockedPurchase->supplier_id,
+                    'purchase_id' => $lockedPurchase->id,
+                    'return_type' => 'purchase_cancellation',
+                    'resolution' => $resolution,
+                    'status' => 'Completed',
+                    'amount' => $paidAmount,
+                    'payment_account_id' => $paymentAccountId,
+                    'reason' => $fullReason,
+                    'returned_at' => now(),
+                    'user_id' => auth()->id(),
+                ]);
+
+                $lockedPurchase->supplier?->recalculateBalance();
+
+                \App\Models\ActivityLog::log(
+                    'purchase_cancelled',
+                    'Purchases',
+                    "Cancelled Purchase #{$lockedPurchase->id} ({$resolution}, UGX " . number_format($paidAmount) . "): {$validated['reason']}",
+                    ['purchase_id' => $lockedPurchase->id, 'resolution' => $resolution, 'amount' => $paidAmount]
+                );
+            });
+
+            $msg = match ($resolution) {
+                'refund' => 'Purchase cancelled and UGX ' . number_format($paidAmount) . ' refund recorded into wallet.',
+                'supplier_credit' => 'Purchase cancelled and UGX ' . number_format($paidAmount) . ' added to supplier credit.',
+                'forfeited' => 'Purchase cancelled and UGX ' . number_format($paidAmount) . ' logged as Supplier Write-Off.',
+                default => 'Pending purchase order cancelled cleanly.',
+            };
+
+            return redirect()->back()->with('success', $msg);
+        } catch (\Exception $e) {
+            return redirect()->back()->withErrors(['error' => $e->getMessage()]);
+        }
+    }
+
     public function recordPayment(Request $request, Purchase $purchase)
     {
+        if ($purchase->status === 'Cancelled') {
+            return redirect()->back()->withErrors(['amount' => 'Cannot record a payment for a cancelled purchase order.']);
+        }
         $remaining = $purchase->total_amount - $purchase->paid_amount;
 
         if ($remaining <= 0) {

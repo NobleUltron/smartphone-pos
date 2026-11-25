@@ -5,7 +5,7 @@ import PageHeader from '@/Components/SaaS/PageHeader';
 import Card from '@/Components/SaaS/Card';
 import Button from '@/Components/SaaS/Button';
 import Badge from '@/Components/SaaS/Badge';
-import { Package, Building2, Phone, Mail, MapPin, Receipt, DollarSign, Calendar, Info, X, Trash2, AlertTriangle, Plus, ArrowLeft } from 'lucide-react';
+import { Package, Building2, Phone, Mail, MapPin, Receipt, DollarSign, Calendar, Info, X, Trash2, AlertTriangle, Plus, ArrowLeft, Ban, Undo2, Wallet, CreditCard, RotateCcw } from 'lucide-react';
 import toast from 'react-hot-toast';
 import Modal from '@/Components/Modal';
 
@@ -23,6 +23,7 @@ export default function SuppliersShow({ auth, supplier, paymentAccounts = [] }) 
     const [purchaseToDelete, setPurchaseToDelete] = useState(null);
     const [isDeleting, setIsDeleting] = useState(false);
     const [paymentModalPurchase, setPaymentModalPurchase] = useState(null);
+    const [cancelModalPurchase, setCancelModalPurchase] = useState(null);
 
     const defaultAccountId = paymentAccounts[0]?.id || '';
     const defaultAccountName = paymentAccounts[0]?.name || 'Cash';
@@ -33,6 +34,40 @@ export default function SuppliersShow({ auth, supplier, paymentAccounts = [] }) 
         payment_method: defaultAccountName,
         notes: ''
     });
+
+    const cancelForm = useForm({
+        resolution: 'refund',
+        payment_account_id: defaultAccountId,
+        reason: '',
+        notes: ''
+    });
+
+    const openCancelModal = (purchase) => {
+        const paid = Number(purchase.paid_amount || 0);
+        setCancelModalPurchase(purchase);
+        cancelForm.clearErrors();
+        cancelForm.setData({
+            resolution: paid > 0 ? 'refund' : 'none',
+            payment_account_id: defaultAccountId,
+            reason: '',
+            notes: ''
+        });
+    };
+
+    const handleCancelSubmit = (e) => {
+        e.preventDefault();
+        if (!cancelModalPurchase) return;
+        cancelForm.post(`/api/purchases/${cancelModalPurchase.id}/cancel`, {
+            onSuccess: () => {
+                setCancelModalPurchase(null);
+                toast.success('Purchase order cancelled');
+            },
+            onError: (errs) => {
+                const message = errs?.error || errs?.reason || errs?.payment_account_id || Object.values(errs || {})[0] || 'Failed to cancel purchase';
+                toast.error(message, { duration: 6000 });
+            }
+        });
+    };
 
     const openPaymentModal = (purchase) => {
         const remaining = Number(purchase.total_amount) - Number(purchase.paid_amount);
@@ -132,12 +167,12 @@ export default function SuppliersShow({ auth, supplier, paymentAccounts = [] }) 
                                         <Info size={14} className="mt-0.5 shrink-0" />
                                         This is the total unpaid balance across wholesale shipments.
                                     </p>
-                                    {supplier.purchases && supplier.purchases.find(p => p.payment_status !== 'Paid') && (
+                                    {supplier.purchases && supplier.purchases.find(p => p.status !== 'Cancelled' && p.payment_status !== 'Paid') && (
                                         <Button 
                                             variant="primary" 
                                             className="w-full bg-rose-600 hover:bg-rose-700 text-white font-bold py-2 text-sm flex items-center justify-center gap-2"
                                             onClick={() => {
-                                                const unpaidP = supplier.purchases.find(p => p.payment_status !== 'Paid');
+                                                const unpaidP = supplier.purchases.find(p => p.status !== 'Cancelled' && p.payment_status !== 'Paid');
                                                 if (unpaidP) openPaymentModal(unpaidP);
                                             }}
                                         >
@@ -147,6 +182,22 @@ export default function SuppliersShow({ auth, supplier, paymentAccounts = [] }) 
                                 </div>
                             )}
                         </div>
+
+                        {/* Available Supplier Credit Widget */}
+                        {Number(supplier.credit_balance || 0) > 0 && (
+                            <div className="rounded-3xl p-6 border bg-teal-50 dark:bg-teal-950/30 border-teal-200 dark:border-teal-800/60">
+                                <h3 className="font-bold flex items-center gap-2 mb-2 text-teal-900 dark:text-teal-300">
+                                    <CreditCard size={20} />
+                                    Available Supplier Credit
+                                </h3>
+                                <div className="text-3xl font-black text-teal-600 dark:text-teal-400">
+                                    {Number(supplier.credit_balance).toLocaleString()} <span className="text-base">UGX</span>
+                                </div>
+                                <p className="text-xs text-teal-700 dark:text-teal-400/90 font-medium mt-2">
+                                    Credit owed to your shop from returned devices or cancelled prepaid orders.
+                                </p>
+                            </div>
+                        )}
 
                         {/* Supplier Info Form */}
                         <Card>
@@ -263,20 +314,24 @@ export default function SuppliersShow({ auth, supplier, paymentAccounts = [] }) 
                                                     </td>
                                                     <td className="px-6 py-4">
                                                         <div className="flex flex-col gap-2 items-start">
-                                                            <Badge variant={purchase.status === 'Received' ? 'success' : 'warning'}>
+                                                            <Badge variant={
+                                                                purchase.status === 'Received' ? 'success' :
+                                                                purchase.status === 'Cancelled' ? 'danger' : 'warning'
+                                                            }>
                                                                 {purchase.status}
                                                             </Badge>
                                                             <Badge variant={
                                                                 purchase.payment_status === 'Paid' ? 'success' : 
-                                                                purchase.payment_status === 'Partial' ? 'warning' : 'danger'
+                                                                purchase.payment_status === 'Partial' ? 'warning' :
+                                                                (purchase.payment_status === 'Refunded' || purchase.payment_status === 'Credited') ? 'info' : 'danger'
                                                             }>
                                                                 {purchase.payment_status}
                                                             </Badge>
                                                         </div>
                                                     </td>
                                                     <td className="px-6 py-4 text-right">
-                                                        <div className="flex items-center justify-end gap-2">
-                                                            {purchase.payment_status !== 'Paid' && (
+                                                        <div className="flex items-center justify-end gap-2 flex-wrap">
+                                                            {purchase.status !== 'Cancelled' && purchase.payment_status !== 'Paid' && (
                                                                 <button 
                                                                     onClick={() => openPaymentModal(purchase)}
                                                                     className="text-xs font-extrabold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1"
@@ -285,12 +340,20 @@ export default function SuppliersShow({ auth, supplier, paymentAccounts = [] }) 
                                                                 </button>
                                                             )}
                                                             {purchase.status === 'Pending' && (
-                                                                <button 
-                                                                    onClick={() => handleReceivePurchase(purchase.id)}
-                                                                    className="text-xs font-bold text-amber-700 hover:text-amber-800 transition-colors bg-amber-50 px-2.5 py-1.5 rounded-lg border border-amber-200"
-                                                                >
-                                                                    Mark Received
-                                                                </button>
+                                                                <>
+                                                                    <button 
+                                                                        onClick={() => handleReceivePurchase(purchase.id)}
+                                                                        className="text-xs font-bold text-amber-700 hover:text-amber-800 transition-colors bg-amber-50 px-2.5 py-1.5 rounded-lg border border-amber-200"
+                                                                    >
+                                                                        Mark Received
+                                                                    </button>
+                                                                    <button 
+                                                                        onClick={() => openCancelModal(purchase)}
+                                                                        className="text-xs font-bold text-rose-700 hover:text-rose-800 transition-colors bg-rose-50 hover:bg-rose-100 px-2.5 py-1.5 rounded-lg border border-rose-200 flex items-center gap-1"
+                                                                    >
+                                                                        <Ban size={13} /> Cancel Order
+                                                                    </button>
+                                                                </>
                                                             )}
                                                             <button 
                                                                 onClick={() => setSelectedPurchase(purchase)}
@@ -326,6 +389,109 @@ export default function SuppliersShow({ auth, supplier, paymentAccounts = [] }) 
                                 </Link>
                             </Card>
                         )}
+
+                        {/* Returns, RMAs & Cancelled Orders History */}
+                        <div className="pt-4">
+                            <div className="flex items-center justify-between mb-4">
+                                <h2 className="text-xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                                    <Undo2 size={20} className="text-rose-500" />
+                                    Returns, RMAs & Cancelled Orders
+                                </h2>
+                                <span className="text-xs font-bold text-slate-500 bg-slate-100 dark:bg-slate-800 px-2.5 py-1 rounded-full">
+                                    {supplier.supplier_returns?.length || 0} records
+                                </span>
+                            </div>
+
+                            {supplier.supplier_returns && supplier.supplier_returns.length > 0 ? (
+                                <Card noPadding className="overflow-hidden">
+                                    <div className="overflow-x-auto">
+                                        <table className="w-full text-left text-sm">
+                                            <thead className="bg-slate-50 dark:bg-slate-800/70 border-b border-slate-200 dark:border-slate-800 text-slate-500">
+                                                <tr>
+                                                    <th className="px-5 py-3.5 font-semibold">Date & Type</th>
+                                                    <th className="px-5 py-3.5 font-semibold">Item / Purchase</th>
+                                                    <th className="px-5 py-3.5 font-semibold">Resolution</th>
+                                                    <th className="px-5 py-3.5 font-semibold text-right">Amount</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                                                {supplier.supplier_returns.map(ret => {
+                                                    const resolutionLabel = {
+                                                        refund: 'Refund to Wallet',
+                                                        supplier_credit: 'Supplier Credit',
+                                                        replacement: 'Replacement Swap',
+                                                        supplier_repair: 'Supplier Repair',
+                                                        forfeited: 'Forfeited Deposit',
+                                                        none: 'No Payment',
+                                                    }[ret.resolution] || ret.resolution;
+
+                                                    return (
+                                                        <tr key={ret.id} className="hover:bg-slate-50/70 dark:hover:bg-slate-800/40">
+                                                            <td className="px-5 py-3.5">
+                                                                <div className="font-bold text-slate-800 dark:text-slate-100 text-xs">
+                                                                    {ret.return_type === 'purchase_cancellation' ? 'Cancelled Order' : 'Device Return'}
+                                                                </div>
+                                                                <div className="text-[11px] text-slate-500 mt-0.5">
+                                                                    {new Date(ret.created_at).toLocaleDateString()}
+                                                                </div>
+                                                            </td>
+                                                            <td className="px-5 py-3.5">
+                                                                {ret.purchase_id ? (
+                                                                    <div className="font-semibold text-slate-900 dark:text-white text-xs">
+                                                                        Purchase #{ret.purchase_id}
+                                                                    </div>
+                                                                ) : ret.device_imei ? (
+                                                                    <div>
+                                                                        <div className="font-semibold text-slate-900 dark:text-white text-xs">
+                                                                            {ret.device_imei.product?.brand?.name ? `${ret.device_imei.product.brand.name} ` : ''}
+                                                                            {ret.device_imei.product?.model_name || 'Device'}
+                                                                        </div>
+                                                                        <div className="text-[11px] font-mono text-slate-500">
+                                                                            IMEI: {ret.device_imei.imei}
+                                                                            {ret.replacement_imei && (
+                                                                                <span className="text-emerald-600 dark:text-emerald-400"> → {ret.replacement_imei.imei}</span>
+                                                                            )}
+                                                                        </div>
+                                                                    </div>
+                                                                ) : (
+                                                                    <span className="text-xs text-slate-400">—</span>
+                                                                )}
+                                                                {ret.reason && (
+                                                                    <div className="text-[11px] text-slate-500 mt-0.5 max-w-xs truncate" title={ret.reason}>
+                                                                        {ret.reason}
+                                                                    </div>
+                                                                )}
+                                                            </td>
+                                                            <td className="px-5 py-3.5">
+                                                                <div className="flex flex-col gap-1 items-start">
+                                                                    <Badge variant={
+                                                                        ret.resolution === 'refund' || ret.resolution === 'replacement' ? 'success' :
+                                                                        ret.resolution === 'supplier_credit' ? 'info' :
+                                                                        ret.resolution === 'forfeited' ? 'danger' : 'warning'
+                                                                    }>
+                                                                        {resolutionLabel}
+                                                                    </Badge>
+                                                                    <span className="text-[11px] text-slate-500">
+                                                                        {ret.payment_account ? `Wallet: ${ret.payment_account.name}` : ret.status}
+                                                                    </span>
+                                                                </div>
+                                                            </td>
+                                                            <td className="px-5 py-3.5 text-right font-bold text-slate-900 dark:text-white text-xs">
+                                                                {Number(ret.amount || 0) > 0 ? `${Number(ret.amount).toLocaleString()} UGX` : '—'}
+                                                            </td>
+                                                        </tr>
+                                                    );
+                                                })}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </Card>
+                            ) : (
+                                <Card className="text-center py-8">
+                                    <p className="text-sm text-slate-500">No supplier returns, RMAs, or cancelled orders recorded yet.</p>
+                                </Card>
+                            )}
+                        </div>
                     </div>
 
                 </div>
@@ -443,6 +609,146 @@ export default function SuppliersShow({ auth, supplier, paymentAccounts = [] }) 
                     </div>
                 </div>
             </Modal>
+
+            {/* Cancel Pending Purchase Order Modal */}
+            {cancelModalPurchase && (
+                <Modal show={true} onClose={() => !cancelForm.processing && setCancelModalPurchase(null)} maxWidth="lg">
+                    <div className="p-6 bg-white dark:bg-slate-900 rounded-2xl">
+                        <div className="flex items-center justify-between pb-4 border-b border-slate-100 dark:border-slate-800 mb-5">
+                            <div>
+                                <h3 className="font-bold text-lg text-slate-900 dark:text-white flex items-center gap-2">
+                                    <Ban size={20} className="text-rose-600" />
+                                    Cancel Pending Purchase #{cancelModalPurchase.id}
+                                </h3>
+                                <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                                    {supplier.name} • Order Total: {Number(cancelModalPurchase.total_amount).toLocaleString()} UGX
+                                </p>
+                            </div>
+                            <button onClick={() => setCancelModalPurchase(null)} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors">
+                                <X size={20} />
+                            </button>
+                        </div>
+
+                        <form onSubmit={handleCancelSubmit} className="space-y-4">
+                            {Object.keys(cancelForm.errors).length > 0 && (
+                                <div className="bg-rose-50 text-rose-800 p-3 rounded-xl text-xs border border-rose-200 flex items-start gap-2 font-medium">
+                                    <AlertTriangle size={16} className="mt-0.5 shrink-0 text-rose-600" />
+                                    <div>
+                                        {Object.values(cancelForm.errors).map((err, i) => (
+                                            <div key={i}>{err}</div>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+
+                            {Number(cancelModalPurchase.paid_amount || 0) <= 0 ? (
+                                <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 text-xs text-slate-600 dark:text-slate-300 space-y-1">
+                                    <div className="font-bold text-slate-800 dark:text-white">No payment recorded on this order (0 UGX paid)</div>
+                                    <p>Cancelling will mark this order as <strong>Cancelled</strong>, void any <em>In Transit</em> IMEIs, and remove the unpaid payable from your supplier balance with zero cash movement.</p>
+                                </div>
+                            ) : (
+                                <>
+                                    <div className="p-3.5 rounded-xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/60 flex items-center justify-between">
+                                        <span className="text-xs font-bold text-amber-900 dark:text-amber-300">Amount Already Paid to Supplier:</span>
+                                        <span className="text-base font-black text-amber-700 dark:text-amber-400">
+                                            UGX {Number(cancelModalPurchase.paid_amount).toLocaleString()}
+                                        </span>
+                                    </div>
+
+                                    <div>
+                                        <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-2">
+                                            How is the paid amount settled? *
+                                        </label>
+                                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                                            {[
+                                                { id: 'refund', label: 'Refund to Wallet', desc: 'Supplier returned cash/MoMo/bank', icon: Wallet },
+                                                { id: 'supplier_credit', label: 'Supplier Credit', desc: 'Keep as credit for next order', icon: CreditCard },
+                                                { id: 'forfeited', label: 'Forfeited / Loss', desc: 'Non-refundable deposit write-off', icon: AlertTriangle },
+                                            ].map(opt => {
+                                                const Icon = opt.icon;
+                                                const active = cancelForm.data.resolution === opt.id;
+                                                return (
+                                                    <button
+                                                        type="button"
+                                                        key={opt.id}
+                                                        onClick={() => cancelForm.setData('resolution', opt.id)}
+                                                        className={`text-left p-3 rounded-xl border transition-all ${
+                                                            active
+                                                                ? 'border-indigo-500 bg-indigo-50/70 dark:bg-indigo-950/40 ring-1 ring-indigo-500'
+                                                                : 'border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600'
+                                                        }`}
+                                                    >
+                                                        <Icon size={16} className={active ? 'text-indigo-600 dark:text-indigo-400 mb-1.5' : 'text-slate-400 mb-1.5'} />
+                                                        <div className="text-xs font-bold text-slate-900 dark:text-white">{opt.label}</div>
+                                                        <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5 leading-tight">{opt.desc}</div>
+                                                    </button>
+                                                );
+                                            })}
+                                        </div>
+                                    </div>
+
+                                    {cancelForm.data.resolution === 'refund' && (
+                                        <div>
+                                            <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                                                Refund Received Into Wallet *
+                                            </label>
+                                            <select
+                                                className="saas-input w-full font-medium"
+                                                value={cancelForm.data.payment_account_id}
+                                                onChange={e => cancelForm.setData('payment_account_id', e.target.value)}
+                                                required
+                                            >
+                                                <option value="">-- Select Business Wallet --</option>
+                                                {paymentAccounts.map(account => (
+                                                    <option key={account.id} value={account.id}>
+                                                        {account.name} ({account.provider || account.type}) — Bal: UGX {Number(account.current_balance || 0).toLocaleString()}
+                                                    </option>
+                                                ))}
+                                            </select>
+                                        </div>
+                                    )}
+                                </>
+                            )}
+
+                            <div>
+                                <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                                    Reason for Cancellation *
+                                </label>
+                                <input
+                                    type="text"
+                                    className="saas-input w-full text-sm"
+                                    placeholder="e.g. Supplier out of stock / failed to deliver on time"
+                                    value={cancelForm.data.reason}
+                                    onChange={e => cancelForm.setData('reason', e.target.value)}
+                                    required
+                                />
+                            </div>
+
+                            <div>
+                                <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                                    Additional Notes (Optional)
+                                </label>
+                                <input
+                                    type="text"
+                                    className="saas-input w-full text-sm"
+                                    placeholder="e.g. Refund MoMo ref #88291"
+                                    value={cancelForm.data.notes}
+                                    onChange={e => cancelForm.setData('notes', e.target.value)}
+                                />
+                            </div>
+
+                            <div className="flex justify-end gap-3 pt-4 border-t border-slate-100 dark:border-slate-800">
+                                <Button variant="secondary" type="button" onClick={() => setCancelModalPurchase(null)}>
+                                    Keep Order
+                                </Button>
+                                <Button variant="primary" type="submit" isLoading={cancelForm.processing} className="bg-rose-600 hover:bg-rose-700">
+                                    Confirm Cancellation
+                                </Button>
+                            </div>
+                        </form>
+                    </div>
+                </Modal>
+            )}
 
             {/* Record Payment Modal */}
             {paymentModalPurchase && (

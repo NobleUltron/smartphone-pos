@@ -100,7 +100,8 @@ class AccountController extends Controller
             ->value('total');
         $totalReceivables = $layawayReceivables + $invoiceReceivables;
 
-        $supplierPayables = (float) \App\Models\Purchase::selectRaw('COALESCE(SUM(CASE WHEN total_amount - paid_amount > 0 THEN total_amount - paid_amount ELSE 0 END), 0) as total')
+        $supplierPayables = (float) \App\Models\Purchase::where('status', '!=', 'Cancelled')
+            ->selectRaw('COALESCE(SUM(CASE WHEN total_amount - paid_amount > 0 THEN total_amount - paid_amount ELSE 0 END), 0) as total')
             ->value('total');
         $dealerPayables = (float) \App\Models\DealerItem::where('direction', 'inward')
             ->where('quantity_sold', '>', 0)

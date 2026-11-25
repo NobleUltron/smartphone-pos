@@ -367,6 +367,7 @@ Route::middleware('auth')->group(function () {
         Route::get('/purchases/create', [\App\Http\Controllers\PurchaseController::class, 'create'])->name('purchases.create');
         Route::post('/api/purchases', [\App\Http\Controllers\PurchaseController::class, 'store']);
         Route::post('/api/purchases/{purchase}/receive', [\App\Http\Controllers\PurchaseController::class, 'receive']);
+        Route::post('/api/purchases/{purchase}/cancel', [\App\Http\Controllers\PurchaseController::class, 'cancel'])->name('purchases.cancel');
         Route::post('/api/purchases/{purchase}/payments', [\App\Http\Controllers\PurchaseController::class, 'recordPayment'])->name('purchases.payments.store');
         Route::delete('/api/purchases/{purchase}', [\App\Http\Controllers\PurchaseController::class, 'destroy']);
 
@@ -393,6 +394,8 @@ Route::middleware('auth')->group(function () {
         Route::get('/api/inventory/{product}/stock', [ProductController::class, 'viewStock']);
         Route::put('/api/inventory/stock/{deviceImei}', [ProductController::class, 'updateStock']);
         Route::post('/api/inventory/stock/{deviceImei}/refurbish', [ProductController::class, 'addRefurbishmentCost'])->name('inventory.stock.refurbish');
+        Route::post('/api/inventory/stock/{deviceImei}/return-supplier', [ProductController::class, 'returnToSupplier'])->name('inventory.stock.return-supplier');
+        Route::post('/api/inventory/stock/{deviceImei}/receive-from-supplier', [ProductController::class, 'receiveFromSupplier'])->name('inventory.stock.receive-from-supplier');
         Route::delete('/api/inventory/stock/{deviceImei}', [ProductController::class, 'destroyStock']);
 
         // Brands and Categories

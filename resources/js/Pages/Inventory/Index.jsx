@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import toast from 'react-hot-toast';
 import { Head, Link, router } from '@inertiajs/react';
 import axios from 'axios';
-import { Search, Plus, Pencil, Trash2, Smartphone, Printer, Package, Layers, AlertTriangle, DollarSign, Scan, FileSpreadsheet, X, Wrench, MoreHorizontal, ChevronDown } from 'lucide-react';
+import { Search, Plus, Pencil, Trash2, Smartphone, Printer, Package, Layers, AlertTriangle, DollarSign, Scan, FileSpreadsheet, X, Wrench, MoreHorizontal, ChevronDown, Undo2, RotateCcw, Wallet, CreditCard, RefreshCw } from 'lucide-react';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import Card from '@/Components/SaaS/Card';
 import Badge from '@/Components/SaaS/Badge';
@@ -11,7 +11,7 @@ import PageHeader from '@/Components/SaaS/PageHeader';
 import DataTable from '@/Components/SaaS/DataTable';
 import LabelCard from '@/Components/SaaS/LabelCard';
 
-export default function Inventory({ auth, products, allProducts = [], categories = [], brands = [], filters = {}, summary, partners = [], paymentAccounts = [] }) {
+export default function Inventory({ auth, products, allProducts = [], categories = [], brands = [], filters = {}, summary, partners = [], paymentAccounts = [], suppliers = [] }) {
     // Add Category Modal State
     const [showAddCategoryModal, setShowAddCategoryModal] = useState(false);
     const [newCategory, setNewCategory] = useState('');
@@ -54,6 +54,27 @@ export default function Inventory({ auth, products, allProducts = [], categories
         new_condition: '',
         new_status: '',
     });
+
+    // Return to Supplier Modal State
+    const [returnDevice, setReturnDevice] = useState(null);
+    const [returnForm, setReturnForm] = useState({
+        supplier_id: '',
+        resolution: 'refund',
+        amount: '',
+        payment_account_id: '',
+        replacement_imei: '',
+        replacement_product_id: '',
+        replacement_storage: '',
+        replacement_color: '',
+        replacement_condition: 'Brand New',
+        replacement_cost_price: '',
+        replacement_selling_price: '',
+        return_credit_value: '',
+        difference_settlement: 'wallet',
+        reason: '',
+        notes: '',
+    });
+    const [receivingId, setReceivingId] = useState(null);
 
     // Search and Filter State
     const [searchQuery, setSearchQuery] = useState(filters.search || '');
@@ -271,6 +292,98 @@ export default function Inventory({ auth, products, allProducts = [], categories
             toast.error(error.response?.data?.message || "Error recording refurbishment cost");
         }
         setLoading(false);
+    };
+
+    const openReturnModal = (item) => {
+        setReturnDevice(item);
+        setReturnForm({
+            supplier_id: item.original_supplier_id || '',
+            resolution: 'refund',
+            amount: item.cost_price ?? '',
+            payment_account_id: paymentAccounts[0]?.id || '',
+            replacement_imei: '',
+            replacement_product_id: item.product_id || viewProduct?.id || '',
+            replacement_storage: item.storage_capacity || '',
+            replacement_color: item.color || '',
+            replacement_condition: item.condition || 'Brand New',
+            replacement_cost_price: item.cost_price ?? '',
+            replacement_selling_price: item.selling_price ?? '',
+            return_credit_value: item.cost_price ?? '',
+            difference_settlement: 'wallet',
+            reason: '',
+            notes: '',
+        });
+    };
+
+    const handleReturnSubmit = async () => {
+        if (!returnDevice) return;
+        if (!returnForm.supplier_id) return toast.error('Please select a supplier');
+        if (!returnForm.reason?.trim()) return toast.error('Please provide a reason for returning this device');
+        if (returnForm.resolution === 'refund' && !returnForm.payment_account_id) {
+            return toast.error('Please select the business wallet that received the refund');
+        }
+        if (returnForm.resolution === 'replacement') {
+            if (!returnForm.replacement_imei?.trim()) {
+                return toast.error('Please enter the replacement device IMEI');
+            }
+            const swapDiff = Number(returnForm.replacement_cost_price || 0) - Number(returnForm.return_credit_value || 0);
+            if (swapDiff !== 0 && returnForm.difference_settlement === 'wallet' && !returnForm.payment_account_id) {
+                return toast.error('Please select a business wallet for the price difference');
+            }
+        }
+
+        setLoading(true);
+        try {
+            const isSwap = returnForm.resolution === 'replacement';
+            const swapDiff = isSwap ? (Number(returnForm.replacement_cost_price || 0) - Number(returnForm.return_credit_value || 0)) : 0;
+            const needsWallet = returnForm.resolution === 'refund' || (isSwap && swapDiff !== 0 && returnForm.difference_settlement === 'wallet');
+
+            const payload = {
+                supplier_id: returnForm.supplier_id,
+                resolution: returnForm.resolution,
+                amount: ['refund', 'supplier_credit'].includes(returnForm.resolution) ? parseFloat(returnForm.amount || 0) : 0,
+                payment_account_id: needsWallet ? returnForm.payment_account_id : null,
+                replacement_imei: isSwap ? returnForm.replacement_imei.trim() : null,
+                replacement_product_id: isSwap && returnForm.replacement_product_id ? returnForm.replacement_product_id : null,
+                replacement_storage: isSwap ? (returnForm.replacement_storage || null) : null,
+                replacement_color: isSwap ? (returnForm.replacement_color || null) : null,
+                replacement_condition: isSwap ? (returnForm.replacement_condition || null) : null,
+                replacement_cost_price: isSwap && returnForm.replacement_cost_price !== '' ? parseFloat(returnForm.replacement_cost_price) : null,
+                replacement_selling_price: isSwap && returnForm.replacement_selling_price !== '' ? parseFloat(returnForm.replacement_selling_price) : null,
+                return_credit_value: isSwap && returnForm.return_credit_value !== '' ? parseFloat(returnForm.return_credit_value) : null,
+                difference_settlement: isSwap && swapDiff !== 0 ? returnForm.difference_settlement : null,
+                reason: returnForm.reason.trim(),
+                notes: returnForm.notes?.trim() || null,
+            };
+            const res = await axios.post(`/api/inventory/stock/${returnDevice.id}/return-supplier`, payload);
+            toast.success(res.data?.message || 'Device returned to supplier!');
+            setImeisList(prev => {
+                const updated = prev.map(i => i.id === returnDevice.id ? res.data.device : i);
+                return (res.data.replacement_device && res.data.replacement_same_product)
+                    ? [res.data.replacement_device, ...updated]
+                    : updated;
+            });
+            setReturnDevice(null);
+            router.reload({ only: ['summary', 'products', 'paymentAccounts', 'suppliers'], preserveScroll: true });
+        } catch (error) {
+            const errs = error.response?.data?.errors;
+            const firstErr = errs ? Object.values(errs)[0]?.[0] : null;
+            toast.error(firstErr || error.response?.data?.message || 'Error processing supplier return');
+        }
+        setLoading(false);
+    };
+
+    const handleReceiveFromSupplier = async (item) => {
+        setReceivingId(item.id);
+        try {
+            const res = await axios.post(`/api/inventory/stock/${item.id}/receive-from-supplier`, {});
+            toast.success(res.data?.message || 'Device received back into stock!');
+            setImeisList(prev => prev.map(i => i.id === item.id ? res.data.device : i));
+            router.reload({ only: ['summary', 'products'], preserveScroll: true });
+        } catch (error) {
+            toast.error(error.response?.data?.message || 'Error receiving device back from supplier');
+        }
+        setReceivingId(null);
     };
 
     const handleViewStock = async (product) => {
@@ -1207,7 +1320,10 @@ export default function Inventory({ auth, products, allProducts = [], categories
                                             <option value="In Stock">In Stock ({imeisList.filter(i => i.status === 'In Stock').length})</option>
                                             <option value="Sold">Sold ({imeisList.filter(i => i.status === 'Sold').length})</option>
                                             <option value="Defective">Defective ({imeisList.filter(i => i.status === 'Defective').length})</option>
+                                            <option value="At Supplier (Repair)">At Supplier (Repair) ({imeisList.filter(i => i.status === 'At Supplier (Repair)').length})</option>
+                                            <option value="Returned to Supplier">Returned to Supplier ({imeisList.filter(i => i.status === 'Returned to Supplier').length})</option>
                                             <option value="Reserved">Reserved ({imeisList.filter(i => i.status === 'Reserved').length})</option>
+                                            <option value="Cancelled">Cancelled ({imeisList.filter(i => i.status === 'Cancelled').length})</option>
                                         </select>
                                     </div>
                                 )}
@@ -1296,7 +1412,12 @@ export default function Inventory({ auth, products, allProducts = [], categories
                                             <td>{item.color}</td>
                                             <td>{item.condition}</td>
                                             <td>
-                                                <Badge variant={item.status === 'In Stock' ? 'success' : (item.status === 'Defective' ? 'danger' : (item.status === 'In Transit' ? 'info' : 'neutral'))}>
+                                                <Badge variant={
+                                                    item.status === 'In Stock' ? 'success' :
+                                                    item.status === 'Defective' ? 'danger' :
+                                                    item.status === 'At Supplier (Repair)' ? 'warning' :
+                                                    (item.status === 'In Transit' || item.status === 'Returned to Supplier') ? 'info' : 'neutral'
+                                                }>
                                                     {item.status === 'Defective' ? '🛠️ Defective' : item.status}
                                                 </Badge>
                                             </td>
@@ -1319,8 +1440,27 @@ export default function Inventory({ auth, products, allProducts = [], categories
                                             </td>
                                             <td className="font-semibold text-slate-900 dark:text-white">{Number(item.selling_price).toLocaleString()} UGX</td>
                                             <td className="text-center">
-                                                <div className="flex justify-center gap-1">
-                                                    {item.status !== 'Sold' && (
+                                                <div className="flex justify-center gap-1 items-center">
+                                                    {(item.status === 'In Stock' || item.status === 'Defective') && (
+                                                        <button
+                                                            className="p-2 text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/50 rounded-lg transition-colors"
+                                                            title="Return to Supplier (RMA / Refund / Swap)"
+                                                            onClick={() => openReturnModal(item)}
+                                                        >
+                                                            <Undo2 size={16} />
+                                                        </button>
+                                                    )}
+                                                    {item.status === 'At Supplier (Repair)' && (
+                                                        <button
+                                                            className="px-2 py-1 text-[11px] font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-lg transition-colors flex items-center gap-1 disabled:opacity-50"
+                                                            title="Receive Repaired Device Back into Stock"
+                                                            disabled={receivingId === item.id}
+                                                            onClick={() => handleReceiveFromSupplier(item)}
+                                                        >
+                                                            <RotateCcw size={13} /> {receivingId === item.id ? '...' : 'Receive Back'}
+                                                        </button>
+                                                    )}
+                                                    {item.status !== 'Sold' && item.status !== 'Returned to Supplier' && item.status !== 'Cancelled' && (
                                                         <button
                                                             className="p-2 text-slate-400 hover:text-amber-600 dark:hover:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-950/50 rounded-lg transition-colors"
                                                             title="Add Repair / Refurbishment Cost"
@@ -1470,6 +1610,387 @@ export default function Inventory({ auth, products, allProducts = [], categories
                             </a>
                         </div>
                     </div>
+                </div>
+            )}
+
+            {/* Return Device to Supplier Modal */}
+            {returnDevice && (
+                <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[60] flex items-center justify-center p-4 overflow-y-auto">
+                    <Card className="w-full max-w-xl animate-slide-up">
+                        <div className="flex items-center justify-between mb-4">
+                            <div className="flex items-center gap-2.5">
+                                <div className="p-2 rounded-xl bg-rose-100 dark:bg-rose-950/60 text-rose-600 dark:text-rose-400">
+                                    <Undo2 size={18} />
+                                </div>
+                                <div>
+                                    <h3 className="text-lg font-bold text-slate-900 dark:text-white">Return Device to Supplier</h3>
+                                    <p className="text-xs text-slate-500 font-mono">
+                                        {viewProduct?.brand?.name} {viewProduct?.model_name} • IMEI: {returnDevice.imei}
+                                    </p>
+                                </div>
+                            </div>
+                            <button
+                                className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-1 rounded-lg"
+                                onClick={() => setReturnDevice(null)}
+                            >
+                                <X size={18} />
+                            </button>
+                        </div>
+
+                        <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 flex flex-wrap items-center justify-between gap-2 text-xs mb-4">
+                            <div>
+                                <span className="text-slate-500">Specs:</span>{' '}
+                                <strong className="text-slate-800 dark:text-white">{returnDevice.storage_capacity} • {returnDevice.color} • {returnDevice.condition}</strong>
+                            </div>
+                            <div>
+                                <span className="text-slate-500">Cost Basis:</span>{' '}
+                                <strong className="text-indigo-700 dark:text-indigo-400">UGX {Number(returnDevice.cost_price || 0).toLocaleString()}</strong>
+                            </div>
+                            {returnDevice.partner_investor && (
+                                <div className="w-full text-[11px] text-purple-700 dark:text-purple-300 font-semibold pt-1 border-t border-slate-200 dark:border-slate-700">
+                                    Partner-Funded ({returnDevice.partner_investor.name}): Returning restores capital to partner pool; Replacement Swap carries partner funding to the new IMEI.
+                                </div>
+                            )}
+                        </div>
+
+                        <div className="space-y-4">
+                            <div>
+                                <div className="flex items-center justify-between gap-2 mb-1">
+                                    <label className="saas-label !mb-0">Supplier *</label>
+                                    {returnDevice.original_supplier_name ? (
+                                        <span className="text-[11px] font-bold text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-200 dark:border-emerald-800 px-2 py-0.5 rounded-full">
+                                            Supplied by {returnDevice.original_supplier_name}
+                                            {returnDevice.original_purchase_id ? ` (PO #${returnDevice.original_purchase_id})` : ''}
+                                        </span>
+                                    ) : (
+                                        <span className="text-[11px] font-medium text-amber-600 dark:text-amber-400">
+                                            Select supplier manually (no linked PO)
+                                        </span>
+                                    )}
+                                </div>
+                                <select
+                                    className="saas-input pl-4"
+                                    value={returnForm.supplier_id}
+                                    onChange={e => setReturnForm({ ...returnForm, supplier_id: e.target.value })}
+                                >
+                                    <option value="">-- Choose Supplier --</option>
+                                    {suppliers.map(s => (
+                                        <option key={s.id} value={s.id}>
+                                            {s.name}{Number(s.credit_balance || 0) > 0 ? ` (Credit: UGX ${Number(s.credit_balance).toLocaleString()})` : ''}
+                                        </option>
+                                    ))}
+                                </select>
+                            </div>
+
+                            <div>
+                                <label className="saas-label">Resolution Type *</label>
+                                <div className="grid grid-cols-2 gap-2.5">
+                                    {[
+                                        { id: 'refund', label: 'Refund to Wallet', desc: 'Supplier refunds money to business wallet', icon: Wallet },
+                                        { id: 'supplier_credit', label: 'Supplier Credit', desc: 'Keep value as credit for next purchase', icon: CreditCard },
+                                        { id: 'replacement', label: 'Swap / Exchange', desc: 'Same or different phone + top-up / balance', icon: RefreshCw },
+                                        { id: 'supplier_repair', label: 'Send for Repair', desc: 'Temporarily at supplier (receive back later)', icon: Wrench },
+                                    ].map(opt => {
+                                        const Icon = opt.icon;
+                                        const active = returnForm.resolution === opt.id;
+                                        return (
+                                            <button
+                                                type="button"
+                                                key={opt.id}
+                                                onClick={() => setReturnForm({ ...returnForm, resolution: opt.id })}
+                                                className={`text-left p-3 rounded-xl border transition-all ${
+                                                    active
+                                                        ? 'border-indigo-500 bg-indigo-50/70 dark:bg-indigo-950/40 ring-1 ring-indigo-500'
+                                                        : 'border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600'
+                                                }`}
+                                            >
+                                                <Icon size={15} className={active ? 'text-indigo-600 dark:text-indigo-400 mb-1' : 'text-slate-400 mb-1'} />
+                                                <div className="text-xs font-bold text-slate-900 dark:text-white">{opt.label}</div>
+                                                <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5 leading-tight">{opt.desc}</div>
+                                            </button>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+
+                            {['refund', 'supplier_credit'].includes(returnForm.resolution) && (
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                    <div>
+                                        <label className="saas-label">
+                                            {returnForm.resolution === 'refund' ? 'Refund Amount (UGX) *' : 'Credit Amount (UGX) *'}
+                                        </label>
+                                        <input
+                                            type="number"
+                                            min="0"
+                                            className="saas-input"
+                                            value={returnForm.amount}
+                                            onChange={e => setReturnForm({ ...returnForm, amount: e.target.value })}
+                                        />
+                                    </div>
+                                    {returnForm.resolution === 'refund' && (
+                                        <div>
+                                            <label className="saas-label">Credit Into Business Wallet *</label>
+                                            <select
+                                                className="saas-input pl-4"
+                                                value={returnForm.payment_account_id}
+                                                onChange={e => setReturnForm({ ...returnForm, payment_account_id: e.target.value })}
+                                            >
+                                                <option value="">-- Choose Wallet --</option>
+                                                {paymentAccounts.map(acc => (
+                                                    <option key={acc.id} value={acc.id}>
+                                                        {acc.name} (Bal: {Number(acc.current_balance).toLocaleString()} UGX)
+                                                    </option>
+                                                ))}
+                                            </select>
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+
+                            {returnForm.resolution === 'replacement' && (() => {
+                                const swapDiff = Number(returnForm.replacement_cost_price || 0) - Number(returnForm.return_credit_value || 0);
+                                const selectedSup = suppliers.find(s => String(s.id) === String(returnForm.supplier_id));
+                                const supCredit = Number(selectedSup?.credit_balance || 0);
+                                const serializedProducts = (allProducts || []).filter(p => p.type !== 'bulk');
+
+                                return (
+                                    <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 space-y-3">
+                                        <div className="text-xs font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
+                                            <RefreshCw size={14} className="text-indigo-500" />
+                                            Incoming Replacement / Trade-In Device
+                                        </div>
+
+                                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                            <div>
+                                                <label className="saas-label">New Product Model *</label>
+                                                <select
+                                                    className="saas-input pl-3 text-sm"
+                                                    value={returnForm.replacement_product_id}
+                                                    onChange={e => setReturnForm({ ...returnForm, replacement_product_id: e.target.value })}
+                                                >
+                                                    {serializedProducts.map(p => (
+                                                        <option key={p.id} value={p.id}>
+                                                            {p.brand?.name ? `${p.brand.name} ` : ''}{p.model_name}
+                                                        </option>
+                                                    ))}
+                                                </select>
+                                            </div>
+                                            <div>
+                                                <label className="saas-label">New Device IMEI *</label>
+                                                <input
+                                                    type="text"
+                                                    className="saas-input font-mono text-sm"
+                                                    placeholder="Scan or type new IMEI..."
+                                                    value={returnForm.replacement_imei}
+                                                    onChange={e => setReturnForm({ ...returnForm, replacement_imei: e.target.value })}
+                                                />
+                                            </div>
+                                        </div>
+
+                                        <div className="grid grid-cols-3 gap-2.5">
+                                            <div>
+                                                <label className="saas-label">Storage</label>
+                                                <input
+                                                    type="text"
+                                                    className="saas-input text-sm"
+                                                    placeholder="e.g. 256GB"
+                                                    value={returnForm.replacement_storage}
+                                                    onChange={e => setReturnForm({ ...returnForm, replacement_storage: e.target.value })}
+                                                />
+                                            </div>
+                                            <div>
+                                                <label className="saas-label">Color</label>
+                                                <input
+                                                    type="text"
+                                                    className="saas-input text-sm"
+                                                    placeholder="e.g. Black"
+                                                    value={returnForm.replacement_color}
+                                                    onChange={e => setReturnForm({ ...returnForm, replacement_color: e.target.value })}
+                                                />
+                                            </div>
+                                            <div>
+                                                <label className="saas-label">Condition</label>
+                                                <select
+                                                    className="saas-input pl-3 text-sm"
+                                                    value={returnForm.replacement_condition}
+                                                    onChange={e => setReturnForm({ ...returnForm, replacement_condition: e.target.value })}
+                                                >
+                                                    <option>Brand New</option>
+                                                    <option>Refurbished</option>
+                                                    <option>Used Grade A</option>
+                                                    <option>Used Grade B</option>
+                                                </select>
+                                            </div>
+                                        </div>
+
+                                        <div className="grid grid-cols-3 gap-2.5">
+                                            <div>
+                                                <label className="saas-label">Returned Value (UGX)</label>
+                                                <input
+                                                    type="number"
+                                                    min="0"
+                                                    className="saas-input text-sm"
+                                                    value={returnForm.return_credit_value}
+                                                    onChange={e => setReturnForm({ ...returnForm, return_credit_value: e.target.value })}
+                                                />
+                                            </div>
+                                            <div>
+                                                <label className="saas-label">New Cost Price (UGX)</label>
+                                                <input
+                                                    type="number"
+                                                    min="0"
+                                                    className="saas-input text-sm font-bold"
+                                                    value={returnForm.replacement_cost_price}
+                                                    onChange={e => setReturnForm({ ...returnForm, replacement_cost_price: e.target.value })}
+                                                />
+                                            </div>
+                                            <div>
+                                                <label className="saas-label">New Selling Price</label>
+                                                <input
+                                                    type="number"
+                                                    min="0"
+                                                    className="saas-input text-sm"
+                                                    value={returnForm.replacement_selling_price}
+                                                    onChange={e => setReturnForm({ ...returnForm, replacement_selling_price: e.target.value })}
+                                                />
+                                            </div>
+                                        </div>
+
+                                        {swapDiff === 0 ? (
+                                            <div className="px-3 py-2 rounded-lg bg-indigo-50 dark:bg-indigo-950/40 border border-indigo-200 dark:border-indigo-800 text-xs font-semibold text-indigo-700 dark:text-indigo-300">
+                                                Even Swap — UGX 0 difference (no cash or credit movement).
+                                            </div>
+                                        ) : swapDiff > 0 ? (
+                                            <div className="p-3 rounded-lg bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/60 space-y-2.5">
+                                                <div className="flex items-center justify-between text-xs font-bold text-amber-900 dark:text-amber-300">
+                                                    <span>Top-Up Payable to Supplier:</span>
+                                                    <span className="text-sm font-black">UGX {swapDiff.toLocaleString()}</span>
+                                                </div>
+                                                <div className="grid grid-cols-2 gap-2">
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => setReturnForm({ ...returnForm, difference_settlement: 'wallet' })}
+                                                        className={`px-3 py-2 rounded-lg border text-xs font-bold transition-all ${
+                                                            returnForm.difference_settlement === 'wallet'
+                                                                ? 'border-amber-500 bg-white dark:bg-slate-900 text-amber-800 dark:text-amber-300 ring-1 ring-amber-500'
+                                                                : 'border-amber-200 dark:border-amber-800/60 text-amber-700 dark:text-amber-400'
+                                                        }`}
+                                                    >
+                                                        Pay From Wallet
+                                                    </button>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => setReturnForm({ ...returnForm, difference_settlement: 'supplier_credit' })}
+                                                        className={`px-3 py-2 rounded-lg border text-xs font-bold transition-all ${
+                                                            returnForm.difference_settlement === 'supplier_credit'
+                                                                ? 'border-teal-500 bg-white dark:bg-slate-900 text-teal-700 dark:text-teal-300 ring-1 ring-teal-500'
+                                                                : 'border-amber-200 dark:border-amber-800/60 text-amber-700 dark:text-amber-400'
+                                                        }`}
+                                                    >
+                                                        Use Credit ({supCredit.toLocaleString()})
+                                                    </button>
+                                                </div>
+                                                {returnForm.difference_settlement === 'wallet' && (
+                                                    <select
+                                                        className="saas-input pl-3 text-sm"
+                                                        value={returnForm.payment_account_id}
+                                                        onChange={e => setReturnForm({ ...returnForm, payment_account_id: e.target.value })}
+                                                    >
+                                                        <option value="">-- Choose Business Wallet --</option>
+                                                        {paymentAccounts.map(acc => (
+                                                            <option key={acc.id} value={acc.id}>
+                                                                {acc.name} (Bal: {Number(acc.current_balance).toLocaleString()} UGX)
+                                                            </option>
+                                                        ))}
+                                                    </select>
+                                                )}
+                                            </div>
+                                        ) : (
+                                            <div className="p-3 rounded-lg bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800/60 space-y-2.5">
+                                                <div className="flex items-center justify-between text-xs font-bold text-emerald-900 dark:text-emerald-300">
+                                                    <span>Balance Owed Back by Supplier:</span>
+                                                    <span className="text-sm font-black">UGX {Math.abs(swapDiff).toLocaleString()}</span>
+                                                </div>
+                                                <div className="grid grid-cols-2 gap-2">
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => setReturnForm({ ...returnForm, difference_settlement: 'wallet' })}
+                                                        className={`px-3 py-2 rounded-lg border text-xs font-bold transition-all ${
+                                                            returnForm.difference_settlement === 'wallet'
+                                                                ? 'border-emerald-500 bg-white dark:bg-slate-900 text-emerald-800 dark:text-emerald-300 ring-1 ring-emerald-500'
+                                                                : 'border-emerald-200 dark:border-emerald-800/60 text-emerald-700 dark:text-emerald-400'
+                                                        }`}
+                                                    >
+                                                        Refund to Wallet
+                                                    </button>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => setReturnForm({ ...returnForm, difference_settlement: 'supplier_credit' })}
+                                                        className={`px-3 py-2 rounded-lg border text-xs font-bold transition-all ${
+                                                            returnForm.difference_settlement === 'supplier_credit'
+                                                                ? 'border-teal-500 bg-white dark:bg-slate-900 text-teal-700 dark:text-teal-300 ring-1 ring-teal-500'
+                                                                : 'border-emerald-200 dark:border-emerald-800/60 text-emerald-700 dark:text-emerald-400'
+                                                        }`}
+                                                    >
+                                                        Leave as Supplier Credit
+                                                    </button>
+                                                </div>
+                                                {returnForm.difference_settlement === 'wallet' && (
+                                                    <select
+                                                        className="saas-input pl-3 text-sm"
+                                                        value={returnForm.payment_account_id}
+                                                        onChange={e => setReturnForm({ ...returnForm, payment_account_id: e.target.value })}
+                                                    >
+                                                        <option value="">-- Choose Business Wallet --</option>
+                                                        {paymentAccounts.map(acc => (
+                                                            <option key={acc.id} value={acc.id}>
+                                                                {acc.name} (Bal: {Number(acc.current_balance).toLocaleString()} UGX)
+                                                            </option>
+                                                        ))}
+                                                    </select>
+                                                )}
+                                            </div>
+                                        )}
+                                    </div>
+                                );
+                            })()}
+
+                            {returnForm.resolution === 'supplier_repair' && (
+                                <div className="p-3 rounded-xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/60 text-xs text-amber-800 dark:text-amber-300">
+                                    Device will be marked <strong>At Supplier (Repair)</strong> so it cannot be sold while away. When the supplier returns it, click <strong>Receive Back</strong> on the IMEI row to restore it to <strong>In Stock</strong>.
+                                </div>
+                            )}
+
+                            <div>
+                                <label className="saas-label">Reason / Fault Description *</label>
+                                <input
+                                    type="text"
+                                    className="saas-input"
+                                    placeholder="e.g. Defective motherboard / dead Face ID out of box"
+                                    value={returnForm.reason}
+                                    onChange={e => setReturnForm({ ...returnForm, reason: e.target.value })}
+                                />
+                            </div>
+
+                            <div>
+                                <label className="saas-label">Notes / RMA Reference (Optional)</label>
+                                <input
+                                    type="text"
+                                    className="saas-input"
+                                    placeholder="e.g. Handed to supplier rep John"
+                                    value={returnForm.notes}
+                                    onChange={e => setReturnForm({ ...returnForm, notes: e.target.value })}
+                                />
+                            </div>
+                        </div>
+
+                        <div className="flex justify-end gap-3 mt-6 pt-5 border-t border-slate-100 dark:border-slate-800">
+                            <Button variant="secondary" onClick={() => setReturnDevice(null)}>Cancel</Button>
+                            <Button variant="primary" className="!bg-rose-600 hover:!bg-rose-700" onClick={handleReturnSubmit} isLoading={loading}>
+                                Confirm Supplier Return
+                            </Button>
+                        </div>
+                    </Card>
                 </div>
             )}
 

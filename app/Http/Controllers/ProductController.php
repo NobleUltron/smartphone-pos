@@ -199,6 +199,7 @@ class ProductController extends Controller
             ],
             'partners' => \App\Models\PartnerInvestor::where('is_active', true)->select('id', 'name', 'profit_share_percentage')->get(),
             'paymentAccounts' => PaymentAccount::where('is_active', true)->where('is_personal', false)->orderBy('id')->get(['id', 'name', 'type', 'current_balance']),
+            'suppliers' => \App\Models\Supplier::orderBy('name')->get(['id', 'name', 'credit_balance']),
         ]);
     }
 
@@ -439,6 +440,37 @@ class ProductController extends Controller
     public function viewStock(Product $product)
     {
         $imeis = $product->deviceImeis()->with('partnerInvestor')->orderBy('created_at', 'desc')->get();
+
+        // Map each IMEI to its original supplier & purchase order from purchase_items
+        $imeiSupplierMap = [];
+        $purchaseItems = \App\Models\PurchaseItem::with('purchase.supplier')
+            ->where('product_id', $product->id)
+            ->whereNotNull('imeis')
+            ->orderByDesc('id')
+            ->get();
+
+        foreach ($purchaseItems as $pi) {
+            if (!is_array($pi->imeis) || !$pi->purchase) continue;
+            foreach ($pi->imeis as $imeiStr) {
+                $key = trim((string) $imeiStr);
+                if ($key !== '' && !isset($imeiSupplierMap[$key])) {
+                    $imeiSupplierMap[$key] = [
+                        'supplier_id' => $pi->purchase->supplier_id,
+                        'supplier_name' => $pi->purchase->supplier?->name,
+                        'purchase_id' => $pi->purchase_id,
+                    ];
+                }
+            }
+        }
+
+        $imeis->transform(function ($device) use ($imeiSupplierMap) {
+            $match = $imeiSupplierMap[trim((string) $device->imei)] ?? null;
+            $device->setAttribute('original_supplier_id', $match['supplier_id'] ?? null);
+            $device->setAttribute('original_supplier_name', $match['supplier_name'] ?? null);
+            $device->setAttribute('original_purchase_id', $match['purchase_id'] ?? null);
+            return $device;
+        });
+
         return response()->json(['imeis' => $imeis]);
     }
     public function updateStock(Request $request, DeviceImei $deviceImei)
@@ -563,6 +595,302 @@ class ProductController extends Controller
             null,
             auth()->id()
         );
+    }
+
+    public function returnToSupplier(Request $request, DeviceImei $deviceImei)
+    {
+        if (!in_array($deviceImei->status, ['In Stock', 'Defective'])) {
+            return response()->json([
+                'message' => "Only 'In Stock' or 'Defective' devices can be returned to a supplier (current status: {$deviceImei->status}).",
+            ], 422);
+        }
+
+        $validated = $request->validate([
+            'supplier_id' => 'required|exists:suppliers,id',
+            'resolution' => 'required|in:refund,supplier_credit,replacement,supplier_repair',
+            'amount' => 'required_if:resolution,refund,supplier_credit|nullable|numeric|min:0',
+            'payment_account_id' => 'required_if:resolution,refund|nullable|exists:payment_accounts,id',
+            'replacement_imei' => 'required_if:resolution,replacement|nullable|string|max:50|unique:device_imeis,imei',
+            'replacement_product_id' => 'nullable|exists:products,id',
+            'replacement_storage' => 'nullable|string|max:50',
+            'replacement_color' => 'nullable|string|max:50',
+            'replacement_condition' => 'nullable|string|max:50',
+            'replacement_cost_price' => 'nullable|numeric|min:0',
+            'replacement_selling_price' => 'nullable|numeric|min:0',
+            'return_credit_value' => 'nullable|numeric|min:0',
+            'difference_settlement' => 'nullable|in:wallet,supplier_credit',
+            'reason' => 'required|string|max:1000',
+            'notes' => 'nullable|string|max:1000',
+        ], [
+            'supplier_id.required' => 'Please select the supplier receiving this return.',
+            'payment_account_id.required_if' => 'Please select the business wallet receiving the supplier refund.',
+            'replacement_imei.required_if' => 'Please enter the replacement device IMEI.',
+            'replacement_imei.unique' => 'That replacement IMEI already exists in inventory.',
+        ]);
+
+        try {
+            $result = DB::transaction(function () use ($deviceImei, $validated) {
+                $device = DeviceImei::with('product.brand')->lockForUpdate()->findOrFail($deviceImei->id);
+
+                if (!in_array($device->status, ['In Stock', 'Defective'])) {
+                    throw new \InvalidArgumentException("Device is no longer eligible for supplier return (status: {$device->status}).");
+                }
+
+                $supplier = \App\Models\Supplier::lockForUpdate()->findOrFail($validated['supplier_id']);
+                $resolution = $validated['resolution'];
+                $amount = in_array($resolution, ['refund', 'supplier_credit'])
+                    ? (float) ($validated['amount'] ?? $device->cost_price ?? 0)
+                    : 0.0;
+
+                $brandName = $device->product?->brand?->name ? ($device->product->brand->name . ' ') : '';
+                $productName = $brandName . ($device->product?->model_name ?? 'Device');
+
+                $replacementDevice = null;
+                $paymentAccountId = null;
+                $returnStatus = 'Completed';
+                $settlementNote = '';
+
+                if ($resolution === 'refund') {
+                    $device->status = 'Returned to Supplier';
+                    $device->save();
+
+                    $account = PaymentAccount::where('is_active', true)
+                        ->where('is_personal', false)
+                        ->lockForUpdate()
+                        ->findOrFail($validated['payment_account_id']);
+                    $paymentAccountId = $account->id;
+
+                    if ($amount > 0) {
+                        TreasuryService::recordInflow(
+                            $account,
+                            $amount,
+                            'Supplier Refund',
+                            $device,
+                            "Supplier refund for returned {$productName} (IMEI: {$device->imei}) from {$supplier->name}: {$validated['reason']}",
+                            null,
+                            auth()->id()
+                        );
+                    }
+                } elseif ($resolution === 'supplier_credit') {
+                    $device->status = 'Returned to Supplier';
+                    $device->save();
+
+                    if ($amount > 0) {
+                        $supplier->increment('credit_balance', $amount);
+                    }
+                } elseif ($resolution === 'replacement') {
+                    $device->status = 'Returned to Supplier';
+                    $device->save();
+
+                    $newProductId = !empty($validated['replacement_product_id'])
+                        ? (int) $validated['replacement_product_id']
+                        : $device->product_id;
+                    $newProduct = Product::with('brand')->findOrFail($newProductId);
+                    $newBrandName = $newProduct->brand?->name ? ($newProduct->brand->name . ' ') : '';
+                    $newProductName = $newBrandName . $newProduct->model_name;
+
+                    $returnValue = array_key_exists('return_credit_value', $validated) && $validated['return_credit_value'] !== null
+                        ? (float) $validated['return_credit_value']
+                        : (float) $device->cost_price;
+                    $newCost = array_key_exists('replacement_cost_price', $validated) && $validated['replacement_cost_price'] !== null
+                        ? (float) $validated['replacement_cost_price']
+                        : (float) $device->cost_price;
+                    $newSellingPrice = array_key_exists('replacement_selling_price', $validated) && $validated['replacement_selling_price'] !== null
+                        ? (float) $validated['replacement_selling_price']
+                        : (float) ($newProductId === $device->product_id ? $device->selling_price : ($newProduct->selling_price ?? $newCost));
+
+                    $replacementDevice = DeviceImei::create([
+                        'product_id' => $newProductId,
+                        'imei' => trim($validated['replacement_imei']),
+                        'condition' => !empty($validated['replacement_condition']) ? $validated['replacement_condition'] : $device->condition,
+                        'status' => 'In Stock',
+                        'cost_price' => $newCost,
+                        'initial_cost_price' => $newCost,
+                        'refurbishment_cost' => 0,
+                        'selling_price' => $newSellingPrice,
+                        'storage_capacity' => !empty($validated['replacement_storage']) ? trim($validated['replacement_storage']) : $device->storage_capacity,
+                        'color' => !empty($validated['replacement_color']) ? trim($validated['replacement_color']) : $device->color,
+                        'partner_investor_id' => $device->partner_investor_id,
+                    ]);
+
+                    $diff = round($newCost - $returnValue, 2);
+                    $amount = abs($diff);
+
+                    if ($diff > 0) {
+                        // New device costs MORE -> Shop pays top-up to supplier
+                        $settlement = $validated['difference_settlement'] ?? 'wallet';
+                        if ($settlement === 'supplier_credit') {
+                            if ((float) $supplier->credit_balance < $diff) {
+                                throw new \InvalidArgumentException(
+                                    "Insufficient supplier credit with {$supplier->name} (Available: UGX " . number_format((float) $supplier->credit_balance) . ", Needed: UGX " . number_format($diff) . ")."
+                                );
+                            }
+                            $supplier->decrement('credit_balance', $diff);
+                            $settlementNote = " [Top-Up UGX " . number_format($diff) . " deducted from Supplier Credit]";
+                        } else {
+                            if (empty($validated['payment_account_id'])) {
+                                throw new \InvalidArgumentException('Please select the business wallet used to pay the top-up.');
+                            }
+                            $account = PaymentAccount::where('is_active', true)
+                                ->where('is_personal', false)
+                                ->lockForUpdate()
+                                ->findOrFail($validated['payment_account_id']);
+                            if ((float) $account->current_balance < $diff) {
+                                throw new \InvalidArgumentException(
+                                    "Insufficient balance in {$account->name} (Available: UGX " . number_format((float) $account->current_balance) . ")."
+                                );
+                            }
+                            $paymentAccountId = $account->id;
+                            TreasuryService::recordOutflow(
+                                $account,
+                                $diff,
+                                'Supplier Exchange Top-Up',
+                                $replacementDevice,
+                                "Top-up paid to {$supplier->name} swapping {$productName} ({$device->imei}) for {$newProductName} ({$replacementDevice->imei}): {$validated['reason']}",
+                                null,
+                                auth()->id()
+                            );
+                            $settlementNote = " [Top-Up UGX " . number_format($diff) . " paid via {$account->name}]";
+                        }
+                    } elseif ($diff < 0) {
+                        // New device costs LESS -> Supplier owes balance back to shop
+                        $balanceBack = abs($diff);
+                        $settlement = $validated['difference_settlement'] ?? 'supplier_credit';
+                        if ($settlement === 'wallet') {
+                            if (empty($validated['payment_account_id'])) {
+                                throw new \InvalidArgumentException('Please select the business wallet that received the balance refund.');
+                            }
+                            $account = PaymentAccount::where('is_active', true)
+                                ->where('is_personal', false)
+                                ->lockForUpdate()
+                                ->findOrFail($validated['payment_account_id']);
+                            $paymentAccountId = $account->id;
+                            TreasuryService::recordInflow(
+                                $account,
+                                $balanceBack,
+                                'Supplier Exchange Refund',
+                                $device,
+                                "Balance refund from {$supplier->name} swapping {$productName} ({$device->imei}) for {$newProductName} ({$replacementDevice->imei}): {$validated['reason']}",
+                                null,
+                                auth()->id()
+                            );
+                            $settlementNote = " [Balance UGX " . number_format($balanceBack) . " refunded to {$account->name}]";
+                        } else {
+                            $supplier->increment('credit_balance', $balanceBack);
+                            $settlementNote = " [Balance UGX " . number_format($balanceBack) . " added to Supplier Credit]";
+                        }
+                    }
+                } elseif ($resolution === 'supplier_repair') {
+                    $device->status = 'At Supplier (Repair)';
+                    $device->save();
+                    $returnStatus = 'Pending Return';
+                }
+
+                $fullReason = trim($validated['reason'])
+                    . (!empty($validated['notes']) ? ' — ' . trim($validated['notes']) : '')
+                    . $settlementNote;
+
+                \App\Models\SupplierReturn::create([
+                    'supplier_id' => $supplier->id,
+                    'device_imei_id' => $device->id,
+                    'replacement_imei_id' => $replacementDevice?->id,
+                    'return_type' => 'device_return',
+                    'resolution' => $resolution,
+                    'status' => $returnStatus,
+                    'amount' => $amount,
+                    'payment_account_id' => $paymentAccountId,
+                    'reason' => $fullReason,
+                    'returned_at' => now(),
+                    'user_id' => auth()->id(),
+                ]);
+
+                \App\Models\ActivityLog::log(
+                    'device_returned_to_supplier',
+                    'Inventory',
+                    "Returned {$productName} (IMEI: {$device->imei}) to {$supplier->name} via {$resolution}" . ($amount > 0 ? " (UGX " . number_format($amount) . ")" : '') . ($replacementDevice ? " → Replacement IMEI: {$replacementDevice->imei}" : '') . ": {$validated['reason']}{$settlementNote}",
+                    ['device_imei_id' => $device->id, 'supplier_id' => $supplier->id, 'resolution' => $resolution, 'amount' => $amount]
+                );
+
+                return [
+                    'device' => $device->fresh('partnerInvestor'),
+                    'replacement_device' => $replacementDevice?->load('partnerInvestor'),
+                    'replacement_same_product' => $replacementDevice ? ($replacementDevice->product_id === $device->product_id) : false,
+                ];
+            });
+        } catch (\InvalidArgumentException $e) {
+            return response()->json(['message' => $e->getMessage()], 422);
+        }
+
+        $this->clearInventoryCaches();
+
+        $msg = match ($validated['resolution']) {
+            'refund' => 'Device returned to supplier and refund credited to wallet.',
+            'supplier_credit' => 'Device returned to supplier and credit added to supplier account.',
+            'replacement' => 'Device exchanged with supplier for IMEI ' . trim($validated['replacement_imei']) . ' (In Stock).',
+            'supplier_repair' => 'Device sent to supplier for repair (status: At Supplier (Repair)).',
+        };
+
+        return response()->json([
+            'success' => true,
+            'message' => $msg,
+            'device' => $result['device'],
+            'replacement_device' => $result['replacement_device'],
+            'replacement_same_product' => $result['replacement_same_product'],
+        ]);
+    }
+
+    public function receiveFromSupplier(Request $request, DeviceImei $deviceImei)
+    {
+        if ($deviceImei->status !== 'At Supplier (Repair)') {
+            return response()->json([
+                'message' => 'Only devices currently marked as At Supplier (Repair) can be received back.',
+            ], 422);
+        }
+
+        $validated = $request->validate([
+            'notes' => 'nullable|string|max:1000',
+        ]);
+
+        $updated = DB::transaction(function () use ($deviceImei, $validated) {
+            $device = DeviceImei::with('product.brand')->lockForUpdate()->findOrFail($deviceImei->id);
+            $device->status = 'In Stock';
+            $device->save();
+
+            $openReturn = \App\Models\SupplierReturn::where('device_imei_id', $device->id)
+                ->where('resolution', 'supplier_repair')
+                ->where('status', 'Pending Return')
+                ->latest()
+                ->first();
+
+            if ($openReturn) {
+                $openReturn->status = 'Received Back';
+                $openReturn->received_back_at = now();
+                if (!empty($validated['notes'])) {
+                    $openReturn->reason = trim(($openReturn->reason ? $openReturn->reason . ' | ' : '') . 'Received back: ' . trim($validated['notes']));
+                }
+                $openReturn->save();
+            }
+
+            $brandName = $device->product?->brand?->name ? ($device->product->brand->name . ' ') : '';
+            $productName = $brandName . ($device->product?->model_name ?? 'Device');
+
+            \App\Models\ActivityLog::log(
+                'device_received_from_supplier',
+                'Inventory',
+                "Received repaired {$productName} (IMEI: {$device->imei}) back from supplier into In Stock.",
+                ['device_imei_id' => $device->id]
+            );
+
+            return $device->fresh('partnerInvestor');
+        });
+
+        $this->clearInventoryCaches();
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Device received back from supplier and returned to In Stock.',
+            'device' => $updated,
+        ]);
     }
 
     public function destroyStock(DeviceImei $deviceImei)
