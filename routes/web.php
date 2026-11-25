@@ -361,6 +361,7 @@ Route::middleware('auth')->group(function () {
         Route::post('/api/suppliers', [\App\Http\Controllers\SupplierController::class, 'store']);
         Route::get('/suppliers/{supplier}', [\App\Http\Controllers\SupplierController::class, 'show'])->name('suppliers.show');
         Route::put('/api/suppliers/{supplier}', [\App\Http\Controllers\SupplierController::class, 'update']);
+        Route::post('/api/suppliers/{supplier}/refund-credit', [\App\Http\Controllers\SupplierController::class, 'refundCredit'])->name('suppliers.refund-credit');
         Route::delete('/api/suppliers/{supplier}', [\App\Http\Controllers\SupplierController::class, 'destroy']);
 
         // Purchases

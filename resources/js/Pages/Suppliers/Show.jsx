@@ -24,16 +24,48 @@ export default function SuppliersShow({ auth, supplier, paymentAccounts = [] }) 
     const [isDeleting, setIsDeleting] = useState(false);
     const [paymentModalPurchase, setPaymentModalPurchase] = useState(null);
     const [cancelModalPurchase, setCancelModalPurchase] = useState(null);
+    const [showCreditRefundModal, setShowCreditRefundModal] = useState(false);
 
     const defaultAccountId = paymentAccounts[0]?.id || '';
     const defaultAccountName = paymentAccounts[0]?.name || 'Cash';
 
     const paymentForm = useForm({
         amount: '',
+        credit_amount: '',
         payment_account_id: defaultAccountId,
         payment_method: defaultAccountName,
         notes: ''
     });
+
+    const creditRefundForm = useForm({
+        amount: '',
+        payment_account_id: defaultAccountId,
+        notes: ''
+    });
+
+    const openCreditRefundModal = () => {
+        creditRefundForm.clearErrors();
+        creditRefundForm.setData({
+            amount: Number(supplier.credit_balance || 0),
+            payment_account_id: defaultAccountId,
+            notes: ''
+        });
+        setShowCreditRefundModal(true);
+    };
+
+    const handleCreditRefundSubmit = (e) => {
+        e.preventDefault();
+        creditRefundForm.post(`/api/suppliers/${supplier.id}/refund-credit`, {
+            onSuccess: () => {
+                setShowCreditRefundModal(false);
+                toast.success('Supplier credit refund recorded into wallet');
+            },
+            onError: (errs) => {
+                const message = errs?.amount || errs?.payment_account_id || errs?.error || Object.values(errs || {})[0] || 'Failed to record credit refund';
+                toast.error(message, { duration: 6000 });
+            }
+        });
+    };
 
     const cancelForm = useForm({
         resolution: 'refund',
@@ -70,10 +102,16 @@ export default function SuppliersShow({ auth, supplier, paymentAccounts = [] }) 
     };
 
     const openPaymentModal = (purchase) => {
-        const remaining = Number(purchase.total_amount) - Number(purchase.paid_amount);
+        const remaining = Math.max(0, Number(purchase.total_amount) - Number(purchase.paid_amount));
+        const availCredit = Math.max(0, Number(supplier.credit_balance || 0));
+        const autoCredit = availCredit > 0 ? Math.min(availCredit, remaining) : 0;
+        const autoWallet = Math.max(0, remaining - autoCredit);
+
         setPaymentModalPurchase(purchase);
+        paymentForm.clearErrors();
         paymentForm.setData({
-            amount: remaining > 0 ? remaining : '',
+            amount: autoWallet,
+            credit_amount: autoCredit,
             payment_account_id: defaultAccountId,
             payment_method: defaultAccountName,
             notes: ''
@@ -89,7 +127,7 @@ export default function SuppliersShow({ auth, supplier, paymentAccounts = [] }) 
                 toast.success('Supplier payment recorded successfully');
             },
             onError: (errs) => {
-                const message = errs?.amount || errs?.payment_method || errs?.error || Object.values(errs || {})[0] || 'Failed to record payment';
+                const message = errs?.amount || errs?.credit_amount || errs?.payment_method || errs?.error || Object.values(errs || {})[0] || 'Failed to record payment';
                 toast.error(message, { duration: 6000 });
             }
         });
@@ -193,9 +231,16 @@ export default function SuppliersShow({ auth, supplier, paymentAccounts = [] }) 
                                 <div className="text-3xl font-black text-teal-600 dark:text-teal-400">
                                     {Number(supplier.credit_balance).toLocaleString()} <span className="text-base">UGX</span>
                                 </div>
-                                <p className="text-xs text-teal-700 dark:text-teal-400/90 font-medium mt-2">
-                                    Credit owed to your shop from returned devices or cancelled prepaid orders.
+                                <p className="text-xs text-teal-700 dark:text-teal-400/90 font-medium mt-2 mb-4">
+                                    Credit owed to your shop from returned devices or cancelled prepaid orders. You can apply it when paying a balance, on a new purchase, or receive it back in cash/MoMo/bank.
                                 </p>
+                                <Button
+                                    variant="primary"
+                                    className="w-full !bg-teal-600 hover:!bg-teal-700 text-white font-bold py-2 text-sm flex items-center justify-center gap-2"
+                                    onClick={openCreditRefundModal}
+                                >
+                                    <Wallet size={16} /> Receive Refund from Credit
+                                </Button>
                             </div>
                         )}
 
@@ -422,14 +467,22 @@ export default function SuppliersShow({ auth, supplier, paymentAccounts = [] }) 
                                                         replacement: 'Replacement Swap',
                                                         supplier_repair: 'Supplier Repair',
                                                         forfeited: 'Forfeited Deposit',
+                                                        applied_to_purchase: 'Applied to Purchase',
                                                         none: 'No Payment',
                                                     }[ret.resolution] || ret.resolution;
+
+                                                    const typeLabel = {
+                                                        purchase_cancellation: 'Cancelled Order',
+                                                        device_return: 'Device Return',
+                                                        credit_applied: 'Credit Used',
+                                                        credit_refund: 'Credit Refund',
+                                                    }[ret.return_type] || 'Supplier Return';
 
                                                     return (
                                                         <tr key={ret.id} className="hover:bg-slate-50/70 dark:hover:bg-slate-800/40">
                                                             <td className="px-5 py-3.5">
                                                                 <div className="font-bold text-slate-800 dark:text-slate-100 text-xs">
-                                                                    {ret.return_type === 'purchase_cancellation' ? 'Cancelled Order' : 'Device Return'}
+                                                                    {typeLabel}
                                                                 </div>
                                                                 <div className="text-[11px] text-slate-500 mt-0.5">
                                                                     {new Date(ret.created_at).toLocaleDateString()}
@@ -750,13 +803,132 @@ export default function SuppliersShow({ auth, supplier, paymentAccounts = [] }) 
                 </Modal>
             )}
 
-            {/* Record Payment Modal */}
-            {paymentModalPurchase && (
-                <Modal show={true} onClose={() => setPaymentModalPurchase(null)} maxWidth="md">
-                    <div className="p-6 bg-white rounded-2xl">
-                        <div className="flex items-center justify-between pb-4 border-b border-slate-100 mb-6">
+            {/* Receive Refund from Supplier Credit Modal */}
+            {showCreditRefundModal && (
+                <Modal show={true} onClose={() => !creditRefundForm.processing && setShowCreditRefundModal(false)} maxWidth="md">
+                    <div className="p-6 bg-white dark:bg-slate-900 rounded-2xl">
+                        <div className="flex items-center justify-between pb-4 border-b border-slate-100 dark:border-slate-800 mb-5">
                             <div>
-                                <h3 className="font-bold text-lg text-slate-900 flex items-center gap-2">
+                                <h3 className="font-bold text-lg text-slate-900 dark:text-white flex items-center gap-2">
+                                    <Wallet size={20} className="text-teal-600" />
+                                    Receive Refund from Credit
+                                </h3>
+                                <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">{supplier.name}</p>
+                            </div>
+                            <button onClick={() => setShowCreditRefundModal(false)} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors">
+                                <X size={20} />
+                            </button>
+                        </div>
+
+                        <form onSubmit={handleCreditRefundSubmit} className="space-y-4">
+                            {Object.keys(creditRefundForm.errors).length > 0 && (
+                                <div className="bg-rose-50 text-rose-800 p-3 rounded-xl text-xs border border-rose-200 flex items-start gap-2 font-medium">
+                                    <AlertTriangle size={16} className="mt-0.5 shrink-0 text-rose-600" />
+                                    <div>
+                                        {Object.values(creditRefundForm.errors).map((err, i) => (
+                                            <div key={i}>{err}</div>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+
+                            <div className="p-3.5 rounded-xl bg-teal-50 dark:bg-teal-950/30 border border-teal-200 dark:border-teal-800/60 flex items-center justify-between">
+                                <span className="text-xs font-bold text-teal-900 dark:text-teal-300">Available Supplier Credit:</span>
+                                <span className="text-base font-black text-teal-700 dark:text-teal-400">
+                                    UGX {Number(supplier.credit_balance || 0).toLocaleString()}
+                                </span>
+                            </div>
+
+                            <div>
+                                <div className="flex items-center justify-between mb-1">
+                                    <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300">
+                                        Refund Amount Received (UGX) *
+                                    </label>
+                                    <button
+                                        type="button"
+                                        onClick={() => creditRefundForm.setData('amount', Number(supplier.credit_balance || 0))}
+                                        className="text-[11px] font-bold text-teal-600 hover:text-teal-700"
+                                    >
+                                        Full Credit
+                                    </button>
+                                </div>
+                                <input
+                                    type="number"
+                                    min="1"
+                                    max={Number(supplier.credit_balance || 0)}
+                                    className="saas-input w-full text-lg font-bold text-slate-900 dark:text-white"
+                                    value={creditRefundForm.data.amount}
+                                    onChange={e => creditRefundForm.setData('amount', e.target.value)}
+                                    required
+                                />
+                                {Number(creditRefundForm.data.amount || 0) > 0 && Number(creditRefundForm.data.amount || 0) < Number(supplier.credit_balance || 0) && (
+                                    <p className="text-[11px] text-teal-700 dark:text-teal-400 mt-1 font-medium">
+                                        Remaining credit after partial refund: <strong>UGX {(Number(supplier.credit_balance || 0) - Number(creditRefundForm.data.amount || 0)).toLocaleString()}</strong>
+                                    </p>
+                                )}
+                            </div>
+
+                            <div>
+                                <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                                    Deposit Into Business Wallet *
+                                </label>
+                                <select
+                                    className="saas-input w-full font-medium"
+                                    value={creditRefundForm.data.payment_account_id}
+                                    onChange={e => creditRefundForm.setData('payment_account_id', e.target.value)}
+                                    required
+                                >
+                                    <option value="">-- Choose Business Wallet --</option>
+                                    {paymentAccounts.map(account => (
+                                        <option key={account.id} value={account.id}>
+                                            {account.name} ({account.provider || account.type}) — Bal: UGX {Number(account.current_balance || 0).toLocaleString()}
+                                        </option>
+                                    ))}
+                                </select>
+                            </div>
+
+                            <div>
+                                <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                                    Notes / Reference (Optional)
+                                </label>
+                                <input
+                                    type="text"
+                                    className="saas-input w-full text-sm"
+                                    placeholder="e.g. Refunded via MTN MoMo ref #44821"
+                                    value={creditRefundForm.data.notes}
+                                    onChange={e => creditRefundForm.setData('notes', e.target.value)}
+                                />
+                            </div>
+
+                            <div className="flex justify-end gap-3 pt-4 border-t border-slate-100 dark:border-slate-800">
+                                <Button variant="secondary" type="button" onClick={() => setShowCreditRefundModal(false)}>
+                                    Cancel
+                                </Button>
+                                <Button variant="primary" type="submit" isLoading={creditRefundForm.processing} className="!bg-teal-600 hover:!bg-teal-700">
+                                    Confirm Refund
+                                </Button>
+                            </div>
+                        </form>
+                    </div>
+                </Modal>
+            )}
+
+            {/* Record Payment Modal */}
+            {paymentModalPurchase && (() => {
+                const remaining = Math.max(0, Number(paymentModalPurchase.total_amount) - Number(paymentModalPurchase.paid_amount));
+                const availCredit = Math.max(0, Number(supplier.credit_balance || 0));
+                const maxCreditApplicable = Math.min(availCredit, remaining);
+                const creditNum = Math.max(0, Number(paymentForm.data.credit_amount || 0));
+                const walletNum = Math.max(0, Number(paymentForm.data.amount || 0));
+                const totalApplied = creditNum + walletNum;
+                const newRemaining = Math.max(0, remaining - totalApplied);
+
+                return (
+                <Modal show={true} onClose={() => setPaymentModalPurchase(null)} maxWidth="md">
+                    <div className="p-6 bg-white dark:bg-slate-900 rounded-2xl">
+                        <div className="flex items-center justify-between pb-4 border-b border-slate-100 dark:border-slate-800 mb-5">
+                            <div>
+                                <h3 className="font-bold text-lg text-slate-900 dark:text-white flex items-center gap-2">
                                     <DollarSign size={20} className="text-emerald-600" />
                                     Record Supplier Payment
                                 </h3>
@@ -778,83 +950,156 @@ export default function SuppliersShow({ auth, supplier, paymentAccounts = [] }) 
                                     </div>
                                 </div>
                             )}
-                            <div className="bg-slate-50 border border-slate-100 rounded-xl p-4 mb-6 space-y-2 text-sm">
+                            <div className="bg-slate-50 dark:bg-slate-800/60 border border-slate-100 dark:border-slate-800 rounded-xl p-4 mb-5 space-y-2 text-sm">
                                 <div className="flex justify-between">
                                     <span className="text-slate-500">Total Purchase Cost:</span>
-                                    <span className="font-bold text-slate-900">{Number(paymentModalPurchase.total_amount).toLocaleString()} UGX</span>
+                                    <span className="font-bold text-slate-900 dark:text-white">{Number(paymentModalPurchase.total_amount).toLocaleString()} UGX</span>
                                 </div>
                                 <div className="flex justify-between">
                                     <span className="text-slate-500">Amount Paid So Far:</span>
                                     <span className="font-semibold text-emerald-600">{Number(paymentModalPurchase.paid_amount).toLocaleString()} UGX</span>
                                 </div>
-                                <div className="flex justify-between pt-2 border-t border-slate-200 text-base font-extrabold">
-                                    <span className="text-slate-900">Remaining Balance:</span>
+                                <div className="flex justify-between pt-2 border-t border-slate-200 dark:border-slate-700 text-base font-extrabold">
+                                    <span className="text-slate-900 dark:text-white">Remaining Balance:</span>
                                     <span className="text-rose-600">
-                                        {Number(paymentModalPurchase.total_amount - paymentModalPurchase.paid_amount).toLocaleString()} UGX
+                                        {remaining.toLocaleString()} UGX
                                     </span>
                                 </div>
                             </div>
 
-                            <div className="space-y-4 mb-6">
+                            <div className="space-y-4 mb-5">
+                                {availCredit > 0 && (
+                                    <div className="p-3.5 rounded-xl bg-teal-50/80 dark:bg-teal-950/30 border border-teal-200 dark:border-teal-800/60 space-y-2">
+                                        <div className="flex items-center justify-between gap-2">
+                                            <label className="text-xs font-bold text-teal-900 dark:text-teal-300 flex items-center gap-1.5">
+                                                <CreditCard size={14} className="text-teal-600" />
+                                                Apply Supplier Credit (Avail: {availCredit.toLocaleString()} UGX)
+                                            </label>
+                                            <div className="flex items-center gap-2">
+                                                <button
+                                                    type="button"
+                                                    onClick={() => paymentForm.setData(prev => ({
+                                                        ...prev,
+                                                        credit_amount: maxCreditApplicable,
+                                                        amount: Math.max(0, remaining - maxCreditApplicable),
+                                                    }))}
+                                                    className="text-[11px] font-bold text-teal-700 dark:text-teal-300 hover:underline"
+                                                >
+                                                    Use Max
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => paymentForm.setData(prev => ({
+                                                        ...prev,
+                                                        credit_amount: 0,
+                                                    }))}
+                                                    className="text-[11px] font-semibold text-slate-500 hover:underline"
+                                                >
+                                                    Clear
+                                                </button>
+                                            </div>
+                                        </div>
+                                        <input
+                                            type="number"
+                                            min="0"
+                                            max={maxCreditApplicable}
+                                            className="saas-input w-full text-base font-bold text-teal-900 dark:text-white"
+                                            placeholder="0"
+                                            value={paymentForm.data.credit_amount}
+                                            onChange={e => paymentForm.setData('credit_amount', e.target.value)}
+                                        />
+                                        <p className="text-[11px] text-teal-700 dark:text-teal-400">
+                                            Use all or part of your credit. Set Wallet Payment below to <strong>0</strong> to pay with credit only and leave the rest for later.
+                                        </p>
+                                    </div>
+                                )}
+
                                 <div>
-                                    <label className="block text-sm font-semibold text-slate-700 mb-1">Payment Amount (UGX)</label>
+                                    <div className="flex items-center justify-between mb-1">
+                                        <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300">
+                                            {availCredit > 0 ? 'Additional Payment From Wallet (UGX)' : 'Payment Amount (UGX)'}
+                                        </label>
+                                        {availCredit > 0 && creditNum < remaining && (
+                                            <button
+                                                type="button"
+                                                onClick={() => paymentForm.setData('amount', Math.max(0, remaining - creditNum))}
+                                                className="text-[11px] font-bold text-emerald-600 hover:underline"
+                                            >
+                                                Pay Rest ({Math.max(0, remaining - creditNum).toLocaleString()})
+                                            </button>
+                                        )}
+                                    </div>
                                     <input 
                                         type="number" 
-                                        className="saas-input w-full text-lg font-bold text-slate-900"
-                                        min="1"
-                                        max={paymentModalPurchase.total_amount - paymentModalPurchase.paid_amount}
+                                        className="saas-input w-full text-lg font-bold text-slate-900 dark:text-white"
+                                        min="0"
+                                        max={Math.max(0, remaining - creditNum)}
                                         value={paymentForm.data.amount}
                                         onChange={e => paymentForm.setData('amount', e.target.value)}
-                                        required
                                     />
                                 </div>
 
-                                <div>
-                                    <label className="block text-sm font-semibold text-slate-700 mb-1">
-                                        Pay From Account / Float *
-                                    </label>
-                                    {paymentAccounts && paymentAccounts.length > 0 ? (
-                                        <>
+                                {walletNum > 0 && (
+                                    <div>
+                                        <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                                            Pay From Account / Float *
+                                        </label>
+                                        {paymentAccounts && paymentAccounts.length > 0 ? (
+                                            <>
+                                                <select 
+                                                    className="saas-input w-full font-medium"
+                                                    value={paymentForm.data.payment_account_id}
+                                                    onChange={e => {
+                                                        const accId = e.target.value;
+                                                        const selectedAcc = paymentAccounts.find(a => String(a.id) === String(accId));
+                                                        paymentForm.setData(prev => ({
+                                                            ...prev,
+                                                            payment_account_id: accId,
+                                                            payment_method: selectedAcc ? selectedAcc.name : 'Cash'
+                                                        }));
+                                                    }}
+                                                >
+                                                    {paymentAccounts.map(account => (
+                                                        <option key={account.id} value={account.id}>
+                                                            {account.name} ({account.provider || account.type}) — Bal: UGX {Number(account.current_balance || 0).toLocaleString()}
+                                                        </option>
+                                                    ))}
+                                                </select>
+                                                {paymentAccounts.find(a => String(a.id) === String(paymentForm.data.payment_account_id)) && (
+                                                    <p className="text-[11px] text-slate-500 mt-1 font-medium">
+                                                        Available funds in selected account: <span className="font-bold text-emerald-700">UGX {Number(paymentAccounts.find(a => String(a.id) === String(paymentForm.data.payment_account_id)).current_balance || 0).toLocaleString()}</span>
+                                                    </p>
+                                                )}
+                                            </>
+                                        ) : (
                                             <select 
-                                                className="saas-input w-full font-medium"
-                                                value={paymentForm.data.payment_account_id}
-                                                onChange={e => {
-                                                    const accId = e.target.value;
-                                                    const selectedAcc = paymentAccounts.find(a => String(a.id) === String(accId));
-                                                    paymentForm.setData(prev => ({
-                                                        ...prev,
-                                                        payment_account_id: accId,
-                                                        payment_method: selectedAcc ? selectedAcc.name : 'Cash'
-                                                    }));
-                                                }}
+                                                className="saas-input w-full"
+                                                value={paymentForm.data.payment_method}
+                                                onChange={e => paymentForm.setData('payment_method', e.target.value)}
                                             >
-                                                {paymentAccounts.map(account => (
-                                                    <option key={account.id} value={account.id}>
-                                                        {account.name} ({account.provider || account.type}) — Bal: UGX {Number(account.current_balance || 0).toLocaleString()}
-                                                    </option>
-                                                ))}
+                                                <option value="Cash">Cash (Cash Register / Drawer)</option>
+                                                <option value="Mobile Money">Mobile Money</option>
+                                                <option value="Bank Transfer">Bank Transfer</option>
                                             </select>
-                                            {paymentAccounts.find(a => String(a.id) === String(paymentForm.data.payment_account_id)) && (
-                                                <p className="text-[11px] text-slate-500 mt-1 font-medium">
-                                                    Available funds in selected account: <span className="font-bold text-emerald-700">UGX {Number(paymentAccounts.find(a => String(a.id) === String(paymentForm.data.payment_account_id)).current_balance || 0).toLocaleString()}</span>
-                                                </p>
-                                            )}
-                                        </>
-                                    ) : (
-                                        <select 
-                                            className="saas-input w-full"
-                                            value={paymentForm.data.payment_method}
-                                            onChange={e => paymentForm.setData('payment_method', e.target.value)}
-                                        >
-                                            <option value="Cash">Cash (Cash Register / Drawer)</option>
-                                            <option value="Mobile Money">Mobile Money</option>
-                                            <option value="Bank Transfer">Bank Transfer</option>
-                                        </select>
-                                    )}
-                                </div>
+                                        )}
+                                    </div>
+                                )}
+
+                                {totalApplied > 0 && (
+                                    <div className="p-3 rounded-xl bg-emerald-50/70 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800/60 text-xs space-y-1">
+                                        <div className="flex justify-between font-bold text-emerald-900 dark:text-emerald-300">
+                                            <span>Total Applied Now:</span>
+                                            <span>UGX {totalApplied.toLocaleString()}</span>
+                                        </div>
+                                        <div className="flex justify-between text-slate-600 dark:text-slate-400">
+                                            <span>New Remaining Balance:</span>
+                                            <span className="font-bold">{newRemaining === 0 ? 'UGX 0 (Paid in Full)' : `UGX ${newRemaining.toLocaleString()}`}</span>
+                                        </div>
+                                    </div>
+                                )}
 
                                 <div>
-                                    <label className="block text-sm font-semibold text-slate-700 mb-1">Notes / Reference (Optional)</label>
+                                    <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">Notes / Reference (Optional)</label>
                                     <input 
                                         type="text"
                                         className="saas-input w-full text-sm"
@@ -865,7 +1110,7 @@ export default function SuppliersShow({ auth, supplier, paymentAccounts = [] }) 
                                 </div>
                             </div>
 
-                            <div className="flex justify-end gap-3 pt-4 border-t border-slate-100">
+                            <div className="flex justify-end gap-3 pt-4 border-t border-slate-100 dark:border-slate-800">
                                 <Button variant="secondary" type="button" onClick={() => setPaymentModalPurchase(null)}>
                                     Cancel
                                 </Button>
@@ -876,7 +1121,8 @@ export default function SuppliersShow({ auth, supplier, paymentAccounts = [] }) 
                         </form>
                     </div>
                 </Modal>
-            )}
+                );
+            })()}
         </AuthenticatedLayout>
     );
 }

@@ -5,7 +5,7 @@ import PageHeader from '@/Components/SaaS/PageHeader';
 import Card from '@/Components/SaaS/Card';
 import Button from '@/Components/SaaS/Button';
 import SearchableSelect from '@/Components/SaaS/SearchableSelect';
-import { Package, Plus, Trash2, Save, X, Search, AlertTriangle } from 'lucide-react';
+import { Package, Plus, Trash2, Save, X, Search, AlertTriangle, CreditCard } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 export default function PurchasesCreate({ auth, suppliers, products, paymentAccounts = [], selected_supplier_id = '' }) {
@@ -14,11 +14,15 @@ export default function PurchasesCreate({ auth, suppliers, products, paymentAcco
         reference_no: '',
         total_amount: '',
         paid_amount: '',
+        credit_applied: '',
         payment_account_id: paymentAccounts?.[0]?.id || '',
         status: 'Received',
         purchase_date: new Date().toISOString().split('T')[0],
         items: [] // { product_id, quantity, unit_cost, imeis: [] }
     });
+
+    const selectedSupplier = suppliers.find(s => String(s.id) === String(data.supplier_id));
+    const availableSupplierCredit = Math.max(0, Number(selectedSupplier?.credit_balance || 0));
 
     const [imeiInputs, setImeiInputs] = useState({});
 
@@ -115,8 +119,17 @@ export default function PurchasesCreate({ auth, suppliers, products, paymentAcco
             }
         }
 
-        if (Number(data.paid_amount) > Number(data.total_amount)) {
-            toast.error(`Amount paid (${Number(data.paid_amount).toLocaleString()} UGX) cannot exceed total purchase cost (${Number(data.total_amount).toLocaleString()} UGX).`);
+        const walletPaid = Number(data.paid_amount || 0);
+        const creditUsed = Number(data.credit_applied || 0);
+        const totalCost = Number(data.total_amount || 0);
+
+        if (creditUsed > availableSupplierCredit) {
+            toast.error(`Supplier credit applied (${creditUsed.toLocaleString()} UGX) exceeds available credit (${availableSupplierCredit.toLocaleString()} UGX).`);
+            return;
+        }
+
+        if (walletPaid + creditUsed > totalCost) {
+            toast.error(`Combined credit + wallet payment (${(walletPaid + creditUsed).toLocaleString()} UGX) cannot exceed total purchase cost (${totalCost.toLocaleString()} UGX).`);
             return;
         }
 
@@ -159,11 +172,13 @@ export default function PurchasesCreate({ auth, suppliers, products, paymentAcco
                                     className="saas-input w-full" 
                                     required
                                     value={data.supplier_id}
-                                    onChange={e => setData('supplier_id', e.target.value)}
+                                    onChange={e => setData(prev => ({ ...prev, supplier_id: e.target.value, credit_applied: '' }))}
                                 >
                                     <option value="" disabled>Select a supplier...</option>
                                     {suppliers.map(s => (
-                                        <option key={s.id} value={s.id}>{s.name}</option>
+                                        <option key={s.id} value={s.id}>
+                                            {s.name}{Number(s.credit_balance || 0) > 0 ? ` (Credit: UGX ${Number(s.credit_balance).toLocaleString()})` : ''}
+                                        </option>
                                     ))}
                                 </select>
                                 {errors.supplier_id && <div className="text-rose-500 text-xs mt-1">{errors.supplier_id}</div>}
@@ -385,11 +400,59 @@ export default function PurchasesCreate({ auth, suppliers, products, paymentAcco
                     </Card>
 
                     {/* Payment */}
-                    <Card className="bg-emerald-50/50 border-emerald-100">
+                    <Card className="bg-emerald-50/50 border-emerald-100 space-y-4">
+                        {availableSupplierCredit > 0 && (
+                            <div className="flex flex-col md:flex-row md:justify-between md:items-center gap-4 pb-4 border-b border-emerald-200/70">
+                                <div>
+                                    <h3 className="font-bold text-teal-900 mb-1 flex items-center gap-2">
+                                        <CreditCard size={18} className="text-teal-600" />
+                                        Apply Supplier Credit
+                                    </h3>
+                                    <p className="text-sm text-teal-700">
+                                        <strong>{selectedSupplier?.name}</strong> has <strong>UGX {availableSupplierCredit.toLocaleString()}</strong> available credit. Apply all or part of it to this shipment.
+                                    </p>
+                                </div>
+                                <div className="w-full md:w-80 space-y-1.5">
+                                    <div className="flex items-center justify-end gap-3 text-[11px] font-bold">
+                                        <button
+                                            type="button"
+                                            onClick={() => {
+                                                const maxC = Math.min(availableSupplierCredit, calculateTotal());
+                                                setData('credit_applied', maxC);
+                                            }}
+                                            className="text-teal-700 hover:underline"
+                                        >
+                                            Use Max ({Math.min(availableSupplierCredit, calculateTotal() || availableSupplierCredit).toLocaleString()})
+                                        </button>
+                                        {Number(data.credit_applied || 0) > 0 && (
+                                            <button type="button" onClick={() => setData('credit_applied', '')} className="text-slate-500 hover:underline">
+                                                Clear
+                                            </button>
+                                        )}
+                                    </div>
+                                    <div className="relative">
+                                        <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-xs font-bold text-teal-600">UGX</span>
+                                        <input
+                                            type="number"
+                                            className="saas-input w-full text-right font-bold text-lg py-2 pl-12 text-teal-900 border-teal-200 focus:border-teal-500 focus:ring-teal-500 rounded-xl"
+                                            placeholder="0"
+                                            min="0"
+                                            max={Math.min(availableSupplierCredit, calculateTotal() || availableSupplierCredit)}
+                                            value={data.credit_applied}
+                                            onChange={e => setData('credit_applied', e.target.value)}
+                                        />
+                                    </div>
+                                    {errors.credit_applied && <div className="text-rose-500 text-xs text-right font-bold">{errors.credit_applied}</div>}
+                                </div>
+                            </div>
+                        )}
+
                         <div className="flex flex-col md:flex-row md:justify-between md:items-center gap-4">
                             <div>
-                                <h3 className="font-bold text-emerald-900 mb-1">Payment Made</h3>
-                                <p className="text-sm text-emerald-700">How much are you paying the supplier upfront for this shipment?</p>
+                                <h3 className="font-bold text-emerald-900 mb-1">
+                                    {availableSupplierCredit > 0 ? 'Cash / Wallet Payment Made' : 'Payment Made'}
+                                </h3>
+                                <p className="text-sm text-emerald-700">How much are you paying the supplier upfront from a business wallet?</p>
                             </div>
                             <div className="w-full md:w-80 space-y-2">
                                 <div className="relative">
@@ -399,7 +462,7 @@ export default function PurchasesCreate({ auth, suppliers, products, paymentAcco
                                         className="saas-input w-full text-right font-bold text-xl py-2.5 pl-12 text-emerald-900 border-emerald-200 focus:border-emerald-500 focus:ring-emerald-500 rounded-xl"
                                         placeholder="0"
                                         min="0"
-                                        max={data.total_amount || 9999999999}
+                                        max={Math.max(0, (Number(data.total_amount) || 9999999999) - Number(data.credit_applied || 0))}
                                         value={data.paid_amount}
                                         onChange={e => setData('paid_amount', e.target.value)}
                                     />
@@ -426,8 +489,13 @@ export default function PurchasesCreate({ auth, suppliers, products, paymentAcco
                                 )}
 
                                 {data.total_amount > 0 && (
-                                    <div className="text-[11px] text-slate-500 text-right font-medium">
-                                        Total shipment cost: <strong className="text-emerald-700">{Number(data.total_amount).toLocaleString()} UGX</strong>
+                                    <div className="text-[11px] text-slate-600 text-right font-medium space-y-0.5 pt-1">
+                                        <div>
+                                            Total Paid Upfront: <strong className="text-emerald-700">{(Number(data.paid_amount || 0) + Number(data.credit_applied || 0)).toLocaleString()} UGX</strong>
+                                        </div>
+                                        <div>
+                                            Remaining Balance: <strong className="text-rose-600">{Math.max(0, Number(data.total_amount) - Number(data.paid_amount || 0) - Number(data.credit_applied || 0)).toLocaleString()} UGX</strong>
+                                        </div>
                                     </div>
                                 )}
                             </div>

@@ -116,6 +116,77 @@ class SupplierController extends Controller
         return redirect()->back()->with('success', 'Supplier updated successfully.');
     }
 
+    public function refundCredit(Request $request, Supplier $supplier)
+    {
+        $available = (float) ($supplier->credit_balance ?? 0);
+        if ($available <= 0) {
+            return redirect()->back()->withErrors(['amount' => 'This supplier has no available credit balance to refund.']);
+        }
+
+        $validated = $request->validate([
+            'amount' => 'required|numeric|min:1|max:' . $available,
+            'payment_account_id' => 'required|exists:payment_accounts,id',
+            'notes' => 'nullable|string|max:500',
+        ], [
+            'amount.max' => 'Refund amount cannot exceed available supplier credit of ' . number_format($available) . ' UGX.',
+            'payment_account_id.required' => 'Please select the business wallet that received the refund.',
+        ]);
+
+        $amount = (float) $validated['amount'];
+        $accountName = '';
+
+        \Illuminate\Support\Facades\DB::transaction(function () use ($supplier, $validated, $amount, &$accountName) {
+            $lockedSupplier = Supplier::lockForUpdate()->findOrFail($supplier->id);
+            if ($amount > (float) ($lockedSupplier->credit_balance ?? 0)) {
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                    'amount' => 'Refund amount exceeds available supplier credit.',
+                ]);
+            }
+
+            $account = \App\Models\PaymentAccount::where('is_active', true)
+                ->where('is_personal', false)
+                ->lockForUpdate()
+                ->findOrFail($validated['payment_account_id']);
+            $accountName = $account->name;
+
+            $lockedSupplier->decrement('credit_balance', $amount);
+
+            $notes = trim((string) ($validated['notes'] ?? ''));
+            $desc = "Supplier credit refund from {$lockedSupplier->name}" . ($notes !== '' ? ": {$notes}" : '');
+
+            \App\Services\TreasuryService::recordInflow(
+                $account,
+                $amount,
+                'Supplier Credit Refund',
+                $lockedSupplier,
+                $desc,
+                $notes !== '' ? $notes : null,
+                auth()->id()
+            );
+
+            \App\Models\SupplierReturn::create([
+                'supplier_id' => $lockedSupplier->id,
+                'return_type' => 'credit_refund',
+                'resolution' => 'refund',
+                'status' => 'Completed',
+                'amount' => $amount,
+                'payment_account_id' => $account->id,
+                'reason' => 'Supplier refunded credit balance' . ($notes !== '' ? " — {$notes}" : ''),
+                'returned_at' => now(),
+                'user_id' => auth()->id(),
+            ]);
+
+            \App\Models\ActivityLog::log(
+                'supplier_credit_refunded',
+                'Suppliers',
+                "Received UGX " . number_format($amount) . " credit refund from {$lockedSupplier->name} into {$account->name}" . ($notes !== '' ? " ({$notes})" : ''),
+                ['supplier_id' => $lockedSupplier->id, 'amount' => $amount, 'payment_account_id' => $account->id]
+            );
+        });
+
+        return redirect()->back()->with('success', 'Received UGX ' . number_format($amount) . ' refund from supplier credit into ' . $accountName . '.');
+    }
+
     public function destroy(Supplier $supplier)
     {
         if ($supplier->recalculateBalance() > 0) {

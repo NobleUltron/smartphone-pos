@@ -25,7 +25,8 @@ class PurchaseController extends Controller
             'supplier_id' => 'required|exists:suppliers,id',
             'reference_no' => 'nullable|string|max:255',
             'total_amount' => 'required|numeric|min:0|max:9999999999',
-            'paid_amount' => 'required|numeric|min:0|lte:total_amount|max:9999999999',
+            'paid_amount' => 'nullable|numeric|min:0|max:9999999999',
+            'credit_applied' => 'nullable|numeric|min:0|max:9999999999',
             'payment_account_id' => 'nullable|exists:payment_accounts,id',
             'status' => 'required|in:Pending,Received',
             'purchase_date' => 'required|date',
@@ -73,30 +74,50 @@ class PurchaseController extends Controller
             }
         }
 
-        // Validate and resolve payment account if paid_amount > 0
-        $paidAmount = floatval($validated['paid_amount'] ?? 0);
+        // Validate supplier credit and wallet payment
+        $walletPaid = floatval($validated['paid_amount'] ?? 0);
+        $creditApplied = floatval($validated['credit_applied'] ?? 0);
+        $totalPaid = $walletPaid + $creditApplied;
+
+        if ($totalPaid > floatval($validated['total_amount'])) {
+            throw \Illuminate\Validation\ValidationException::withMessages([
+                'paid_amount' => 'Combined supplier credit + wallet payment (' . number_format($totalPaid) . ' UGX) cannot exceed total purchase cost (' . number_format($validated['total_amount']) . ' UGX).'
+            ]);
+        }
+
+        if ($creditApplied > 0) {
+            $supCheck = Supplier::find($validated['supplier_id']);
+            if (!$supCheck || $creditApplied > floatval($supCheck->credit_balance ?? 0)) {
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                    'credit_applied' => 'Supplier credit applied exceeds available credit balance (' . number_format(floatval($supCheck->credit_balance ?? 0)) . ' UGX).'
+                ]);
+            }
+        }
+
         $paymentAccountId = $validated['payment_account_id'] ?? null;
         $paymentAccount = null;
 
-        if ($paidAmount > 0) {
-            $paymentAccount = $paymentAccountId ? \App\Models\PaymentAccount::find($paymentAccountId) : null;
+        if ($walletPaid > 0) {
+            $paymentAccount = $paymentAccountId
+                ? \App\Models\PaymentAccount::where('is_active', true)->where('is_personal', false)->find($paymentAccountId)
+                : null;
             if (!$paymentAccount) {
-                $paymentAccount = \App\Models\PaymentAccount::where('name', 'Main Cash Register')->first()
-                    ?? \App\Models\PaymentAccount::where('type', 'cash')->first()
-                    ?? \App\Models\PaymentAccount::first();
+                $paymentAccount = \App\Models\PaymentAccount::where('is_active', true)->where('is_personal', false)->where('name', 'Main Cash Register')->first()
+                    ?? \App\Models\PaymentAccount::where('is_active', true)->where('is_personal', false)->where('type', 'cash')->first()
+                    ?? \App\Models\PaymentAccount::where('is_active', true)->where('is_personal', false)->first();
             }
 
-            if ($paymentAccount && $paidAmount > floatval($paymentAccount->current_balance)) {
+            if ($paymentAccount && $walletPaid > floatval($paymentAccount->current_balance)) {
                 throw \Illuminate\Validation\ValidationException::withMessages([
                     'paid_amount' => "Insufficient funds in {$paymentAccount->name}! Available balance is " . number_format(max(0, $paymentAccount->current_balance)) . " UGX."
                 ]);
             }
         }
 
-        DB::transaction(function () use ($validated, $paidAmount, $paymentAccount) {
+        DB::transaction(function () use ($validated, $walletPaid, $creditApplied, $totalPaid, $paymentAccount) {
             $payment_status = 'Unpaid';
-            if ($paidAmount > 0) {
-                if ($paidAmount >= $validated['total_amount']) {
+            if ($totalPaid > 0) {
+                if ($totalPaid >= $validated['total_amount']) {
                     $payment_status = 'Paid';
                 } else {
                     $payment_status = 'Partial';
@@ -107,7 +128,7 @@ class PurchaseController extends Controller
                 'supplier_id' => $validated['supplier_id'],
                 'reference_no' => $validated['reference_no'],
                 'total_amount' => $validated['total_amount'],
-                'paid_amount' => $validated['paid_amount'],
+                'paid_amount' => $totalPaid,
                 'status' => $validated['status'],
                 'payment_status' => $payment_status,
                 'purchase_date' => $validated['purchase_date']
@@ -152,19 +173,31 @@ class PurchaseController extends Controller
                 }
             }
 
-            // Update supplier balance
-            $balanceIncrease = $validated['total_amount'] - $validated['paid_amount'];
-            if ($balanceIncrease > 0) {
-                $supplier = Supplier::find($validated['supplier_id']);
-                $supplier->balance += $balanceIncrease;
-                $supplier->save();
+            // Deduct applied supplier credit & log audit entry
+            $supplier = Supplier::lockForUpdate()->find($validated['supplier_id']);
+            if ($creditApplied > 0 && $supplier) {
+                $supplier->decrement('credit_balance', $creditApplied);
+                \App\Models\SupplierReturn::create([
+                    'supplier_id' => $supplier->id,
+                    'purchase_id' => $purchase->id,
+                    'return_type' => 'credit_applied',
+                    'resolution' => 'applied_to_purchase',
+                    'status' => 'Completed',
+                    'amount' => $creditApplied,
+                    'reason' => "Applied UGX " . number_format($creditApplied) . " supplier credit towards Purchase #{$purchase->id}",
+                    'returned_at' => now(),
+                    'user_id' => auth()->id(),
+                ]);
             }
 
-            // Sync with Treasury Service if paid_amount > 0
-            if ($paidAmount > 0 && $paymentAccount) {
+            // Update supplier balance
+            $supplier?->recalculateBalance();
+
+            // Sync with Treasury Service if walletPaid > 0
+            if ($walletPaid > 0 && $paymentAccount) {
                 \App\Services\TreasuryService::recordOutflow(
                     $paymentAccount,
-                    $paidAmount,
+                    $walletPaid,
                     'Supplier Purchase',
                     $purchase,
                     "Stock Purchase #{$purchase->id} (" . ($purchase->supplier->name ?? 'Supplier') . ")" . ($purchase->reference_no ? " - Ref: {$purchase->reference_no}" : ''),
@@ -184,7 +217,7 @@ class PurchaseController extends Controller
                             'user_id' => auth()->id(),
                             'recorded_by' => auth()->id(),
                             'category' => 'Supplier Payment',
-                            'amount' => $paidAmount,
+                            'amount' => $walletPaid,
                             'description' => "Stock Purchase #{$purchase->id} (" . ($purchase->supplier->name ?? 'Supplier') . ")",
                             'expense_date' => now(),
                         ]);
@@ -471,95 +504,149 @@ class PurchaseController extends Controller
         if ($purchase->status === 'Cancelled') {
             return redirect()->back()->withErrors(['amount' => 'Cannot record a payment for a cancelled purchase order.']);
         }
-        $remaining = $purchase->total_amount - $purchase->paid_amount;
+        $remaining = (float) ($purchase->total_amount - $purchase->paid_amount);
 
         if ($remaining <= 0) {
             return redirect()->back()->withErrors(['amount' => 'This purchase is already paid in full.']);
         }
 
         $validated = $request->validate([
-            'amount' => 'required|numeric|min:1|max:' . $remaining,
+            'amount' => 'nullable|numeric|min:0',
+            'credit_amount' => 'nullable|numeric|min:0',
             'payment_account_id' => 'nullable|exists:payment_accounts,id',
             'payment_method' => 'nullable|string|max:255',
             'notes' => 'nullable|string',
-        ], [
-            'amount.max' => 'Payment amount cannot exceed remaining balance of ' . number_format($remaining) . ' UGX.',
-            'amount.min' => 'Payment amount must be at least 1 UGX.',
         ]);
 
-        $account = !empty($validated['payment_account_id'])
-            ? \App\Models\PaymentAccount::find($validated['payment_account_id'])
-            : \App\Models\PaymentAccount::getForMethod($validated['payment_method'] ?? 'Cash');
+        $walletAmount = floatval($validated['amount'] ?? 0);
+        $creditAmount = floatval($validated['credit_amount'] ?? 0);
+        $totalApplied = $walletAmount + $creditAmount;
 
-        if ($account && floatval($validated['amount']) > floatval($account->current_balance)) {
+        if ($totalApplied < 1) {
             throw \Illuminate\Validation\ValidationException::withMessages([
-                'amount' => "Insufficient funds in {$account->name}! Available balance is " . number_format(max(0, $account->current_balance)) . " UGX."
+                'amount' => 'Enter a supplier credit amount and/or wallet payment of at least 1 UGX.',
             ]);
         }
 
-        DB::transaction(function () use ($purchase, $validated, $account) {
-            $purchase->paid_amount += $validated['amount'];
+        if ($totalApplied > $remaining) {
+            throw \Illuminate\Validation\ValidationException::withMessages([
+                'amount' => 'Total applied (' . number_format($totalApplied) . ' UGX) cannot exceed remaining balance of ' . number_format($remaining) . ' UGX.',
+            ]);
+        }
+
+        $supplierCredit = floatval($purchase->supplier?->credit_balance ?? 0);
+        if ($creditAmount > $supplierCredit) {
+            throw \Illuminate\Validation\ValidationException::withMessages([
+                'credit_amount' => 'Credit applied cannot exceed available supplier credit of ' . number_format($supplierCredit) . ' UGX.',
+            ]);
+        }
+
+        $account = null;
+        if ($walletAmount > 0) {
+            $account = !empty($validated['payment_account_id'])
+                ? \App\Models\PaymentAccount::where('is_active', true)->where('is_personal', false)->find($validated['payment_account_id'])
+                : \App\Models\PaymentAccount::getForMethod($validated['payment_method'] ?? 'Cash');
+
+            if ($account && $walletAmount > floatval($account->current_balance)) {
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                    'amount' => "Insufficient funds in {$account->name}! Available balance is " . number_format(max(0, $account->current_balance)) . " UGX."
+                ]);
+            }
+        }
+
+        DB::transaction(function () use ($purchase, $validated, $account, $walletAmount, $creditAmount, $totalApplied) {
+            $purchase->paid_amount += $totalApplied;
             if ($purchase->paid_amount >= $purchase->total_amount) {
                 $purchase->payment_status = 'Paid';
             } else {
                 $purchase->payment_status = 'Partial';
             }
             $purchase->save();
-            $purchase->supplier?->recalculateBalance();
 
-            // Record in Cash Drawer Expenses only if paying specifically from the Cash Register Till (not the Shop Safe)
-            $isTill = $account 
-                ? ($account->type === 'cash' && stripos($account->name, 'Safe') === false && ($account->provider ?? '') !== 'Safe')
-                : (strtolower($validated['payment_method'] ?? '') === 'cash');
-
-            $user = auth()->user();
-            $isAdminOrManager = $user && in_array(strtolower($user->role ?? ''), ['admin', 'manager', 'owner']);
-
-            if ($isTill) {
-                $activeDrawer = \App\Models\CashDrawer::where('user_id', auth()->id())
-                    ->where('status', 'open')
-                    ->first();
-
-                if (!$activeDrawer && !$isAdminOrManager) {
+            if ($creditAmount > 0 && $purchase->supplier) {
+                $lockedSupplier = Supplier::lockForUpdate()->findOrFail($purchase->supplier_id);
+                if ($creditAmount > floatval($lockedSupplier->credit_balance ?? 0)) {
                     throw \Illuminate\Validation\ValidationException::withMessages([
-                        'payment_method' => 'You must have an open shift to pay cash from the drawer register. Please open a shift or pay from Shop Safe / Mobile Money / Bank Transfer.'
+                        'credit_amount' => 'Insufficient available supplier credit.',
                     ]);
                 }
+                $lockedSupplier->decrement('credit_balance', $creditAmount);
 
-                if ($activeDrawer) {
-                    $availableCash = $activeDrawer->calculateExpectedCash();
-                    if ($validated['amount'] > $availableCash) {
+                $notes = trim((string) ($validated['notes'] ?? ''));
+                \App\Models\SupplierReturn::create([
+                    'supplier_id' => $lockedSupplier->id,
+                    'purchase_id' => $purchase->id,
+                    'return_type' => 'credit_applied',
+                    'resolution' => 'applied_to_purchase',
+                    'status' => 'Completed',
+                    'amount' => $creditAmount,
+                    'reason' => "Applied UGX " . number_format($creditAmount) . " supplier credit towards Purchase #{$purchase->id}" . ($notes !== '' ? " — {$notes}" : ''),
+                    'returned_at' => now(),
+                    'user_id' => auth()->id(),
+                ]);
+            }
+
+            $purchase->supplier?->recalculateBalance();
+
+            if ($walletAmount > 0) {
+                // Record in Cash Drawer Expenses only if paying specifically from the Cash Register Till (not the Shop Safe)
+                $isTill = $account
+                    ? ($account->type === 'cash' && stripos($account->name, 'Safe') === false && ($account->provider ?? '') !== 'Safe')
+                    : (strtolower($validated['payment_method'] ?? '') === 'cash');
+
+                $user = auth()->user();
+                $isAdminOrManager = $user && in_array(strtolower($user->role ?? ''), ['admin', 'manager', 'owner']);
+
+                if ($isTill) {
+                    $activeDrawer = \App\Models\CashDrawer::where('user_id', auth()->id())
+                        ->where('status', 'open')
+                        ->first();
+
+                    if (!$activeDrawer && !$isAdminOrManager) {
                         throw \Illuminate\Validation\ValidationException::withMessages([
-                            'amount' => 'Insufficient cash in active register shift! Available cash in drawer is ' . number_format(max(0, $availableCash)) . ' UGX. Please pay from Shop Safe, Bank, or Mobile Money.'
+                            'payment_method' => 'You must have an open shift to pay cash from the drawer register. Please open a shift or pay from Shop Safe / Mobile Money / Bank Transfer.'
                         ]);
                     }
 
-                    \App\Models\Expense::create([
-                        'cash_drawer_id' => $activeDrawer->id,
-                        'payment_account_id' => $account?->id,
-                        'user_id' => auth()->id(),
-                        'category' => 'Supplier Payment',
-                        'amount' => $validated['amount'],
-                        'description' => "Payment towards Purchase #{$purchase->id} (" . ($purchase->supplier->name ?? 'Supplier') . "). " . ($validated['notes'] ?? ''),
-                        'expense_date' => now(),
-                    ]);
-                }
-            }
+                    if ($activeDrawer) {
+                        $availableCash = $activeDrawer->calculateExpectedCash();
+                        if ($walletAmount > $availableCash) {
+                            throw \Illuminate\Validation\ValidationException::withMessages([
+                                'amount' => 'Insufficient cash in active register shift! Available cash in drawer is ' . number_format(max(0, $availableCash)) . ' UGX. Please pay from Shop Safe, Bank, or Mobile Money.'
+                            ]);
+                        }
 
-            // Sync with Treasury Service
-            $methodOrAccount = $account ?: ($validated['payment_method'] ?? 'Cash');
-            $accountName = $account ? $account->name : ($validated['payment_method'] ?? 'Cash');
-            \App\Services\TreasuryService::recordOutflow(
-                $methodOrAccount,
-                floatval($validated['amount']),
-                'Supplier Payment',
-                $purchase,
-                "Supplier Payment for Purchase #{$purchase->id} (" . ($purchase->supplier->name ?? 'Supplier') . ") via {$accountName}",
-                $validated['notes'] ?? null,
-                auth()->id()
-            );
+                        \App\Models\Expense::create([
+                            'cash_drawer_id' => $activeDrawer->id,
+                            'payment_account_id' => $account?->id,
+                            'user_id' => auth()->id(),
+                            'category' => 'Supplier Payment',
+                            'amount' => $walletAmount,
+                            'description' => "Payment towards Purchase #{$purchase->id} (" . ($purchase->supplier->name ?? 'Supplier') . "). " . ($validated['notes'] ?? ''),
+                            'expense_date' => now(),
+                        ]);
+                    }
+                }
+
+                // Sync with Treasury Service for wallet portion only
+                $methodOrAccount = $account ?: ($validated['payment_method'] ?? 'Cash');
+                $accountName = $account ? $account->name : ($validated['payment_method'] ?? 'Cash');
+                \App\Services\TreasuryService::recordOutflow(
+                    $methodOrAccount,
+                    $walletAmount,
+                    'Supplier Payment',
+                    $purchase,
+                    "Supplier Payment for Purchase #{$purchase->id} (" . ($purchase->supplier->name ?? 'Supplier') . ") via {$accountName}",
+                    $validated['notes'] ?? null,
+                    auth()->id()
+                );
+            }
         });
 
-        return redirect()->back()->with('success', 'Supplier payment of ' . number_format($validated['amount']) . ' UGX recorded successfully.');
+        $parts = [];
+        if ($creditAmount > 0) $parts[] = 'UGX ' . number_format($creditAmount) . ' from supplier credit';
+        if ($walletAmount > 0) $parts[] = 'UGX ' . number_format($walletAmount) . ' from wallet';
+
+        return redirect()->back()->with('success', 'Supplier payment recorded: ' . implode(' + ', $parts) . '.');
     }
 }
