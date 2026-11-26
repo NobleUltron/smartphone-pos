@@ -102,6 +102,42 @@ class SupplierController extends Controller
         ]);
     }
 
+    public function generateStatement(Supplier $supplier)
+    {
+        $supplier->recalculateBalance();
+
+        $supplier->load([
+            'purchases' => function ($query) {
+                $query->orderBy('purchase_date', 'desc')->with('items.product.brand');
+            },
+            'supplierReturns' => function ($query) {
+                $query->orderBy('created_at', 'desc')
+                    ->with(['purchase', 'deviceImei.product.brand', 'replacementImei.product.brand', 'paymentAccount']);
+            },
+        ]);
+
+        $activePurchases = $supplier->purchases->where('status', '!=', 'Cancelled');
+        $summary = [
+            'total_orders' => $activePurchases->count(),
+            'total_spend' => (float) $activePurchases->sum('total_amount'),
+            'total_paid' => (float) $activePurchases->sum('paid_amount'),
+            'outstanding_balance' => (float) $supplier->balance,
+            'credit_balance' => (float) ($supplier->credit_balance ?? 0),
+        ];
+
+        $settings = [
+            'shop_name' => \App\Models\Setting::get('shop_name', 'SmartPOS'),
+            'shop_address' => \App\Models\Setting::get('shop_address', ''),
+            'shop_phone' => \App\Models\Setting::get('shop_phone', ''),
+            'currency_symbol' => \App\Models\Setting::get('currency_symbol', 'UGX'),
+        ];
+
+        $pdf = \Barryvdh\DomPDF\Facade\Pdf::loadView('pdf.supplier_statement', compact('supplier', 'summary', 'settings'));
+        $filename = 'Supplier-Statement-' . \Illuminate\Support\Str::slug($supplier->name) . '-' . now()->format('Y-m-d') . '.pdf';
+
+        return $pdf->stream($filename);
+    }
+
     public function update(Request $request, Supplier $supplier)
     {
         $validated = $request->validate([

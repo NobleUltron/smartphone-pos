@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import toast from 'react-hot-toast';
 import { Head, Link, router } from '@inertiajs/react';
 import axios from 'axios';
-import { Search, Plus, Pencil, Trash2, Smartphone, Printer, Package, Layers, AlertTriangle, DollarSign, Scan, FileSpreadsheet, X, Wrench, MoreHorizontal, ChevronDown, Undo2, RotateCcw, Wallet, CreditCard, RefreshCw } from 'lucide-react';
+import { Search, Plus, Pencil, Trash2, Smartphone, Printer, Package, Layers, AlertTriangle, DollarSign, Scan, FileSpreadsheet, X, Wrench, MoreHorizontal, ChevronDown, Undo2, RotateCcw, Wallet, CreditCard, RefreshCw, Clock } from 'lucide-react';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import Card from '@/Components/SaaS/Card';
 import Badge from '@/Components/SaaS/Badge';
@@ -75,6 +75,18 @@ export default function Inventory({ auth, products, allProducts = [], categories
         notes: '',
     });
     const [receivingId, setReceivingId] = useState(null);
+
+    // Bulk Return to Supplier Modal State
+    const [bulkReturnProduct, setBulkReturnProduct] = useState(null);
+    const [bulkReturnForm, setBulkReturnForm] = useState({
+        supplier_id: '',
+        quantity: 1,
+        resolution: 'refund',
+        amount: '',
+        payment_account_id: '',
+        reason: '',
+        notes: '',
+    });
 
     // Search and Filter State
     const [searchQuery, setSearchQuery] = useState(filters.search || '');
@@ -373,6 +385,57 @@ export default function Inventory({ auth, products, allProducts = [], categories
         setLoading(false);
     };
 
+    const openBulkReturnModal = (product) => {
+        const unitCost = Number(product.cost_price || 0);
+        setBulkReturnProduct(product);
+        setBulkReturnForm({
+            supplier_id: '',
+            quantity: 1,
+            resolution: 'refund',
+            amount: unitCost,
+            payment_account_id: paymentAccounts[0]?.id || '',
+            reason: '',
+            notes: '',
+        });
+    };
+
+    const handleBulkReturnSubmit = async () => {
+        if (!bulkReturnProduct) return;
+        const qty = parseInt(bulkReturnForm.quantity, 10);
+        if (!bulkReturnForm.supplier_id) return toast.error('Please select a supplier');
+        if (!qty || qty < 1 || qty > Number(bulkReturnProduct.quantity || 0)) {
+            return toast.error(`Quantity must be between 1 and ${bulkReturnProduct.quantity}`);
+        }
+        if (!bulkReturnForm.reason?.trim()) return toast.error('Please enter a reason for returning these items');
+        if (bulkReturnForm.resolution === 'refund' && !bulkReturnForm.payment_account_id) {
+            return toast.error('Please select the business wallet receiving the refund');
+        }
+
+        setLoading(true);
+        try {
+            const res = await axios.post(`/api/inventory/products/${bulkReturnProduct.id}/return-bulk-supplier`, {
+                supplier_id: bulkReturnForm.supplier_id,
+                quantity: qty,
+                resolution: bulkReturnForm.resolution,
+                amount: ['refund', 'supplier_credit'].includes(bulkReturnForm.resolution) ? parseFloat(bulkReturnForm.amount || 0) : 0,
+                payment_account_id: bulkReturnForm.resolution === 'refund' ? bulkReturnForm.payment_account_id : null,
+                reason: bulkReturnForm.reason.trim(),
+                notes: bulkReturnForm.notes?.trim() || null,
+            });
+            toast.success(res.data?.message || 'Bulk return recorded!');
+            if (res.data?.product && viewProduct?.id === res.data.product.id) {
+                setViewProduct(res.data.product);
+            }
+            setBulkReturnProduct(null);
+            router.reload({ only: ['summary', 'products', 'paymentAccounts', 'suppliers'], preserveScroll: true });
+        } catch (error) {
+            const errs = error.response?.data?.errors;
+            const firstErr = errs ? Object.values(errs)[0]?.[0] : null;
+            toast.error(firstErr || error.response?.data?.message || 'Error processing bulk return');
+        }
+        setLoading(false);
+    };
+
     const handleReceiveFromSupplier = async (item) => {
         setReceivingId(item.id);
         try {
@@ -646,6 +709,56 @@ export default function Inventory({ auth, products, allProducts = [], categories
                 </div>
             )}
 
+            {/* Aging / Slow-Moving Stock Alert Banner */}
+            {Number(summary?.aging_30_units || 0) > 0 && (
+                <div className="mb-4 px-4 py-3 rounded-2xl bg-amber-50/90 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/60 flex flex-col sm:flex-row sm:items-center justify-between gap-3 animate-slide-up">
+                    <div className="flex items-center gap-3">
+                        <div className="p-2 rounded-xl bg-amber-100 dark:bg-amber-900/50 text-amber-700 dark:text-amber-300 shrink-0">
+                            <Clock size={18} />
+                        </div>
+                        <div className="text-xs sm:text-sm">
+                            <span className="font-bold text-amber-900 dark:text-amber-200">
+                                {summary.aging_30_units} phone{summary.aging_30_units === 1 ? '' : 's'} in stock 30+ days
+                            </span>
+                            <span className="text-amber-800 dark:text-amber-300/90">
+                                {' '}— <strong>UGX {Number(summary.aging_30_value || 0).toLocaleString()}</strong> capital tied up
+                                {Number(summary.aging_60_units || 0) > 0 && (
+                                    <span className="ml-1.5 px-2 py-0.5 rounded-full text-[11px] font-bold bg-rose-100 dark:bg-rose-950/60 text-rose-700 dark:text-rose-300">
+                                        {summary.aging_60_units} critical 60d+
+                                    </span>
+                                )}
+                            </span>
+                        </div>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                        <button
+                            type="button"
+                            onClick={() => setStockStatus(stockStatus === 'aging_30' ? 'all' : 'aging_30')}
+                            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-colors ${
+                                stockStatus === 'aging_30'
+                                    ? 'bg-amber-600 text-white'
+                                    : 'bg-white dark:bg-slate-900 text-amber-800 dark:text-amber-300 border border-amber-300 dark:border-amber-700 hover:bg-amber-100/60'
+                            }`}
+                        >
+                            {stockStatus === 'aging_30' ? 'Showing 30d+ ✓' : 'Filter 30d+'}
+                        </button>
+                        {Number(summary.aging_60_units || 0) > 0 && (
+                            <button
+                                type="button"
+                                onClick={() => setStockStatus(stockStatus === 'aging_60' ? 'all' : 'aging_60')}
+                                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-colors ${
+                                    stockStatus === 'aging_60'
+                                        ? 'bg-rose-600 text-white'
+                                        : 'bg-white dark:bg-slate-900 text-rose-700 dark:text-rose-300 border border-rose-300 dark:border-rose-700 hover:bg-rose-50'
+                                }`}
+                            >
+                                {stockStatus === 'aging_60' ? 'Showing 60d+ ✓' : 'Critical 60d+'}
+                            </button>
+                        )}
+                    </div>
+                </div>
+            )}
+
             {/* Segmented Stock Status Tabs */}
             <div className="flex items-center overflow-x-auto pb-1 sm:pb-0 mb-4 animate-slide-up" style={{ animationDelay: '0.05s' }}>
                 <div className="flex items-center gap-1.5 p-1 bg-slate-100 dark:bg-slate-800/80 rounded-2xl border border-slate-200/70 dark:border-slate-700/60 shadow-inner">
@@ -725,6 +838,26 @@ export default function Inventory({ auth, products, allProducts = [], categories
                                 : 'bg-slate-200/70 dark:bg-slate-700/70 text-slate-600 dark:text-slate-400'
                         }`}>
                             {summary?.out_of_stock_count || 0}
+                        </span>
+                    </button>
+
+                    <button
+                        type="button"
+                        onClick={() => setStockStatus('aging_30')}
+                        className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
+                            stockStatus === 'aging_30' || stockStatus === 'aging_60'
+                                ? 'bg-white dark:bg-slate-900 text-orange-700 dark:text-orange-400 shadow-sm ring-1 ring-orange-500/20'
+                                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-white/50'
+                        }`}
+                    >
+                        <Clock size={12} className="text-orange-500 shrink-0" />
+                        <span>Slow-Moving (30d+)</span>
+                        <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-extrabold ${
+                            stockStatus === 'aging_30' || stockStatus === 'aging_60'
+                                ? 'bg-orange-100 text-orange-800 dark:bg-orange-950/60 dark:text-orange-300'
+                                : 'bg-slate-200/70 dark:bg-slate-700/70 text-slate-600 dark:text-slate-400'
+                        }`}>
+                            {summary?.aging_products_count || 0}
                         </span>
                     </button>
                 </div>
@@ -925,6 +1058,17 @@ export default function Inventory({ auth, products, allProducts = [], categories
                                     ) : (
                                         <>
                                             <Badge variant={stockBadgeVariant}>In Stock: {qty}</Badge>
+                                            {Number(product.aging_30_count || 0) > 0 && (
+                                                <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                                                    Number(product.aging_60_count || 0) > 0
+                                                        ? 'bg-rose-50 dark:bg-rose-950/60 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800/60'
+                                                        : 'bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800/60'
+                                                }`}>
+                                                    <Clock size={10} />
+                                                    {product.aging_30_count} aging 30d+
+                                                    {Number(product.aging_60_count || 0) > 0 ? ` (${product.aging_60_count} >60d)` : ''}
+                                                </span>
+                                            )}
                                             {(product.sold_count > 0 || product.defective_count > 0) && (
                                                 <div className="flex gap-2 text-[11px] font-medium">
                                                     {product.sold_count > 0 && <span className="text-slate-500 dark:text-slate-400">Sold: {product.sold_count}</span>}
@@ -1318,6 +1462,8 @@ export default function Inventory({ auth, products, allProducts = [], categories
                                         >
                                             <option value="all">All Statuses ({imeisList.length})</option>
                                             <option value="In Stock">In Stock ({imeisList.filter(i => i.status === 'In Stock').length})</option>
+                                            <option value="aging_30">Aging 30d+ ({imeisList.filter(i => i.status === 'In Stock' && Number(i.days_in_stock || 0) >= 30).length})</option>
+                                            <option value="aging_60">Critical 60d+ ({imeisList.filter(i => i.status === 'In Stock' && Number(i.days_in_stock || 0) >= 60).length})</option>
                                             <option value="Sold">Sold ({imeisList.filter(i => i.status === 'Sold').length})</option>
                                             <option value="Defective">Defective ({imeisList.filter(i => i.status === 'Defective').length})</option>
                                             <option value="At Supplier (Repair)">At Supplier (Repair) ({imeisList.filter(i => i.status === 'At Supplier (Repair)').length})</option>
@@ -1359,7 +1505,16 @@ export default function Inventory({ auth, products, allProducts = [], categories
                                         <p className="font-bold text-slate-900 dark:text-white">{Number(viewProduct.selling_price || 0).toLocaleString()} UGX</p>
                                     </div>
                                 </div>
-                                <div className="mt-6 flex justify-end">
+                                <div className="mt-6 flex flex-wrap justify-end gap-3">
+                                    {Number(viewProduct.quantity || 0) > 0 && (
+                                        <button
+                                            type="button"
+                                            className="px-4 py-2 rounded-xl text-sm font-bold flex items-center gap-2 bg-rose-50 dark:bg-rose-950/50 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800 hover:bg-rose-100 dark:hover:bg-rose-900/60 transition-colors"
+                                            onClick={() => openBulkReturnModal(viewProduct)}
+                                        >
+                                            <Undo2 size={16} /> Return to Supplier
+                                        </button>
+                                    )}
                                     <button 
                                         className="btn btn-secondary px-4 py-2 rounded-xl text-sm font-bold flex items-center gap-2 bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 transition-colors"
                                         onClick={() => {
@@ -1390,7 +1545,13 @@ export default function Inventory({ auth, products, allProducts = [], categories
                             <div className="overflow-y-auto p-0 flex-auto min-h-0">
                                 {(() => {
                                     const filteredImeis = imeisList.filter(item => {
-                                        if (imeiStatusFilter !== 'all' && item.status !== imeiStatusFilter) return false;
+                                        if (imeiStatusFilter === 'aging_30') {
+                                            if (!(item.status === 'In Stock' && Number(item.days_in_stock || 0) >= 30)) return false;
+                                        } else if (imeiStatusFilter === 'aging_60') {
+                                            if (!(item.status === 'In Stock' && Number(item.days_in_stock || 0) >= 60)) return false;
+                                        } else if (imeiStatusFilter !== 'all' && item.status !== imeiStatusFilter) {
+                                            return false;
+                                        }
                                         if (imeiSearch.trim()) {
                                             const q = imeiSearch.toLowerCase();
                                             return (item.imei || '').toLowerCase().includes(q)
@@ -1401,7 +1562,7 @@ export default function Inventory({ auth, products, allProducts = [], categories
                                     });
                                     return (
                                 <DataTable 
-                                    headers={['IMEI', 'Storage', 'Color', 'Condition', 'Status', 'Funded By', 'Cost Basis', 'Selling Price', { label: 'Actions', className: '!text-center' }]}
+                                    headers={['IMEI', 'Storage', 'Color', 'Condition', 'Status', 'Age', 'Funded By', 'Cost Basis', 'Selling Price', { label: 'Actions', className: '!text-center' }]}
                                     isEmpty={filteredImeis.length === 0}
                                     emptyState={<div className="p-8 text-center text-slate-500 dark:text-slate-400">No matching stock items found.</div>}
                                 >
@@ -1420,6 +1581,23 @@ export default function Inventory({ auth, products, allProducts = [], categories
                                                 }>
                                                     {item.status === 'Defective' ? '🛠️ Defective' : item.status}
                                                 </Badge>
+                                            </td>
+                                            <td>
+                                                {item.status === 'In Stock' ? (() => {
+                                                    const days = Number(item.days_in_stock || 0);
+                                                    const badgeCls = days >= 60
+                                                        ? 'bg-rose-50 dark:bg-rose-950/60 text-rose-700 dark:text-rose-300 border-rose-200 dark:border-rose-800'
+                                                        : days >= 30
+                                                            ? 'bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-800'
+                                                            : 'bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-700';
+                                                    return (
+                                                        <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold border ${badgeCls}`} title={`In stock for ${days} day(s)`}>
+                                                            <Clock size={10} /> {days}d
+                                                        </span>
+                                                    );
+                                                })() : (
+                                                    <span className="text-slate-400 text-xs">—</span>
+                                                )}
                                             </td>
                                             <td>
                                                 {item.partner_investor ? (
@@ -1610,6 +1788,170 @@ export default function Inventory({ auth, products, allProducts = [], categories
                             </a>
                         </div>
                     </div>
+                </div>
+            )}
+
+            {/* Bulk Accessory Return to Supplier Modal */}
+            {bulkReturnProduct && (
+                <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[60] flex items-center justify-center p-4 overflow-y-auto">
+                    <Card className="w-full max-w-lg animate-slide-up">
+                        <div className="flex items-center justify-between mb-4">
+                            <div className="flex items-center gap-2.5">
+                                <div className="p-2 rounded-xl bg-rose-100 dark:bg-rose-950/60 text-rose-600 dark:text-rose-400">
+                                    <Undo2 size={18} />
+                                </div>
+                                <div>
+                                    <h3 className="text-lg font-bold text-slate-900 dark:text-white">Return Bulk Stock to Supplier</h3>
+                                    <p className="text-xs text-slate-500">
+                                        {bulkReturnProduct.brand?.name ? `${bulkReturnProduct.brand.name} ` : ''}{bulkReturnProduct.model_name} • In Stock: {bulkReturnProduct.quantity}
+                                    </p>
+                                </div>
+                            </div>
+                            <button
+                                className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-1 rounded-lg"
+                                onClick={() => setBulkReturnProduct(null)}
+                            >
+                                <X size={18} />
+                            </button>
+                        </div>
+
+                        <div className="space-y-4">
+                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                                <div className="sm:col-span-2">
+                                    <label className="saas-label">Supplier *</label>
+                                    <select
+                                        className="saas-input pl-4"
+                                        value={bulkReturnForm.supplier_id}
+                                        onChange={e => setBulkReturnForm({ ...bulkReturnForm, supplier_id: e.target.value })}
+                                    >
+                                        <option value="">-- Choose Supplier --</option>
+                                        {suppliers.map(s => (
+                                            <option key={s.id} value={s.id}>
+                                                {s.name}{Number(s.credit_balance || 0) > 0 ? ` (Credit: UGX ${Number(s.credit_balance).toLocaleString()})` : ''}
+                                            </option>
+                                        ))}
+                                    </select>
+                                </div>
+                                <div>
+                                    <label className="saas-label">Qty (Max {bulkReturnProduct.quantity}) *</label>
+                                    <input
+                                        type="number"
+                                        min="1"
+                                        max={bulkReturnProduct.quantity}
+                                        className="saas-input font-bold"
+                                        value={bulkReturnForm.quantity}
+                                        onChange={e => {
+                                            const q = Math.max(1, parseInt(e.target.value || '1', 10));
+                                            const unitCost = Number(bulkReturnProduct.cost_price || 0);
+                                            setBulkReturnForm({
+                                                ...bulkReturnForm,
+                                                quantity: e.target.value,
+                                                amount: q * unitCost,
+                                            });
+                                        }}
+                                    />
+                                </div>
+                            </div>
+
+                            <div>
+                                <label className="saas-label">Resolution *</label>
+                                <div className="grid grid-cols-3 gap-2">
+                                    {[
+                                        { id: 'refund', label: 'Refund to Wallet', icon: Wallet },
+                                        { id: 'supplier_credit', label: 'Supplier Credit', icon: CreditCard },
+                                        { id: 'replacement', label: '1-for-1 Swap', icon: RefreshCw },
+                                    ].map(opt => {
+                                        const Icon = opt.icon;
+                                        const active = bulkReturnForm.resolution === opt.id;
+                                        return (
+                                            <button
+                                                type="button"
+                                                key={opt.id}
+                                                onClick={() => setBulkReturnForm({ ...bulkReturnForm, resolution: opt.id })}
+                                                className={`text-left p-2.5 rounded-xl border transition-all ${
+                                                    active
+                                                        ? 'border-indigo-500 bg-indigo-50/70 dark:bg-indigo-950/40 ring-1 ring-indigo-500'
+                                                        : 'border-slate-200 dark:border-slate-700 hover:border-slate-300'
+                                                }`}
+                                            >
+                                                <Icon size={14} className={active ? 'text-indigo-600 dark:text-indigo-400 mb-1' : 'text-slate-400 mb-1'} />
+                                                <div className="text-xs font-bold text-slate-900 dark:text-white">{opt.label}</div>
+                                            </button>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+
+                            {['refund', 'supplier_credit'].includes(bulkReturnForm.resolution) && (
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                    <div>
+                                        <label className="saas-label">
+                                            {bulkReturnForm.resolution === 'refund' ? 'Refund Amount (UGX) *' : 'Credit Amount (UGX) *'}
+                                        </label>
+                                        <input
+                                            type="number"
+                                            min="0"
+                                            className="saas-input font-bold"
+                                            value={bulkReturnForm.amount}
+                                            onChange={e => setBulkReturnForm({ ...bulkReturnForm, amount: e.target.value })}
+                                        />
+                                    </div>
+                                    {bulkReturnForm.resolution === 'refund' && (
+                                        <div>
+                                            <label className="saas-label">Business Wallet *</label>
+                                            <select
+                                                className="saas-input pl-3"
+                                                value={bulkReturnForm.payment_account_id}
+                                                onChange={e => setBulkReturnForm({ ...bulkReturnForm, payment_account_id: e.target.value })}
+                                            >
+                                                <option value="">-- Choose Wallet --</option>
+                                                {paymentAccounts.map(acc => (
+                                                    <option key={acc.id} value={acc.id}>
+                                                        {acc.name} (Bal: {Number(acc.current_balance).toLocaleString()})
+                                                    </option>
+                                                ))}
+                                            </select>
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+
+                            {bulkReturnForm.resolution === 'replacement' && (
+                                <div className="p-3 rounded-xl bg-indigo-50 dark:bg-indigo-950/30 border border-indigo-200 dark:border-indigo-800/60 text-xs text-indigo-800 dark:text-indigo-300">
+                                    Supplier replaces the defective units 1-for-1. Your stock quantity remains unchanged and the RMA is logged in the supplier's return history.
+                                </div>
+                            )}
+
+                            <div>
+                                <label className="saas-label">Reason / Fault Description *</label>
+                                <input
+                                    type="text"
+                                    className="saas-input"
+                                    placeholder="e.g. Defective charging batch / damaged packaging"
+                                    value={bulkReturnForm.reason}
+                                    onChange={e => setBulkReturnForm({ ...bulkReturnForm, reason: e.target.value })}
+                                />
+                            </div>
+
+                            <div>
+                                <label className="saas-label">Notes (Optional)</label>
+                                <input
+                                    type="text"
+                                    className="saas-input"
+                                    placeholder="e.g. Returned with receipt #..."
+                                    value={bulkReturnForm.notes}
+                                    onChange={e => setBulkReturnForm({ ...bulkReturnForm, notes: e.target.value })}
+                                />
+                            </div>
+                        </div>
+
+                        <div className="flex justify-end gap-3 mt-6 pt-5 border-t border-slate-100 dark:border-slate-800">
+                            <Button variant="secondary" onClick={() => setBulkReturnProduct(null)}>Cancel</Button>
+                            <Button variant="primary" className="!bg-rose-600 hover:!bg-rose-700" onClick={handleBulkReturnSubmit} isLoading={loading}>
+                                Confirm Bulk Return
+                            </Button>
+                        </div>
+                    </Card>
                 </div>
             )}
 

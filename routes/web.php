@@ -192,6 +192,82 @@ Route::get('/dashboard', function () {
         ->whereNotIn('category', ['Refund', 'Refund (Past Shift)'])
         ->sum('amount');
 
+    // Unified Overdue & Follow-Ups Collection Queue (Layaways + B2B Invoices + Outward Dealer Consignments)
+    $followUpItems = collect();
+
+    $layawayFollowUps = Sale::with(['customer', 'layawayPayments', 'saleItems.product.brand'])
+        ->where('payment_status', 'Partial')
+        ->get();
+    foreach ($layawayFollowUps as $sale) {
+        $paid = (float) $sale->layawayPayments->sum('amount_paid');
+        $bal = max(0, (float) $sale->final_amount - $paid);
+        if ($bal <= 0) continue;
+        $daysOpen = $sale->sale_date ? (int) Carbon::parse($sale->sale_date)->diffInDays(Carbon::today()) : 0;
+        $itemTitle = $sale->saleItems->map(fn($si) => trim(($si->product?->brand?->name ?? '') . ' ' . ($si->product?->model_name ?? '')))->filter()->implode(', ') ?: ('Receipt #' . $sale->id);
+        $followUpItems->push([
+            'id' => 'layaway-' . $sale->id,
+            'type' => 'layaway',
+            'type_label' => 'Layaway',
+            'name' => $sale->customer?->name ?: 'Walk-in Customer',
+            'phone' => $sale->customer?->phone ?: '',
+            'reference' => $itemTitle,
+            'amount' => $bal,
+            'is_overdue' => $daysOpen >= 14,
+            'due_label' => $daysOpen > 0 ? "{$daysOpen}d open" : 'Today',
+            'href' => '/layaways',
+        ]);
+    }
+
+    $invoiceFollowUps = \App\Models\Invoice::with('customer')
+        ->whereIn('payment_status', ['Unpaid', 'Partial'])
+        ->where('status', '!=', 'Cancelled')
+        ->get();
+    foreach ($invoiceFollowUps as $inv) {
+        $bal = max(0, (float) $inv->total_amount - (float) ($inv->paid_amount ?? 0));
+        if ($bal <= 0) continue;
+        $dueDate = $inv->due_date ? Carbon::parse($inv->due_date) : null;
+        $isOverdue = $dueDate ? $dueDate->lt(Carbon::today()) : false;
+        $followUpItems->push([
+            'id' => 'invoice-' . $inv->id,
+            'type' => 'invoice',
+            'type_label' => 'B2B Invoice',
+            'name' => $inv->customer?->name ?: ($inv->client_name ?? 'Corporate Client'),
+            'phone' => $inv->customer?->phone ?: '',
+            'reference' => $inv->invoice_number ?: ('Invoice #' . $inv->id),
+            'amount' => $bal,
+            'is_overdue' => $isOverdue,
+            'due_label' => $dueDate ? ($isOverdue ? 'Overdue since ' . $dueDate->format('d M') : 'Due ' . $dueDate->format('d M')) : 'Unpaid',
+            'href' => '/invoices/' . $inv->id,
+        ]);
+    }
+
+    $dealerFollowUps = \App\Models\DealerItem::with(['dealer', 'deviceImei.product.brand'])
+        ->where(fn($q) => $q->where('direction', 'outward')->orWhereNull('direction'))
+        ->where('status', 'Pending')
+        ->get();
+    foreach ($dealerFollowUps as $di) {
+        $dueDate = $di->expected_return_date ? Carbon::parse($di->expected_return_date) : null;
+        $isOverdue = $dueDate ? $dueDate->lt(Carbon::today()) : false;
+        $phoneTitle = trim(($di->deviceImei?->product?->brand?->name ?? '') . ' ' . ($di->deviceImei?->product?->model_name ?? ($di->device_name ?? 'Consigned Device')));
+        $followUpItems->push([
+            'id' => 'dealer-' . $di->id,
+            'type' => 'dealer',
+            'type_label' => 'Dealer Outward',
+            'name' => $di->dealer?->name ?: 'Partner Dealer',
+            'phone' => $di->dealer?->phone ?: '',
+            'reference' => $phoneTitle . ($di->deviceImei?->imei ? ' (IMEI: ' . $di->deviceImei->imei . ')' : ''),
+            'amount' => (float) ($di->dealer_price ?: $di->deviceImei?->selling_price ?: 0),
+            'is_overdue' => $isOverdue,
+            'due_label' => $dueDate ? ($isOverdue ? 'Overdue since ' . $dueDate->format('d M') : 'Expected ' . $dueDate->format('d M')) : 'Out with dealer',
+            'href' => '/dealers/' . $di->dealer_id,
+        ]);
+    }
+
+    $followUpItems = $followUpItems
+        ->sortByDesc(fn($item) => ($item['is_overdue'] ? 100000000000 : 0) + $item['amount'])
+        ->take(12)
+        ->values();
+
     return Inertia::render('Dashboard', [
         'todaySales' => $todaySales,
         'inStockCount' => $inStockCount,
@@ -224,6 +300,8 @@ Route::get('/dashboard', function () {
             'activeDrawersCount' => $activeDrawersCount,
             'todayExpenses' => $todayExpenses,
         ],
+        'followUpItems' => $followUpItems,
+        'shopName' => \App\Models\Setting::get('shop_name', 'SmartPOS'),
     ]);
 })->middleware(['auth', 'verified', 'role:admin,manager'])->name('dashboard');
 
@@ -360,6 +438,7 @@ Route::middleware('auth')->group(function () {
         Route::get('/suppliers', [\App\Http\Controllers\SupplierController::class, 'index'])->name('suppliers.index');
         Route::post('/api/suppliers', [\App\Http\Controllers\SupplierController::class, 'store']);
         Route::get('/suppliers/{supplier}', [\App\Http\Controllers\SupplierController::class, 'show'])->name('suppliers.show');
+        Route::get('/suppliers/{supplier}/statement', [\App\Http\Controllers\SupplierController::class, 'generateStatement'])->name('suppliers.statement');
         Route::put('/api/suppliers/{supplier}', [\App\Http\Controllers\SupplierController::class, 'update']);
         Route::post('/api/suppliers/{supplier}/refund-credit', [\App\Http\Controllers\SupplierController::class, 'refundCredit'])->name('suppliers.refund-credit');
         Route::delete('/api/suppliers/{supplier}', [\App\Http\Controllers\SupplierController::class, 'destroy']);
@@ -397,6 +476,7 @@ Route::middleware('auth')->group(function () {
         Route::post('/api/inventory/stock/{deviceImei}/refurbish', [ProductController::class, 'addRefurbishmentCost'])->name('inventory.stock.refurbish');
         Route::post('/api/inventory/stock/{deviceImei}/return-supplier', [ProductController::class, 'returnToSupplier'])->name('inventory.stock.return-supplier');
         Route::post('/api/inventory/stock/{deviceImei}/receive-from-supplier', [ProductController::class, 'receiveFromSupplier'])->name('inventory.stock.receive-from-supplier');
+        Route::post('/api/inventory/products/{product}/return-bulk-supplier', [ProductController::class, 'returnBulkToSupplier'])->name('inventory.products.return-bulk-supplier');
         Route::delete('/api/inventory/stock/{deviceImei}', [ProductController::class, 'destroyStock']);
 
         // Brands and Categories
@@ -413,6 +493,7 @@ Route::middleware('auth')->group(function () {
     Route::middleware(['role:admin,manager'])->group(function () {
         Route::get('/activity-logs', [ActivityLogController::class, 'index'])->name('activity-logs.index');
         Route::get('/reports', [ReportController::class, 'index'])->name('reports.index');
+        Route::post('/api/reports/commissions/pay', [ReportController::class, 'payCommission'])->name('reports.commissions.pay');
         Route::get('/reports/profit-loss', [ReportController::class, 'profitLoss'])->name('reports.profit-loss');
         Route::get('/reports/profit-loss/export', [ReportController::class, 'exportProfitLoss'])->name('reports.profit-loss.export');
         Route::get('/reports/daily-z-report', [ReportController::class, 'dailyZReportPage'])->name('reports.daily-z-report.page');

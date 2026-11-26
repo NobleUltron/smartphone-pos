@@ -4,57 +4,128 @@ namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\DB;
 use App\Models\Product;
 use App\Models\DeviceImei;
 use App\Models\Sale;
-use App\Models\Brand;
 use App\Models\Repair;
 use App\Models\DealerItem;
+use App\Models\Supplier;
+use App\Models\Purchase;
+use App\Models\Invoice;
+use App\Models\Expense;
+use App\Models\LayawayPayment;
+use App\Models\InvoicePayment;
+use App\Models\PaymentAccount;
+use App\Models\Setting;
 use Carbon\Carbon;
-use Illuminate\Support\Facades\DB;
 
 class GeminiAIController extends Controller
 {
     public function ask(Request $request)
     {
-        $request->validate(['prompt' => 'required|string']);
+        $request->validate(['prompt' => 'required|string|max:1500']);
         $userPrompt = trim($request->prompt);
         $lowerPrompt = strtolower($userPrompt);
+        $shopName = Setting::get('shop_name', 'SmartPOS');
 
-        // 1. Gather comprehensive live database analytics
+        // 1. Gather 100% accurate, privacy-safe live shop analytics (no customer PII, no personal accounts)
         $inStockCount = DeviceImei::where('status', 'In Stock')->count();
-        $totalSellingValue = DeviceImei::where('status', 'In Stock')->sum('selling_price');
-        $totalCostValue = Product::sum(DB::raw('cost_price * quantity'));
-        
-        $todaySalesAmount = Sale::where('payment_status', '!=', 'Refunded')->whereDate('sale_date', Carbon::today())->sum('final_amount');
+        $bulkStockCount = (int) Product::where('type', 'bulk')->where('quantity', '>', 0)->sum('quantity');
+        $defectiveCount = DeviceImei::where('status', 'Defective')->count();
+        $atSupplierRepairCount = DeviceImei::where('status', 'At Supplier (Repair)')->count();
+
+        $serializedSellingValue = (float) DeviceImei::where('status', 'In Stock')->sum('selling_price');
+        $serializedCostValue = (float) DeviceImei::where('status', 'In Stock')->sum('cost_price');
+        $bulkCostValue = (float) Product::where('type', 'bulk')->where('quantity', '>', 0)
+            ->selectRaw('COALESCE(SUM(quantity * cost_price), 0) as total')->value('total');
+        $bulkSellingValue = (float) Product::where('type', 'bulk')->where('quantity', '>', 0)
+            ->selectRaw('COALESCE(SUM(quantity * selling_price), 0) as total')->value('total');
+        $totalCostValue = $serializedCostValue + $bulkCostValue;
+        $totalSellingValue = $serializedSellingValue + $bulkSellingValue;
+
+        // Aging / slow-moving phones
+        $aging30Cutoff = now()->subDays(30);
+        $aging60Cutoff = now()->subDays(60);
+        $aging30Units = DeviceImei::where('status', 'In Stock')->where('created_at', '<=', $aging30Cutoff)->count();
+        $aging60Units = DeviceImei::where('status', 'In Stock')->where('created_at', '<=', $aging60Cutoff)->count();
+        $aging30Value = (float) DeviceImei::where('status', 'In Stock')->where('created_at', '<=', $aging30Cutoff)->sum('cost_price');
+
+        // Today's revenue (matching Dashboard formula)
+        $todayDirectSales = (float) Sale::whereDate('sale_date', Carbon::today())
+            ->whereNull('repair_id')
+            ->whereIn('payment_status', ['Paid', 'Refunded'])
+            ->where('payment_method', '!=', 'Layaway')
+            ->sum('final_amount');
+        $todayLayawayPayments = (float) LayawayPayment::whereDate('payment_date', Carbon::today())->sum('amount_paid');
+        $todayInvoicePayments = (float) InvoicePayment::whereDate('payment_date', Carbon::today())->sum('amount');
+        $todayRefunds = (float) Expense::whereDate('expense_date', Carbon::today())
+            ->whereIn('category', ['Refund', 'Refund (Past Shift)'])->sum('amount');
+        $todaySalesAmount = $todayDirectSales + $todayLayawayPayments + $todayInvoicePayments - $todayRefunds;
         $todaySalesCount = Sale::where('payment_status', '!=', 'Refunded')->whereDate('sale_date', Carbon::today())->count();
-        $totalSalesAmount = Sale::where('payment_status', '!=', 'Refunded')->sum('final_amount');
+        $todayExpenses = (float) Expense::whereDate('expense_date', Carbon::today())
+            ->whereNotIn('category', ['Refund', 'Refund (Past Shift)'])->sum('amount');
+        $monthSalesAmount = (float) Sale::where('payment_status', '!=', 'Refunded')
+            ->whereDate('sale_date', '>=', Carbon::now()->startOfMonth())->sum('final_amount');
+        $totalSalesAmount = (float) Sale::where('payment_status', '!=', 'Refunded')->sum('final_amount');
 
-        // Low & Out of stock products
-        $lowStockProducts = Product::with(['brand'])->withCount(['deviceImeis' => function ($q) {
-            $q->where('status', 'In Stock');
-        }])->get()->filter(function ($product) {
-            return $product->device_imeis_count < 5;
-        })->values();
+        // Low stock (1..4 in stock) & Out of stock products (both serialized & bulk)
+        $lowStockProducts = Product::with('brand')
+            ->withCount(['deviceImeis as in_stock_imeis' => fn($q) => $q->where('status', 'In Stock')])
+            ->get()
+            ->map(function ($p) {
+                $qty = $p->type === 'bulk' ? (int) ($p->quantity ?? 0) : (int) ($p->in_stock_imeis ?? 0);
+                $p->computed_stock = $qty;
+                return $p;
+            })
+            ->filter(fn($p) => $p->computed_stock > 0 && $p->computed_stock < 5)
+            ->sortBy('computed_stock')
+            ->values();
 
-        // Repairs statistics
+        // Repairs
         $activeRepairsCount = Repair::whereIn('status', ['Pending', 'In Progress'])->count();
         $pendingRepairsCount = Repair::where('status', 'Pending')->count();
         $inProgressRepairsCount = Repair::where('status', 'In Progress')->count();
-        $completedTodayCount = Repair::where('status', 'Completed')->whereDate('updated_at', Carbon::today())->count();
+        $completedTodayCount = Repair::whereIn('status', ['Completed', 'Delivered'])->whereDate('updated_at', Carbon::today())->count();
 
-        // Dealer items statistics
-        $pendingDealerCount = DealerItem::where('status', 'Pending')->count();
-        $overdueDealerCount = DealerItem::where('status', 'Pending')
+        // Dealers
+        $outwardPendingCount = DealerItem::where(fn($q) => $q->where('direction', 'outward')->orWhereNull('direction'))
+            ->where('status', 'Pending')->count();
+        $overdueDealerCount = DealerItem::where(fn($q) => $q->where('direction', 'outward')->orWhereNull('direction'))
+            ->where('status', 'Pending')
             ->whereNotNull('expected_return_date')
             ->where('expected_return_date', '<', Carbon::today())
             ->count();
+        $dealerOwedAmount = (float) DealerItem::where('direction', 'inward')
+            ->where('quantity_sold', '>', 0)
+            ->get()
+            ->sum(fn($item) => max(0, ($item->quantity_sold * (float) ($item->wholesale_cost ?: $item->dealer_price ?: 0)) - (float) ($item->settlement_amount ?? 0)));
 
-        // Layaways statistics
-        $activeLayaways = Sale::where('payment_method', 'Layaway')->where('payment_status', 'Partial')->get();
-        $totalLayawayBalance = $activeLayaways->sum(function ($s) {
-            return max(0, $s->final_amount - ($s->amount_paid ?? 0));
-        });
+        // Layaways & B2B Invoices
+        $activeLayaways = Sale::withSum('layawayPayments', 'amount_paid')
+            ->where('payment_status', 'Partial')
+            ->get();
+        $totalLayawayBalance = (float) $activeLayaways->sum(fn($s) => max(0, (float) $s->final_amount - (float) ($s->layaway_payments_sum_amount_paid ?? 0)));
+        $invoiceReceivables = (float) Invoice::whereIn('payment_status', ['Unpaid', 'Partial'])
+            ->where('status', '!=', 'Cancelled')
+            ->selectRaw('COALESCE(SUM(CASE WHEN total_amount - paid_amount > 0 THEN total_amount - paid_amount ELSE 0 END), 0) as total')
+            ->value('total');
+
+        // Suppliers (Payables & Credits)
+        $supplierPayables = (float) Purchase::where('status', '!=', 'Cancelled')
+            ->selectRaw('COALESCE(SUM(CASE WHEN total_amount - paid_amount > 0 THEN total_amount - paid_amount ELSE 0 END), 0) as total')
+            ->value('total');
+        $supplierCredits = (float) Supplier::sum('credit_balance');
+        $pendingPurchasesCount = Purchase::where('status', 'Pending')->count();
+
+        // Business Treasury Wallets (strictly is_personal = false!)
+        $businessWallets = PaymentAccount::where('is_active', true)
+            ->where('is_personal', false)
+            ->orderBy('type')
+            ->orderBy('name')
+            ->get(['name', 'type', 'current_balance']);
+        $totalLiquidity = (float) $businessWallets->sum('current_balance');
 
         // Stock by brand
         $brandStock = DB::table('device_imeis')
@@ -66,222 +137,288 @@ class GeminiAIController extends Controller
             ->orderByDesc('count')
             ->get();
 
-        // Top selling brands
+        // Top selling brands (supports serialized + bulk)
         $topBrands = DB::table('sale_items')
-            ->join('device_imeis', 'sale_items.device_imei_id', '=', 'device_imeis.id')
-            ->join('products', 'device_imeis.product_id', '=', 'products.id')
+            ->leftJoin('device_imeis', 'sale_items.device_imei_id', '=', 'device_imeis.id')
+            ->join('products', fn($j) => $j->on('products.id', '=', DB::raw('COALESCE(sale_items.product_id, device_imeis.product_id)')))
             ->join('brands', 'products.brand_id', '=', 'brands.id')
-            ->select('brands.name', DB::raw('count(*) as count'))
+            ->select('brands.name', DB::raw('SUM(sale_items.quantity) as count'))
             ->groupBy('brands.name')
             ->orderByDesc('count')
             ->limit(5)
             ->get();
 
-        // 2. Attempt Gemini Live API call if key is available
-        $geminiKey = env('GEMINI_API_KEY') ?: config('gemini.api_key');
-        if (!empty($geminiKey) && !in_array($geminiKey, ['your_gemini_api_key_here', 'null'])) {
-            $contextString = "You are SmartPOS AI, a super-intelligent retail assistant for a smartphone POS and repair store in Kampala.\n"
-                . "Live Store Metrics:\n"
-                . "- In-Stock Phone Units: {$inStockCount} (Retail Value: " . number_format($totalSellingValue) . " UGX, Stock Cost: " . number_format($totalCostValue) . " UGX)\n"
-                . "- Today's Sales: " . number_format($todaySalesAmount) . " UGX ({$todaySalesCount} sales)\n"
-                . "- Active Repairs: {$activeRepairsCount} ({$pendingRepairsCount} Pending, {$inProgressRepairsCount} In Progress, {$completedTodayCount} Completed Today)\n"
-                . "- Overdue Dealer Items: {$overdueDealerCount} out of {$pendingDealerCount} total dealer items\n"
-                . "- Outstanding Layaway Balance: " . number_format($totalLayawayBalance) . " UGX across {$activeLayaways->count()} customer accounts\n"
-                . "- Low Stock Models: " . $lowStockProducts->pluck('model_name')->implode(', ') . "\n\n"
-                . "Respond with expert store insights, clear Markdown formatting, bullet points, and helpful tone.\n"
-                . "User Question: " . $userPrompt;
-
-            $modelsToTry = ['gemini-2.0-flash', 'gemini-1.5-flash', 'gemini-pro'];
-
-            foreach ($modelsToTry as $model) {
-                try {
-                    $response = Http::withoutVerifying()->timeout(7)->post("https://generativelanguage.googleapis.com/v1beta/models/{$model}:generateContent?key={$geminiKey}", [
-                        'contents' => [
-                            ['parts' => [['text' => $contextString]]]
-                        ]
-                    ]);
-
-                    if ($response->successful()) {
-                        $replyText = $response->json()['candidates'][0]['content']['parts'][0]['text'] ?? null;
-                        if ($replyText) {
-                            return response()->json(['reply' => trim($replyText), 'source' => "gemini_live_api ({$model})"]);
-                        }
-                    }
-                } catch (\Exception $e) {
-                    // Fall back to local smart engine
-                }
-            }
-        }
-
-        // 3. Local SmartPOS AI Intelligence Engine (Runs instantly offline or fallback)
-        $reply = $this->generateSmartEngineReply($lowerPrompt, [
+        $metrics = [
+            'shopName' => $shopName,
             'inStockCount' => $inStockCount,
+            'bulkStockCount' => $bulkStockCount,
+            'defectiveCount' => $defectiveCount,
+            'atSupplierRepairCount' => $atSupplierRepairCount,
             'totalSellingValue' => $totalSellingValue,
             'totalCostValue' => $totalCostValue,
+            'serializedCostValue' => $serializedCostValue,
+            'bulkCostValue' => $bulkCostValue,
+            'aging30Units' => $aging30Units,
+            'aging60Units' => $aging60Units,
+            'aging30Value' => $aging30Value,
             'todaySalesAmount' => $todaySalesAmount,
             'todaySalesCount' => $todaySalesCount,
+            'todayExpenses' => $todayExpenses,
+            'monthSalesAmount' => $monthSalesAmount,
             'totalSalesAmount' => $totalSalesAmount,
             'lowStockProducts' => $lowStockProducts,
             'activeRepairsCount' => $activeRepairsCount,
             'pendingRepairsCount' => $pendingRepairsCount,
             'inProgressRepairsCount' => $inProgressRepairsCount,
             'completedTodayCount' => $completedTodayCount,
-            'pendingDealerCount' => $pendingDealerCount,
+            'outwardPendingCount' => $outwardPendingCount,
             'overdueDealerCount' => $overdueDealerCount,
+            'dealerOwedAmount' => $dealerOwedAmount,
             'activeLayawaysCount' => $activeLayaways->count(),
             'totalLayawayBalance' => $totalLayawayBalance,
+            'invoiceReceivables' => $invoiceReceivables,
+            'supplierPayables' => $supplierPayables,
+            'supplierCredits' => $supplierCredits,
+            'pendingPurchasesCount' => $pendingPurchasesCount,
+            'businessWallets' => $businessWallets,
+            'totalLiquidity' => $totalLiquidity,
             'brandStock' => $brandStock,
             'topBrands' => $topBrands,
-        ]);
+        ];
 
-        return response()->json(['reply' => $reply, 'source' => 'smartpos_ai_engine']);
+        // 2. Attempt Gemini Live API call via config('services.gemini.key') (works even with config:cache on Render!)
+        $geminiKey = trim((string) (config('services.gemini.key') ?: env('GEMINI_API_KEY') ?: ''));
+        if ($geminiKey !== '' && !in_array(strtolower($geminiKey), ['your_gemini_api_key_here', 'null'])) {
+            $walletSummary = $businessWallets->map(fn($w) => "{$w->name}: UGX " . number_format((float) $w->current_balance))->implode('; ');
+            $lowStockSummary = $lowStockProducts->take(8)->map(fn($p) => trim(($p->brand->name ?? '') . ' ' . $p->model_name) . " ({$p->computed_stock})")->implode(', ');
+            $topBrandsSummary = $topBrands->map(fn($b) => "{$b->name} ({$b->count})")->implode(', ');
+
+            $contextString = "You are SmartPOS AI, a sharp retail & wholesale business assistant for {$shopName}, a smartphone and accessories shop in Uganda (currency: UGX).\n"
+                . "Answer the user's specific question directly, concisely, and practically using the LIVE store data below. Use short bullet points and bold labels.\n\n"
+                . "LIVE STORE DATA (as of " . now()->format('d M Y, H:i') . "):\n"
+                . "- Today's Net Revenue: UGX " . number_format($todaySalesAmount) . " ({$todaySalesCount} sales) | Today's Expenses: UGX " . number_format($todayExpenses) . "\n"
+                . "- This Month's Sales: UGX " . number_format($monthSalesAmount) . " | All-Time Sales: UGX " . number_format($totalSalesAmount) . "\n"
+                . "- Inventory: {$inStockCount} phones + {$bulkStockCount} bulk accessories in stock | Cost Value: UGX " . number_format($totalCostValue) . " | Retail Value: UGX " . number_format($totalSellingValue) . "\n"
+                . "- Defective Phones: {$defectiveCount} | At Supplier (Repair): {$atSupplierRepairCount}\n"
+                . "- Aging / Slow-Moving Stock: {$aging30Units} phones in stock 30+ days (UGX " . number_format($aging30Value) . " tied up), including {$aging60Units} critical 60+ days\n"
+                . "- Low Stock (<5 units): " . ($lowStockSummary ?: 'None') . "\n"
+                . "- Business Wallets Total Liquidity: UGX " . number_format($totalLiquidity) . " (" . ($walletSummary ?: 'No wallets') . ")\n"
+                . "- Receivables: Layaways UGX " . number_format($totalLayawayBalance) . " ({$activeLayaways->count()} active) | B2B Invoices UGX " . number_format($invoiceReceivables) . " | Supplier Credits Owed to Shop: UGX " . number_format($supplierCredits) . "\n"
+                . "- Payables: Supplier Payables UGX " . number_format($supplierPayables) . " ({$pendingPurchasesCount} pending POs) | Dealer Consignments Owed: UGX " . number_format($dealerOwedAmount) . "\n"
+                . "- Outward Dealer Phones: {$outwardPendingCount} pending ({$overdueDealerCount} overdue)\n"
+                . "- Repairs Workshop: {$activeRepairsCount} active ({$pendingRepairsCount} Pending, {$inProgressRepairsCount} In Progress), {$completedTodayCount} completed today\n"
+                . "- Top Selling Brands: " . ($topBrandsSummary ?: 'No sales yet') . "\n\n"
+                . "USER QUESTION: {$userPrompt}";
+
+            $modelsToTry = ['gemini-2.5-flash', 'gemini-2.5-flash-lite', 'gemini-2.0-flash'];
+
+            foreach ($modelsToTry as $model) {
+                try {
+                    $response = Http::withoutVerifying()
+                        ->timeout(12)
+                        ->withHeaders([
+                            'x-goog-api-key' => $geminiKey,
+                            'Content-Type' => 'application/json',
+                        ])
+                        ->post("https://generativelanguage.googleapis.com/v1beta/models/{$model}:generateContent", [
+                            'contents' => [
+                                ['parts' => [['text' => $contextString]]]
+                            ],
+                        ]);
+
+                    if ($response->successful()) {
+                        $replyText = $response->json('candidates.0.content.parts.0.text');
+                        if ($replyText) {
+                            return response()->json([
+                                'reply' => trim($replyText),
+                                'source' => "gemini_live ({$model})",
+                            ]);
+                        }
+                    } else {
+                        Log::warning("Gemini API ({$model}) HTTP {$response->status()}: " . substr($response->body(), 0, 300));
+                    }
+                } catch (\Exception $e) {
+                    Log::warning("Gemini API ({$model}) exception: " . $e->getMessage());
+                }
+            }
+        }
+
+        // 3. Accurate Local SmartPOS Engine (offline / fallback)
+        $reply = $this->generateSmartEngineReply($lowerPrompt, $metrics);
+
+        return response()->json([
+            'reply' => $reply,
+            'source' => 'local_engine',
+        ]);
     }
 
-    private function generateSmartEngineReply(string $prompt, array $data): string
+    private function generateSmartEngineReply(string $prompt, array $d): string
     {
-        // Low Stock / Reorder Queries
+        // 1. Actionable Sales Tips / Promotions / Strategy (MUST come BEFORE generic 'sale' check!)
+        if (
+            str_contains($prompt, 'tip') ||
+            str_contains($prompt, 'boost') ||
+            str_contains($prompt, 'promot') ||
+            str_contains($prompt, 'suggest') ||
+            str_contains($prompt, 'advice') ||
+            str_contains($prompt, 'strategy') ||
+            str_contains($prompt, 'increase')
+        ) {
+            $out = "💡 **Actionable Sales & Growth Tips for {$d['shopName']}:**\n\n";
+            if ($d['aging30Units'] > 0) {
+                $out .= "1. **Clear Aging Stock First:** You have **{$d['aging30Units']} phone(s)** sitting 30+ days (**UGX " . number_format($d['aging30Value']) . "** tied up). Offer a free tempered glass + case bundle or swap slow units with your supplier before they depreciate further.\n";
+            } else {
+                $out .= "1. **Bundle High-Margin Accessories:** Pair every phone checkout with a 20W charger + MagSafe case + screen protector bundle — accessories carry 40–60% margin and boost average ticket size.\n";
+            }
+            $out .= "2. **Convert Repairs into Upgrades:** Offer repair customers a quick **Trade-In valuation** when screen/board repairs exceed 35% of the phone's value.\n";
+            if ($d['activeLayawaysCount'] > 0 || $d['overdueDealerCount'] > 0) {
+                $out .= "3. **Follow Up on Open Cash:** Send 1-click WhatsApp reminders from your Dashboard **Follow-Ups Queue** (**UGX " . number_format($d['totalLayawayBalance']) . "** in layaways, **{$d['overdueDealerCount']}** overdue dealer units) to unlock immediate cashflow.";
+            } else {
+                $out .= "3. **WhatsApp Broadcast New Arrivals:** Whenever you receive a wholesale shipment, message repeat customers with photos, storage, and trade-in options.";
+            }
+            return $out;
+        }
+
+        // 2. Repairs & Workbench (MUST come BEFORE 'today' check!)
+        if (
+            str_contains($prompt, 'repair') ||
+            str_contains($prompt, 'technician') ||
+            str_contains($prompt, 'workbench') ||
+            str_contains($prompt, 'turnaround') ||
+            str_contains($prompt, 'screen') ||
+            str_contains($prompt, 'battery') ||
+            str_contains($prompt, 'defect')
+        ) {
+            $out = "🛠️ **Repairs & Workshop Status:**\n\n";
+            $out .= "• **Active Repair Tickets:** {$d['activeRepairsCount']} device(s)\n";
+            $out .= "  - ⏳ Pending Intake: {$d['pendingRepairsCount']}\n";
+            $out .= "  - ⚡ In Progress: {$d['inProgressRepairsCount']}\n";
+            $out .= "  - ✅ Completed Today: {$d['completedTodayCount']}\n";
+            if ($d['defectiveCount'] > 0 || $d['atSupplierRepairCount'] > 0) {
+                $out .= "• **Shop Stock Under Repair:** {$d['defectiveCount']} defective in shop, {$d['atSupplierRepairCount']} at supplier for repair\n";
+            }
+            $out .= "\n💡 *Tip: Open **Repairs** to update ticket status or send WhatsApp pickup notifications to customers.*";
+            return $out;
+        }
+
+        // 3. Aging / Slow-Moving Stock
+        if (str_contains($prompt, 'aging') || str_contains($prompt, 'slow') || str_contains($prompt, 'dead stock') || str_contains($prompt, 'old stock')) {
+            if ($d['aging30Units'] === 0) {
+                return "✅ **No Slow-Moving Stock!** All in-stock phones are under 30 days old.";
+            }
+            return "⏰ **Aging & Slow-Moving Stock Alert:**\n\n"
+                . "• **Phones in Stock 30+ Days:** {$d['aging30Units']} unit(s)\n"
+                . "• **Critical (60+ Days):** {$d['aging60Units']} unit(s)\n"
+                . "• **Capital Tied Up:** UGX " . number_format($d['aging30Value']) . "\n\n"
+                . "💡 *Open **Inventory → Slow-Moving (30d+)** to review exact IMEIs and discount or swap them with suppliers.*";
+        }
+
+        // 4. Low Stock / Reorder
         if (str_contains($prompt, 'low stock') || str_contains($prompt, 'reorder') || str_contains($prompt, 'restock') || str_contains($prompt, 'running low') || str_contains($prompt, 'out of stock')) {
-            if ($data['lowStockProducts']->isEmpty()) {
-                return "✅ **Stock Status Excellent!** All phone models currently have healthy inventory levels (5+ units available).";
+            if ($d['lowStockProducts']->isEmpty()) {
+                return "✅ **Stock Levels Healthy!** No active product lines are currently below 5 units.";
             }
-
-            $out = "⚠️ **Low Stock & Restock Alert:**\n";
-            $out .= "The following models have fewer than 5 units remaining in stock:\n\n";
-            foreach ($data['lowStockProducts'] as $prod) {
-                $brandName = $prod->brand ? $prod->brand->name : 'Device';
-                $count = $prod->device_imeis_count;
-                $statusBadge = $count == 0 ? '❌ OUT OF STOCK (0)' : "⚠️ Low Stock ({$count} left)";
-                $out .= "• **{$brandName} {$prod->model_name}**: {$statusBadge}\n";
+            $out = "⚠️ **Low Stock & Reorder Breakdown (1–4 units left):**\n\n";
+            foreach ($d['lowStockProducts']->take(10) as $prod) {
+                $brandName = $prod->brand ? ($prod->brand->name . ' ') : '';
+                $out .= "• **{$brandName}{$prod->model_name}**: {$prod->computed_stock} left\n";
             }
-            $out .= "\n💡 *Action Tip: Place supplier re-orders for items with 0 or low stock to ensure no lost sales opportunities.*";
+            $out .= "\n💡 *Open **Inventory → Low Stock (< 5)** or **Log Purchase** to restock.*";
             return $out;
         }
 
-        // Sales / Today / Revenue / Profit Queries
-        if (str_contains($prompt, 'sale') || str_contains($prompt, 'today') || str_contains($prompt, 'revenue') || str_contains($prompt, 'profit') || str_contains($prompt, 'summary') || str_contains($prompt, 'earnings')) {
-            $avgTicket = $data['todaySalesCount'] > 0 ? number_format($data['todaySalesAmount'] / $data['todaySalesCount']) : '0';
-            $out = "📊 **Store Revenue & Sales Analytics:**\n\n";
-            $out .= "• **Today's Revenue:** " . number_format($data['todaySalesAmount']) . " UGX\n";
-            $out .= "• **Completed Sales Today:** " . $data['todaySalesCount'] . " transaction(s)\n";
-            $out .= "• **Average Checkout Value:** " . $avgTicket . " UGX\n";
-            $out .= "• **All-Time Total Store Revenue:** " . number_format($data['totalSalesAmount']) . " UGX\n\n";
-            $out .= "📈 *Tip: Checkout velocity peaks in the late afternoon (4 PM - 7 PM). Ensure staff availability during peak hours!*";
-            return $out;
-        }
-
-        // Repair & Technical Queries
-        if (str_contains($prompt, 'repair') || str_contains($prompt, 'fix') || str_contains($prompt, 'technician') || str_contains($prompt, 'screen') || str_contains($prompt, 'battery') || str_contains($prompt, 'defect')) {
-            $out = "🛠️ **Repairs & Workshop Diagnostics:**\n\n";
-            $out .= "• **Active Repair Tickets:** " . $data['activeRepairsCount'] . " device(s)\n";
-            $out .= "  - ⏳ Pending Intake: " . $data['pendingRepairsCount'] . "\n";
-            $out .= "  - ⚡ In Progress on Workbench: " . $data['inProgressRepairsCount'] . "\n";
-            $out .= "  - ✅ Completed Today: " . $data['completedTodayCount'] . " device(s)\n\n";
-
-            if (str_contains($prompt, 'screen') || str_contains($prompt, 'glass')) {
-                $out .= "💡 **Display Diagnostic Tip:** When replacing cracked OLED screens, perform a pre-intake TrueTone & touch digitizer test before unmounting flex cables.";
-            } else if (str_contains($prompt, 'battery') || str_contains($prompt, 'power')) {
-                $out .= "💡 **Power Diagnostic Tip:** Test charge current (mA) on USB ammeter before replacing battery to verify charging IC IC flex integrity.";
-            } else {
-                $out .= "💡 *Use the ✨ **AI Estimate** button in the Repair Form Modal for 1-click automatic quote calculation based on shop inventory!*";
+        // 5. Business Wallets / Treasury / Cash / Liquidity
+        if (str_contains($prompt, 'wallet') || str_contains($prompt, 'treasury') || str_contains($prompt, 'cash') || str_contains($prompt, 'momo') || str_contains($prompt, 'bank') || str_contains($prompt, 'liquidity') || str_contains($prompt, 'money')) {
+            $out = "🏦 **Business Wallets & Liquidity:**\n\n";
+            $out .= "• **Total Business Liquidity:** UGX " . number_format($d['totalLiquidity']) . "\n";
+            foreach ($d['businessWallets'] as $w) {
+                $out .= "  - **{$w->name}:** UGX " . number_format((float) $w->current_balance) . "\n";
             }
+            $out .= "\n• **Today's Expenses:** UGX " . number_format($d['todayExpenses']);
             return $out;
         }
 
-        // Dealers / Consignments Queries
-        if (str_contains($prompt, 'dealer') || str_contains($prompt, 'supplier') || str_contains($prompt, 'overdue') || str_contains($prompt, 'consignment')) {
+        // 6. Suppliers, Payables & Supplier Credits
+        if (str_contains($prompt, 'supplier') || str_contains($prompt, 'credit') || str_contains($prompt, 'purchase') || str_contains($prompt, 'payable')) {
+            return "📦 **Suppliers & Payables Summary:**\n\n"
+                . "• **Supplier Payables Owed:** UGX " . number_format($d['supplierPayables']) . "\n"
+                . "• **Available Supplier Credits (Owed to Shop):** UGX " . number_format($d['supplierCredits']) . "\n"
+                . "• **Pending / In-Transit Orders:** {$d['pendingPurchasesCount']}\n\n"
+                . "💡 *Open **Suppliers** to apply available credit toward balances, receive credit refunds, or print a Supplier Statement PDF.*";
+        }
+
+        // 7. Dealers / Consignments
+        if (str_contains($prompt, 'dealer') || str_contains($prompt, 'consignment') || str_contains($prompt, 'overdue')) {
             $out = "🤝 **Dealer & Consignment Overview:**\n\n";
-            $out .= "• **Pending Dealer Items:** " . $data['pendingDealerCount'] . " item(s)\n";
-            if ($data['overdueDealerCount'] > 0) {
-                $out .= "• 🚨 **Overdue Items:** " . $data['overdueDealerCount'] . " item(s) past expected return date!\n\n";
-                $out .= "⚠️ *Action Required: Open the **Dealers** tab and filter by overdue items to request returns or settlements.*";
-            } else {
-                $out .= "• ✅ **Overdue Status:** All dealer items are within expected return dates.\n";
-            }
+            $out .= "• **Outward Phones with Dealers:** {$d['outwardPendingCount']} pending";
+            $out .= $d['overdueDealerCount'] > 0 ? " (**{$d['overdueDealerCount']} overdue!**)\n" : " (none overdue)\n";
+            $out .= "• **Inward Consignment Payouts Owed:** UGX " . number_format($d['dealerOwedAmount']) . "\n";
+            $out .= "\n💡 *Use the Dashboard **Follow-Ups Queue** to send 1-click WhatsApp reminders to dealers.*";
             return $out;
         }
 
-        // Layaway & Installments Queries
-        if (str_contains($prompt, 'layaway') || str_contains($prompt, 'installment') || str_contains($prompt, 'balance') || str_contains($prompt, 'debt')) {
-            $out = "💰 **Layaway & Customer Installments Summary:**\n\n";
-            $out .= "• **Active Layaway Accounts:** " . $data['activeLayawaysCount'] . " customer(s)\n";
-            $out .= "• **Total Outstanding Balance:** " . number_format($data['totalLayawayBalance']) . " UGX\n\n";
-            $out .= "💡 *Tip: Open **POS -> Layaways** to log customer installment payments or print updated receipts.*";
-            return $out;
+        // 8. Layaways & B2B Invoices
+        if (str_contains($prompt, 'layaway') || str_contains($prompt, 'installment') || str_contains($prompt, 'invoice') || str_contains($prompt, 'receivable') || str_contains($prompt, 'debt') || str_contains($prompt, 'balance')) {
+            return "💰 **Receivables (Layaways & B2B Invoices):**\n\n"
+                . "• **Active Layaways:** {$d['activeLayawaysCount']} account(s) — **UGX " . number_format($d['totalLayawayBalance']) . "** remaining\n"
+                . "• **Unpaid B2B Invoices:** **UGX " . number_format($d['invoiceReceivables']) . "**\n"
+                . "• **Supplier Credits Owed to Shop:** **UGX " . number_format($d['supplierCredits']) . "**\n\n"
+                . "💡 *Use the Dashboard **Follow-Ups Queue** to send 1-click WhatsApp payment reminders.*";
         }
 
-        // Inventory / Stock Value Queries
+        // 9. Inventory / Stock Value
         if (str_contains($prompt, 'inventory') || str_contains($prompt, 'stock') || str_contains($prompt, 'phone') || str_contains($prompt, 'worth') || str_contains($prompt, 'value')) {
             $out = "📱 **Inventory & Asset Valuation:**\n\n";
-            $out .= "• **In-Stock Phone Units:** " . number_format($data['inStockCount']) . " units\n";
-            $out .= "• **Total Retail Selling Value:** " . number_format($data['totalSellingValue']) . " UGX\n";
-            $out .= "• **Estimated Stock Cost Value:** " . number_format($data['totalCostValue']) . " UGX\n\n";
-            $out .= "**Stock Distribution by Brand:**\n";
-            if ($data['brandStock']->isNotEmpty()) {
-                foreach ($data['brandStock'] as $b) {
-                    $out .= "• **{$b->name}**: {$b->count} units\n";
+            $out .= "• **Phones In Stock:** " . number_format($d['inStockCount']) . " units (Cost: UGX " . number_format($d['serializedCostValue']) . ")\n";
+            $out .= "• **Bulk Accessories:** " . number_format($d['bulkStockCount']) . " units (Cost: UGX " . number_format($d['bulkCostValue']) . ")\n";
+            $out .= "• **Total Stock Cost:** UGX " . number_format($d['totalCostValue']) . "\n";
+            $out .= "• **Total Retail Value:** UGX " . number_format($d['totalSellingValue']) . "\n";
+            if ($d['brandStock']->isNotEmpty()) {
+                $out .= "\n**Phones by Brand:**\n";
+                foreach ($d['brandStock']->take(6) as $b) {
+                    $out .= "• **{$b->name}:** {$b->count} unit(s)\n";
                 }
-            } else {
-                $out .= "• No devices registered.\n";
             }
             return $out;
         }
 
-        // Top Brands / Best Sellers
+        // 10. Top Brands
         if (str_contains($prompt, 'brand') || str_contains($prompt, 'top') || str_contains($prompt, 'best') || str_contains($prompt, 'popular')) {
             $out = "🏆 **Top Performing Brands:**\n\n";
-            if ($data['topBrands']->isNotEmpty()) {
-                foreach ($data['topBrands'] as $index => $b) {
-                    $rank = $index + 1;
-                    $out .= "{$rank}. **{$b->name}**: {$b->count} unit(s) sold\n";
+            if ($d['topBrands']->isNotEmpty()) {
+                foreach ($d['topBrands'] as $idx => $b) {
+                    $out .= ($idx + 1) . ". **{$b->name}:** {$b->count} unit(s) sold\n";
                 }
             } else {
-                $out .= "No sales data recorded yet to compute top brands.";
+                $out .= "No sales data recorded yet.";
             }
             return $out;
         }
 
-        // Specific Greeting Handling
-        if (str_contains($prompt, 'morning') || str_contains($prompt, 'afternoon') || str_contains($prompt, 'evening') || in_array($prompt, ['hi', 'hello', 'hey', 'good morning', 'good afternoon', 'good evening'])) {
-            $timeGreeting = "Good day!";
-            if (str_contains($prompt, 'morning')) $timeGreeting = "Good morning! ☀️";
-            elseif (str_contains($prompt, 'afternoon')) $timeGreeting = "Good afternoon! 🌤️";
-            elseif (str_contains($prompt, 'evening')) $timeGreeting = "Good evening! 🌙";
-
-            $out = "👋 **{$timeGreeting} Welcome to SmartPOS Kampala.**\n\n";
-            $out .= "Here is your live store snapshot:\n";
-            $out .= "• **Phones in Stock:** " . number_format($data['inStockCount']) . " units (" . number_format($data['totalSellingValue']) . " UGX retail value)\n";
-            $out .= "• **Today's Revenue:** " . number_format($data['todaySalesAmount']) . " UGX ({$data['todaySalesCount']} sales)\n";
-            $out .= "• **Active Repairs:** " . $data['activeRepairsCount'] . " device(s) on workbench\n";
-            $out .= "• **Overdue Dealer Items:** " . $data['overdueDealerCount'] . " item(s)\n\n";
-            $out .= "💬 *How can I assist you today? Try asking me:*\n";
-            $out .= "• \"Which phones are low on stock?\"\n";
-            $out .= "• \"Give me today's sales summary\"\n";
-            $out .= "• \"How many active repairs do we have?\"\n";
-            $out .= "• \"What is our total inventory value?\"";
-            return $out;
+        // 11. Sales / Today / Revenue / Summary
+        if (str_contains($prompt, 'sale') || str_contains($prompt, 'today') || str_contains($prompt, 'revenue') || str_contains($prompt, 'profit') || str_contains($prompt, 'summary') || str_contains($prompt, 'earnings')) {
+            $avgTicket = $d['todaySalesCount'] > 0 ? number_format($d['todaySalesAmount'] / $d['todaySalesCount']) : '0';
+            return "📊 **Store Revenue & Sales Summary:**\n\n"
+                . "• **Today's Net Revenue:** UGX " . number_format($d['todaySalesAmount']) . " ({$d['todaySalesCount']} sales)\n"
+                . "• **Today's Expenses:** UGX " . number_format($d['todayExpenses']) . "\n"
+                . "• **Average Checkout Value:** UGX {$avgTicket}\n"
+                . "• **This Month's Sales:** UGX " . number_format($d['monthSalesAmount']) . "\n"
+                . "• **All-Time Sales:** UGX " . number_format($d['totalSalesAmount']);
         }
 
-        // Hardware / Printing / System Help
+        // 12. Printing / Settings
         if (str_contains($prompt, 'print') || str_contains($prompt, 'thermal') || str_contains($prompt, 'receipt') || str_contains($prompt, 'setting')) {
-            return "🖨️ **ESC/POS Thermal Printing Help:**\n\n"
-                . "SmartPOS supports **58mm** and **80mm** thermal receipt printers with automated cash drawer pulses.\n\n"
-                . "• Open **POS** -> click **Printer Settings** to switch roll size or test cash drawer kick.\n"
-                . "• To auto-print receipts after checkout, enable **Auto Print Receipts** in the thermal settings modal.";
+            return "🖨️ **Thermal Printing & Receipts:**\n\n"
+                . "• SmartPOS supports **58mm** and **80mm** thermal printers via QZ Tray or browser print, plus 1-click **WhatsApp Receipts**.\n"
+                . "• Configure roll width and store branding under **Settings** (`/settings`).";
         }
 
-        // General Welcome & Diagnostic Response
-        $out = "👋 **Hello! I am SmartPOS AI, your Store Intelligence Assistant.**\n\n";
-        $out .= "Here is a quick snapshot of SmartPOS Kampala:\n";
-        $out .= "• **Phones in Stock:** " . number_format($data['inStockCount']) . " units (" . number_format($data['totalSellingValue']) . " UGX retail value)\n";
-        $out .= "• **Today's Revenue:** " . number_format($data['todaySalesAmount']) . " UGX ({$data['todaySalesCount']} sales)\n";
-        $out .= "• **Active Repairs:** " . $data['activeRepairsCount'] . " device(s) on workbench\n";
-        $out .= "• **Overdue Dealer Items:** " . $data['overdueDealerCount'] . " item(s)\n\n";
-        $out .= "💬 *Try asking me:*\n";
-        $out .= "• \"Which phones are low on stock?\"\n";
-        $out .= "• \"Give me today's sales summary\"\n";
-        $out .= "• \"How many active repairs do we have?\"\n";
-        $out .= "• \"What is our total inventory value?\"\n";
-        $out .= "• \"What are our overdue dealer items?\"";
-        return $out;
+        // 13. Greeting or Default Snapshot
+        return "👋 **Hello! Here is your live {$d['shopName']} snapshot:**\n\n"
+            . "• **Today's Revenue:** UGX " . number_format($d['todaySalesAmount']) . " ({$d['todaySalesCount']} sales)\n"
+            . "• **Stock on Hand:** {$d['inStockCount']} phones + {$d['bulkStockCount']} accessories (Cost: UGX " . number_format($d['totalCostValue']) . ")\n"
+            . "• **Business Wallets:** UGX " . number_format($d['totalLiquidity']) . "\n"
+            . "• **Active Repairs:** {$d['activeRepairsCount']} | **Aging Phones (30d+):** {$d['aging30Units']}\n\n"
+            . "💬 *Try asking about:* **Wallets**, **Aging Stock**, **Low Stock**, **Active Repairs**, **Suppliers & Credits**, **Layaways**, **Sales Tips**, or **Today's Summary**.";
     }
 }

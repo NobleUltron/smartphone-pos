@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Head, Link } from '@inertiajs/react';
 import axios from 'axios';
-import { TrendingUp, Smartphone, AlertTriangle, Sparkles, User, Banknote, PieChart as PieChartIcon, Minimize2, Maximize2, Trash2, Send, Bot, Clock, ArrowRight, ShoppingCart, Settings, Handshake, Layers, DollarSign, Wrench, Wallet, ArrowUpRight, Landmark } from 'lucide-react';
+import { TrendingUp, Smartphone, AlertTriangle, Sparkles, User, Banknote, PieChart as PieChartIcon, Minimize2, Maximize2, Trash2, Send, Bot, Clock, ArrowRight, ShoppingCart, Settings, Handshake, Layers, DollarSign, Wrench, Wallet, ArrowUpRight, Landmark, MessageCircle, BellRing } from 'lucide-react';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Sector } from 'recharts';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import Card from '@/Components/SaaS/Card';
@@ -26,10 +26,31 @@ export default function Dashboard({
     dealerMetrics = {},
     layawayMetrics = {},
     repairMetrics = {},
-    shiftMetrics = {}
+    shiftMetrics = {},
+    followUpItems = [],
+    shopName = 'SmartPOS'
 }) {
     const COLORS = ['#F43F5E', '#6366F1', '#38BDF8', '#8B5CF6', '#10B981'];
     const safeSalesData = Array.isArray(salesData) ? salesData : Object.values(salesData || {});
+    const [followUpTab, setFollowUpTab] = useState('all');
+
+    const handleWhatsAppReminder = (item) => {
+        let msg = '';
+        if (item.type === 'layaway') {
+            msg = `Hello ${item.name}, friendly reminder from ${shopName} regarding your layaway for ${item.reference}. Remaining balance: UGX ${Number(item.amount || 0).toLocaleString()}. Please let us know when you'd like to make your next installment. Thank you!`;
+        } else if (item.type === 'invoice') {
+            msg = `Hello ${item.name}, friendly reminder from ${shopName} regarding ${item.reference} (${item.due_label}). Outstanding balance: UGX ${Number(item.amount || 0).toLocaleString()}. Kindly advise on settlement. Thank you!`;
+        } else {
+            msg = `Hello ${item.name}, checking in from ${shopName} regarding the consigned device ${item.reference} (${item.due_label}, agreed value UGX ${Number(item.amount || 0).toLocaleString()}). Please share an update on sale or return. Thank you!`;
+        }
+
+        const digits = (item.phone || '').replace(/\D/g, '');
+        const waPhone = digits.startsWith('0') ? `256${digits.slice(1)}` : digits;
+        const url = waPhone
+            ? `https://wa.me/${waPhone}?text=${encodeURIComponent(msg)}`
+            : `https://wa.me/?text=${encodeURIComponent(msg)}`;
+        window.open(url, '_blank', 'noopener,noreferrer');
+    };
     const roleLabel = (auth?.user?.role || '').toLowerCase() === 'manager' ? 'Store Manager' : 'Store Owner';
     
     const [messages, setMessages] = useState([
@@ -98,7 +119,9 @@ export default function Dashboard({
         try {
             const res = await axios.post('/api/gemini/ask', { prompt: query });
             const aiTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-            const aiMsg = { role: 'assistant', text: res.data.reply, time: aiTime };
+            const src = res.data.source || 'local_engine';
+            const sourceLabel = src.startsWith('gemini_live') ? '✨ Gemini Live' : '⚡ Local Engine';
+            const aiMsg = { role: 'assistant', text: res.data.reply, time: aiTime, source: sourceLabel };
             setMessages(prev => [...prev, aiMsg]);
         } catch (error) {
             const aiTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
@@ -546,6 +569,125 @@ export default function Dashboard({
                 </div>
             </div>
 
+            {/* Unified Overdue & Follow-Ups Collection Queue */}
+            {followUpItems.length > 0 && (() => {
+                const filteredFollowUps = followUpTab === 'all'
+                    ? followUpItems
+                    : followUpItems.filter(i => i.type === followUpTab);
+                const overdueCount = followUpItems.filter(i => i.is_overdue).length;
+
+                return (
+                <div className="mb-8">
+                    <Card noPadding className="overflow-hidden border-amber-200/80 dark:border-amber-900/50">
+                        <div className="px-6 py-4 bg-gradient-to-r from-amber-50/80 via-white to-white dark:from-amber-950/30 dark:via-slate-900 dark:to-slate-900 border-b border-slate-100 dark:border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                            <div className="flex items-center gap-3">
+                                <div className="w-10 h-10 rounded-xl bg-amber-100 dark:bg-amber-900/50 text-amber-700 dark:text-amber-300 flex items-center justify-center shrink-0">
+                                    <BellRing size={19} />
+                                </div>
+                                <div>
+                                    <h3 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                                        Follow-Ups &amp; Overdue Collections
+                                        {overdueCount > 0 && (
+                                            <span className="px-2 py-0.5 rounded-full text-[11px] font-bold bg-rose-100 dark:bg-rose-950/60 text-rose-700 dark:text-rose-300">
+                                                {overdueCount} overdue
+                                            </span>
+                                        )}
+                                    </h3>
+                                    <p className="text-xs text-slate-500 dark:text-slate-400">
+                                        Send 1-click WhatsApp reminders for active layaways, B2B invoices, and outward dealer stock.
+                                    </p>
+                                </div>
+                            </div>
+
+                            <div className="flex items-center gap-1.5 bg-slate-100 dark:bg-slate-800 p-1 rounded-xl w-fit">
+                                {[
+                                    { key: 'all', label: `All (${followUpItems.length})` },
+                                    { key: 'layaway', label: `Layaways (${followUpItems.filter(i => i.type === 'layaway').length})` },
+                                    { key: 'invoice', label: `Invoices (${followUpItems.filter(i => i.type === 'invoice').length})` },
+                                    { key: 'dealer', label: `Dealers (${followUpItems.filter(i => i.type === 'dealer').length})` },
+                                ].map(tab => (
+                                    <button
+                                        key={tab.key}
+                                        type="button"
+                                        onClick={() => setFollowUpTab(tab.key)}
+                                        className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-colors ${
+                                            followUpTab === tab.key
+                                                ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-sm'
+                                                : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-white'
+                                        }`}
+                                    >
+                                        {tab.label}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+
+                        <div className="divide-y divide-slate-100 dark:divide-slate-800">
+                            {filteredFollowUps.length === 0 ? (
+                                <div className="p-6 text-center text-sm text-slate-500">No items in this category.</div>
+                            ) : (
+                                filteredFollowUps.map(item => (
+                                    <div key={item.id} className="px-6 py-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:bg-slate-50/70 dark:hover:bg-slate-800/40 transition-colors">
+                                        <div className="flex items-start sm:items-center gap-3 min-w-0">
+                                            <Badge variant={
+                                                item.type === 'layaway' ? 'info' :
+                                                item.type === 'invoice' ? 'warning' : 'primary'
+                                            }>
+                                                {item.type_label}
+                                            </Badge>
+                                            <div className="min-w-0">
+                                                <div className="flex items-center gap-2 flex-wrap">
+                                                    <span className="font-bold text-sm text-slate-900 dark:text-white">{item.name}</span>
+                                                    {item.phone && <span className="text-xs text-slate-400 font-mono">{item.phone}</span>}
+                                                    {item.is_overdue && (
+                                                        <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-rose-100 dark:bg-rose-950/60 text-rose-700 dark:text-rose-300">
+                                                            {item.due_label}
+                                                        </span>
+                                                    )}
+                                                    {!item.is_overdue && (
+                                                        <span className="text-[11px] text-slate-500">{item.due_label}</span>
+                                                    )}
+                                                </div>
+                                                <div className="text-xs text-slate-500 dark:text-slate-400 truncate max-w-md" title={item.reference}>
+                                                    {item.reference}
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <div className="flex items-center justify-between sm:justify-end gap-3 shrink-0">
+                                            <div className="text-right">
+                                                <div className="text-sm font-black text-slate-900 dark:text-white">
+                                                    UGX {Number(item.amount || 0).toLocaleString()}
+                                                </div>
+                                                <div className="text-[10px] text-slate-400 uppercase font-bold">
+                                                    {item.type === 'dealer' ? 'Device Value' : 'Balance Due'}
+                                                </div>
+                                            </div>
+                                            <button
+                                                type="button"
+                                                onClick={() => handleWhatsAppReminder(item)}
+                                                className="px-3 py-1.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/50 dark:hover:bg-emerald-900/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 text-xs font-bold flex items-center gap-1.5 transition-colors"
+                                                title="Send WhatsApp Reminder"
+                                            >
+                                                <MessageCircle size={14} /> Remind
+                                            </button>
+                                            <Link
+                                                href={item.href}
+                                                className="p-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 transition-colors"
+                                                title="Open record"
+                                            >
+                                                <ArrowUpRight size={15} />
+                                            </Link>
+                                        </div>
+                                    </div>
+                                ))
+                            )}
+                        </div>
+                    </Card>
+                </div>
+                );
+            })()}
+
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
                 {/* 7-Day Revenue Trend */}
                 <div className="lg:col-span-2">
@@ -807,8 +949,13 @@ export default function Dashboard({
                                         }`}>
                                             {renderFormattedText(msg.text)}
                                         </div>
-                                        <div className={`text-[10px] text-slate-400 mt-1 font-medium ${msg.role === 'user' ? 'text-right' : 'text-left'}`}>
-                                            {msg.time}
+                                        <div className={`text-[10px] text-slate-400 mt-1 font-medium flex items-center gap-2 ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                                            <span>{msg.time}</span>
+                                            {msg.source && (
+                                                <span className="px-1.5 py-0.5 rounded bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-300 font-bold text-[9px]">
+                                                    {msg.source}
+                                                </span>
+                                            )}
                                         </div>
                                     </div>
                                     {msg.role === 'user' && (
@@ -853,6 +1000,12 @@ export default function Dashboard({
                             </button>
                             <button className="whitespace-nowrap px-3 py-1.5 rounded-full border border-indigo-100 dark:border-indigo-800/60 bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 text-xs font-semibold hover:bg-indigo-100 dark:hover:bg-indigo-900/60 transition-colors" onClick={() => handleSend("What is our total inventory value?")}>
                                 📱 Stock Value
+                            </button>
+                            <button className="whitespace-nowrap px-3 py-1.5 rounded-full border border-indigo-100 dark:border-indigo-800/60 bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 text-xs font-semibold hover:bg-indigo-100 dark:hover:bg-indigo-900/60 transition-colors" onClick={() => handleSend("Show me aging slow-moving phones")}>
+                                ⏰ Aging Stock
+                            </button>
+                            <button className="whitespace-nowrap px-3 py-1.5 rounded-full border border-indigo-100 dark:border-indigo-800/60 bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 text-xs font-semibold hover:bg-indigo-100 dark:hover:bg-indigo-900/60 transition-colors" onClick={() => handleSend("What is our business wallet liquidity?")}>
+                                🏦 Wallets
                             </button>
                         </div>
 

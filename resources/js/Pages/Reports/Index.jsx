@@ -1,13 +1,16 @@
 import React, { useState } from 'react';
-import { Head, Link, router } from '@inertiajs/react';
+import { Head, Link, router, useForm } from '@inertiajs/react';
+import toast from 'react-hot-toast';
 import { 
-    BarChart3, TrendingUp, DollarSign, Smartphone, Users2, Activity, Tags, Wallet, Package, Wrench, Sparkles, Handshake, Layers, ArrowUpRight, Receipt, CheckCircle, FileSpreadsheet 
+    BarChart3, TrendingUp, DollarSign, Smartphone, Users2, Activity, Tags, Wallet, Package, Wrench, Sparkles, Handshake, Layers, ArrowUpRight, Receipt, CheckCircle, FileSpreadsheet, X, AlertTriangle 
 } from 'lucide-react';
 import { PieChart, Pie, Cell, Tooltip, Legend, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Sector } from 'recharts';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import Card from '@/Components/SaaS/Card';
 import Badge from '@/Components/SaaS/Badge';
+import Button from '@/Components/SaaS/Button';
 import PageHeader from '@/Components/SaaS/PageHeader';
+import Modal from '@/Components/Modal';
 
 const COLORS = ['#4F46E5', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#3B82F6', '#EC4899', '#14B8A6'];
 
@@ -24,11 +27,49 @@ export default function ReportsIndex({
     topBrands = [], 
     topCategories = [], 
     cashierPerformance = [], 
-    brandProfitBreakdown = [] 
+    brandProfitBreakdown = [],
+    commissionPayouts = [],
+    paymentAccounts = []
 }) {
     const [activeIndex, setActiveIndex] = useState(0);
     const [dateFrom, setDateFrom] = useState(filters?.date_from || '');
     const [dateTo, setDateTo] = useState(filters?.date_to || '');
+    const [payingStaff, setPayingStaff] = useState(null);
+
+    const payoutForm = useForm({
+        user_id: '',
+        amount: '',
+        payment_account_id: paymentAccounts[0]?.id || '',
+        notes: '',
+        period_label: period,
+    });
+
+    const openPayoutModal = (staff) => {
+        const balance = Number(staff.commission_balance ?? staff.commission_earned ?? 0);
+        setPayingStaff(staff);
+        payoutForm.clearErrors();
+        payoutForm.setData({
+            user_id: staff.user_id,
+            amount: balance > 0 ? balance : Number(staff.commission_earned || 0),
+            payment_account_id: paymentAccounts[0]?.id || '',
+            notes: '',
+            period_label: period === 'custom' ? `${dateFrom || '...'} to ${dateTo || '...'}` : period,
+        });
+    };
+
+    const handlePayoutSubmit = (e) => {
+        e.preventDefault();
+        payoutForm.post('/api/reports/commissions/pay', {
+            preserveScroll: true,
+            onSuccess: () => {
+                setPayingStaff(null);
+                toast.success('Staff commission payout recorded!');
+            },
+            onError: (errs) => {
+                toast.error(errs?.amount || errs?.payment_account_id || Object.values(errs || {})[0] || 'Failed to pay commission');
+            },
+        });
+    };
 
     const onPieEnter = (_, index) => {
         setActiveIndex(index);
@@ -707,7 +748,7 @@ export default function ReportsIndex({
                                             </td>
                                             <td className="text-right">
                                                 {staff.commission_type && staff.commission_type !== 'none' ? (
-                                                    <div>
+                                                    <div className="flex flex-col items-end gap-1">
                                                         <div className="font-black text-indigo-600 dark:text-indigo-400">
                                                             {Number(staff.commission_earned || 0).toLocaleString()} <span className="text-slate-400 font-normal text-xs">UGX</span>
                                                         </div>
@@ -718,6 +759,24 @@ export default function ReportsIndex({
                                                                     ? `${staff.commission_rate}% of profit`
                                                                     : `${staff.commission_rate}% of revenue`}
                                                         </div>
+                                                        {Number(staff.commission_paid || 0) > 0 && (
+                                                            <div className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400">
+                                                                Paid: {Number(staff.commission_paid).toLocaleString()} UGX
+                                                            </div>
+                                                        )}
+                                                        {Number(staff.commission_balance || 0) > 0 ? (
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => openPayoutModal(staff)}
+                                                                className="mt-0.5 px-2.5 py-1 rounded-lg bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/50 dark:hover:bg-emerald-900/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 text-[11px] font-bold transition-colors"
+                                                            >
+                                                                Pay {Number(staff.commission_balance).toLocaleString()}
+                                                            </button>
+                                                        ) : Number(staff.commission_paid || 0) > 0 ? (
+                                                            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
+                                                                Settled ✓
+                                                            </span>
+                                                        ) : null}
                                                     </div>
                                                 ) : (
                                                     <span className="text-xs text-slate-400">—</span>
@@ -734,6 +793,39 @@ export default function ReportsIndex({
                                 </tbody>
                             </table>
                         </div>
+
+                        {/* Commission Payout Ledger */}
+                        {commissionPayouts.length > 0 && (
+                            <div className="border-t border-slate-100 dark:border-slate-800">
+                                <div className="px-6 py-3 bg-slate-50/70 dark:bg-slate-800/50 flex items-center justify-between">
+                                    <span className="text-xs font-extrabold uppercase tracking-wider text-slate-600 dark:text-slate-300 flex items-center gap-1.5">
+                                        <Wallet size={14} className="text-emerald-600" />
+                                        Commission Payout Ledger ({commissionPayouts.length})
+                                    </span>
+                                    <span className="text-xs font-black text-emerald-600 dark:text-emerald-400">
+                                        Total Paid: UGX {commissionPayouts.reduce((s, p) => s + Number(p.amount || 0), 0).toLocaleString()}
+                                    </span>
+                                </div>
+                                <div className="divide-y divide-slate-100 dark:divide-slate-800">
+                                    {commissionPayouts.map(payout => (
+                                        <div key={payout.id} className="px-6 py-2.5 flex items-center justify-between gap-3 text-xs">
+                                            <div className="min-w-0">
+                                                <div className="font-bold text-slate-800 dark:text-slate-200">
+                                                    {payout.user?.name || 'Staff'}
+                                                    <span className="text-slate-400 font-normal ml-2">
+                                                        {new Date(payout.expense_date).toLocaleDateString()} • {payout.payment_account?.name || 'Cash'}
+                                                    </span>
+                                                </div>
+                                                <div className="text-[11px] text-slate-500 truncate max-w-md">{payout.description}</div>
+                                            </div>
+                                            <div className="font-black text-emerald-600 dark:text-emerald-400 shrink-0">
+                                                UGX {Number(payout.amount || 0).toLocaleString()}
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
                     </Card>
                 </div>
 
@@ -770,6 +862,104 @@ export default function ReportsIndex({
                     </div>
                 </div>
             </div>
+
+            {/* Pay Staff Commission Modal */}
+            {payingStaff && (
+                <Modal show={true} onClose={() => !payoutForm.processing && setPayingStaff(null)} maxWidth="md">
+                    <div className="p-6 bg-white dark:bg-slate-900 rounded-2xl">
+                        <div className="flex items-center justify-between pb-4 border-b border-slate-100 dark:border-slate-800 mb-5">
+                            <div>
+                                <h3 className="font-bold text-lg text-slate-900 dark:text-white flex items-center gap-2">
+                                    <Wallet size={20} className="text-emerald-600" />
+                                    Pay Staff Commission
+                                </h3>
+                                <p className="text-xs text-slate-500 mt-0.5">{payingStaff.name} ({payingStaff.role})</p>
+                            </div>
+                            <button onClick={() => setPayingStaff(null)} className="text-slate-400 hover:text-slate-600">
+                                <X size={20} />
+                            </button>
+                        </div>
+
+                        <form onSubmit={handlePayoutSubmit} className="space-y-4">
+                            {Object.keys(payoutForm.errors).length > 0 && (
+                                <div className="bg-rose-50 text-rose-800 p-3 rounded-xl text-xs border border-rose-200 flex items-start gap-2 font-medium">
+                                    <AlertTriangle size={16} className="mt-0.5 shrink-0 text-rose-600" />
+                                    <div>
+                                        {Object.values(payoutForm.errors).map((err, i) => (
+                                            <div key={i}>{err}</div>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+
+                            <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 text-xs space-y-1.5">
+                                <div className="flex justify-between">
+                                    <span className="text-slate-500">Commission Earned (Period):</span>
+                                    <span className="font-bold text-slate-900 dark:text-white">UGX {Number(payingStaff.commission_earned || 0).toLocaleString()}</span>
+                                </div>
+                                <div className="flex justify-between">
+                                    <span className="text-slate-500">Already Paid (Period):</span>
+                                    <span className="font-bold text-emerald-600">UGX {Number(payingStaff.commission_paid || 0).toLocaleString()}</span>
+                                </div>
+                                <div className="flex justify-between pt-1.5 border-t border-slate-200 dark:border-slate-700 font-extrabold text-sm">
+                                    <span className="text-slate-900 dark:text-white">Remaining Due:</span>
+                                    <span className="text-indigo-600 dark:text-indigo-400">UGX {Number(payingStaff.commission_balance || 0).toLocaleString()}</span>
+                                </div>
+                            </div>
+
+                            <div>
+                                <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">Payout Amount (UGX) *</label>
+                                <input
+                                    type="number"
+                                    min="1"
+                                    className="saas-input w-full text-lg font-bold"
+                                    value={payoutForm.data.amount}
+                                    onChange={e => payoutForm.setData('amount', e.target.value)}
+                                    required
+                                />
+                            </div>
+
+                            <div>
+                                <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">Pay From Business Wallet *</label>
+                                <select
+                                    className="saas-input w-full font-medium"
+                                    value={payoutForm.data.payment_account_id}
+                                    onChange={e => payoutForm.setData('payment_account_id', e.target.value)}
+                                    required
+                                >
+                                    <option value="">-- Choose Business Wallet --</option>
+                                    {paymentAccounts.map(acc => (
+                                        <option key={acc.id} value={acc.id}>
+                                            {acc.name} — Bal: UGX {Number(acc.current_balance || 0).toLocaleString()}
+                                        </option>
+                                    ))}
+                                </select>
+                                <p className="text-[11px] text-slate-500 mt-1">
+                                    Records a <strong>Staff Commission</strong> operating expense and deducts from Treasury (and Cash Drawer if paying from open Till).
+                                </p>
+                            </div>
+
+                            <div>
+                                <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">Notes / Reference (Optional)</label>
+                                <input
+                                    type="text"
+                                    className="saas-input w-full text-sm"
+                                    placeholder="e.g. Paid via MTN MoMo"
+                                    value={payoutForm.data.notes}
+                                    onChange={e => payoutForm.setData('notes', e.target.value)}
+                                />
+                            </div>
+
+                            <div className="flex justify-end gap-3 pt-4 border-t border-slate-100 dark:border-slate-800">
+                                <Button variant="secondary" type="button" onClick={() => setPayingStaff(null)}>Cancel</Button>
+                                <Button variant="primary" type="submit" isLoading={payoutForm.processing} className="!bg-emerald-600 hover:!bg-emerald-700">
+                                    Confirm Commission Payout
+                                </Button>
+                            </div>
+                        </form>
+                    </div>
+                </Modal>
+            )}
 
         </AuthenticatedLayout>
     );

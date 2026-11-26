@@ -5,7 +5,7 @@ import PageHeader from '@/Components/SaaS/PageHeader';
 import Card from '@/Components/SaaS/Card';
 import Button from '@/Components/SaaS/Button';
 import Badge from '@/Components/SaaS/Badge';
-import { Package, Building2, Phone, Mail, MapPin, Receipt, DollarSign, Calendar, Info, X, Trash2, AlertTriangle, Plus, ArrowLeft, Ban, Undo2, Wallet, CreditCard, RotateCcw } from 'lucide-react';
+import { Package, Building2, Phone, Mail, MapPin, Receipt, DollarSign, Calendar, Info, X, Trash2, AlertTriangle, Plus, ArrowLeft, Ban, Undo2, Wallet, CreditCard, RotateCcw, FileText, MessageCircle } from 'lucide-react';
 import toast from 'react-hot-toast';
 import Modal from '@/Components/Modal';
 
@@ -156,6 +156,32 @@ export default function SuppliersShow({ auth, supplier, paymentAccounts = [] }) 
         });
     };
 
+    const handleWhatsAppShare = () => {
+        const balance = Number(supplier.balance || 0);
+        const credit = Number(supplier.credit_balance || 0);
+        const activeCount = (supplier.purchases || []).filter(p => p.status !== 'Cancelled').length;
+        const lines = [
+            `Hello ${supplier.name},`,
+            `Here is our latest supplier account summary:`,
+            `• Active Orders: ${activeCount}`,
+            `• Outstanding Payable: UGX ${balance.toLocaleString()}`,
+            credit > 0 ? `• Available Supplier Credit: UGX ${credit.toLocaleString()}` : null,
+            credit > 0 && balance > 0
+                ? (credit >= balance
+                    ? `• Net Position: Supplier owes shop UGX ${(credit - balance).toLocaleString()}`
+                    : `• Net Position: Shop owes supplier UGX ${(balance - credit).toLocaleString()}`)
+                : null,
+            `Please confirm on your end. Thank you!`
+        ].filter(Boolean).join('\n');
+
+        const digits = (supplier.phone || '').replace(/\D/g, '');
+        const waPhone = digits.startsWith('0') ? `256${digits.slice(1)}` : digits;
+        const url = waPhone
+            ? `https://wa.me/${waPhone}?text=${encodeURIComponent(lines)}`
+            : `https://wa.me/?text=${encodeURIComponent(lines)}`;
+        window.open(url, '_blank', 'noopener,noreferrer');
+    };
+
     const submitEdit = (e) => {
         e.preventDefault();
         put(`/api/suppliers/${supplier.id}`, {
@@ -175,9 +201,20 @@ export default function SuppliersShow({ auth, supplier, paymentAccounts = [] }) 
                     title={supplier.name} 
                     breadcrumbs={[{ label: 'Home', href: '/' }, { label: 'Suppliers', href: route('suppliers.index') }, { label: supplier.name }]}
                     actions={
-                        <div className="flex flex-wrap items-center gap-3">
+                        <div className="flex flex-wrap items-center gap-2.5">
                             <Button variant="glass" icon={ArrowLeft} onClick={() => router.visit(route('suppliers.index'))}>
-                                Back to Directory
+                                Back
+                            </Button>
+                            <a
+                                href={route('suppliers.statement', supplier.id)}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="saas-btn saas-btn-glass inline-flex items-center gap-2"
+                            >
+                                <FileText size={16} /> Statement PDF
+                            </a>
+                            <Button variant="glass" icon={MessageCircle} onClick={handleWhatsAppShare}>
+                                WhatsApp
                             </Button>
                             <Button variant="primary" icon={Plus} onClick={() => router.visit(route('purchases.create', { supplier_id: supplier.id }))}>
                                 Log Purchase
@@ -474,6 +511,7 @@ export default function SuppliersShow({ auth, supplier, paymentAccounts = [] }) 
                                                     const typeLabel = {
                                                         purchase_cancellation: 'Cancelled Order',
                                                         device_return: 'Device Return',
+                                                        bulk_return: 'Bulk Return',
                                                         credit_applied: 'Credit Used',
                                                         credit_refund: 'Credit Refund',
                                                     }[ret.return_type] || 'Supplier Return';

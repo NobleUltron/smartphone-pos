@@ -98,7 +98,8 @@ class AccountController extends Controller
             ->where('status', '!=', 'Cancelled')
             ->selectRaw('COALESCE(SUM(CASE WHEN total_amount - paid_amount > 0 THEN total_amount - paid_amount ELSE 0 END), 0) as total')
             ->value('total');
-        $totalReceivables = $layawayReceivables + $invoiceReceivables;
+        $supplierCredits = (float) \App\Models\Supplier::sum('credit_balance');
+        $totalReceivables = $layawayReceivables + $invoiceReceivables + $supplierCredits;
 
         $supplierPayables = (float) \App\Models\Purchase::where('status', '!=', 'Cancelled')
             ->selectRaw('COALESCE(SUM(CASE WHEN total_amount - paid_amount > 0 THEN total_amount - paid_amount ELSE 0 END), 0) as total')
@@ -186,6 +187,7 @@ class AccountController extends Controller
                 'ownerNetWorth' => $ownerNetWorth,
                 'layawayReceivables' => $layawayReceivables,
                 'invoiceReceivables' => $invoiceReceivables,
+                'supplierCredits' => $supplierCredits,
                 'totalReceivables' => $totalReceivables,
                 'supplierPayables' => $supplierPayables,
                 'dealerPayables' => $dealerPayables,

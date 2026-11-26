@@ -234,6 +234,12 @@ class ReportController extends Controller
                     default => 0.0,
                 };
 
+                $commissionEarnedRounded = round($commissionEarned);
+                $commissionPaid = (float) \App\Models\Expense::where('category', 'Staff Commission')
+                    ->where('user_id', $row->user_id)
+                    ->whereBetween('expense_date', [$startDate, $endDate])
+                    ->sum('amount');
+
                 return [
                     'user_id' => $row->user_id,
                     'name' => $row->name,
@@ -247,7 +253,9 @@ class ReportController extends Controller
                     'avg_basket' => (float) $avgBasket,
                     'commission_type' => $commType,
                     'commission_rate' => $commRate,
-                    'commission_earned' => round($commissionEarned),
+                    'commission_earned' => $commissionEarnedRounded,
+                    'commission_paid' => $commissionPaid,
+                    'commission_balance' => max(0, $commissionEarnedRounded - $commissionPaid),
                 ];
             });
 
@@ -313,6 +321,20 @@ class ReportController extends Controller
         // Repairs Breakdown in Period
         $repairsLogged = Repair::whereBetween('created_at', [$startDate, $endDate])->count();
 
+        // Staff Commission Payouts Ledger in Period
+        $commissionPayouts = \App\Models\Expense::with(['user:id,name,role', 'paymentAccount:id,name', 'recordedBy:id,name'])
+            ->where('category', 'Staff Commission')
+            ->whereBetween('expense_date', [$startDate, $endDate])
+            ->orderByDesc('expense_date')
+            ->orderByDesc('id')
+            ->limit(30)
+            ->get();
+
+        $paymentAccounts = \App\Models\PaymentAccount::where('is_active', true)
+            ->where('is_personal', false)
+            ->orderBy('id')
+            ->get(['id', 'name', 'type', 'current_balance']);
+
         return Inertia::render('Reports/Index', [
             'period' => $period,
             'filters' => [
@@ -369,8 +391,92 @@ class ReportController extends Controller
             'topBrands' => $topBrands,
             'topCategories' => $topCategories,
             'brandProfitBreakdown' => $brandProfitBreakdown,
-            'cashierPerformance' => $cashierPerformance
+            'cashierPerformance' => $cashierPerformance,
+            'commissionPayouts' => $commissionPayouts,
+            'paymentAccounts' => $paymentAccounts,
         ]);
+    }
+
+    public function payCommission(Request $request)
+    {
+        if (!(auth()->user()?->hasPermission('view_reports'))) {
+            abort(403, 'Unauthorized action.');
+        }
+
+        $validated = $request->validate([
+            'user_id' => 'required|exists:users,id',
+            'amount' => 'required|numeric|min:1',
+            'payment_account_id' => 'required|exists:payment_accounts,id',
+            'notes' => 'nullable|string|max:500',
+            'period_label' => 'nullable|string|max:100',
+        ], [
+            'payment_account_id.required' => 'Please select the business wallet paying this commission.',
+        ]);
+
+        $amount = (float) $validated['amount'];
+        $staff = User::findOrFail($validated['user_id']);
+        $accountName = '';
+
+        DB::transaction(function () use ($validated, $amount, $staff, &$accountName) {
+            $account = \App\Models\PaymentAccount::where('is_active', true)
+                ->where('is_personal', false)
+                ->lockForUpdate()
+                ->findOrFail($validated['payment_account_id']);
+
+            if ((float) $account->current_balance < $amount) {
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                    'amount' => "Insufficient funds in {$account->name}! Available balance is UGX " . number_format(max(0, (float) $account->current_balance)) . ".",
+                ]);
+            }
+
+            $accountName = $account->name;
+            $cashDrawerId = null;
+
+            if ($account->type === 'cash' && stripos($account->name, 'Safe') === false) {
+                $activeDrawer = \App\Models\CashDrawer::where('user_id', auth()->id())
+                    ->where('status', 'open')
+                    ->first();
+                if ($activeDrawer) {
+                    $cashDrawerId = $activeDrawer->id;
+                }
+            }
+
+            $periodLabel = trim((string) ($validated['period_label'] ?? ''));
+            $notes = trim((string) ($validated['notes'] ?? ''));
+            $desc = "Sales commission payout to {$staff->name}"
+                . ($periodLabel !== '' ? " ({$periodLabel})" : '')
+                . ($notes !== '' ? " — {$notes}" : '');
+
+            $expense = \App\Models\Expense::create([
+                'cash_drawer_id' => $cashDrawerId,
+                'payment_account_id' => $account->id,
+                'user_id' => $staff->id,
+                'recorded_by' => auth()->id(),
+                'category' => 'Staff Commission',
+                'amount' => $amount,
+                'description' => $desc,
+                'expense_date' => now(),
+            ]);
+
+            \App\Services\TreasuryService::recordOutflow(
+                $account,
+                $amount,
+                'Staff Commission',
+                $expense,
+                $desc,
+                $notes !== '' ? $notes : null,
+                auth()->id()
+            );
+
+            \App\Models\ActivityLog::log(
+                'staff_commission_paid',
+                'Reports',
+                "Paid UGX " . number_format($amount) . " sales commission to {$staff->name} from {$account->name}",
+                ['staff_user_id' => $staff->id, 'amount' => $amount, 'payment_account_id' => $account->id]
+            );
+        });
+
+        return redirect()->back()->with('success', "Paid UGX " . number_format($amount) . " commission to {$staff->name} from {$accountName}.");
     }
 
     /**

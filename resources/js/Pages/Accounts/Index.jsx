@@ -588,13 +588,23 @@ export default function AccountsIndex({ accounts = [], categories = [], metrics,
                     <div className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-sm flex items-center justify-between gap-4">
                         <div>
                             <div className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                                Customer Receivables (Owed to You)
+                                Receivables &amp; Credits (Owed to You)
                             </div>
                             <div className="text-lg font-black text-emerald-600 dark:text-emerald-400 mt-1">
                                 + UGX {Number(metrics.totalReceivables || 0).toLocaleString()}
                             </div>
-                            <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
-                                Layaways: {Number(metrics.layawayReceivables || 0).toLocaleString()} • Invoices: {Number(metrics.invoiceReceivables || 0).toLocaleString()}
+                            <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5 flex flex-wrap gap-x-1.5">
+                                <span>Layaways: {Number(metrics.layawayReceivables || 0).toLocaleString()}</span>
+                                <span>•</span>
+                                <span>Invoices: {Number(metrics.invoiceReceivables || 0).toLocaleString()}</span>
+                                {Number(metrics.supplierCredits || 0) > 0 && (
+                                    <>
+                                        <span>•</span>
+                                        <span className="font-bold text-teal-600 dark:text-teal-400">
+                                            Supplier Credits: {Number(metrics.supplierCredits).toLocaleString()}
+                                        </span>
+                                    </>
+                                )}
                             </div>
                         </div>
                         <Link

@@ -23,6 +23,9 @@ class ProductController extends Controller
 
     public function index(Request $request)
     {
+        $aging30Cutoff = now()->subDays(30);
+        $aging60Cutoff = now()->subDays(60);
+
         $query = Product::with(['category', 'brand'])
             ->select('products.*')
             ->withCount(['deviceImeis as stock_count' => function ($q) {
@@ -33,6 +36,12 @@ class ProductController extends Controller
             }])
             ->withCount(['deviceImeis as sold_count' => function ($q) {
                 $q->where('status', 'Sold');
+            }])
+            ->withCount(['deviceImeis as aging_30_count' => function ($q) use ($aging30Cutoff) {
+                $q->where('status', 'In Stock')->where('created_at', '<=', $aging30Cutoff);
+            }])
+            ->withCount(['deviceImeis as aging_60_count' => function ($q) use ($aging60Cutoff) {
+                $q->where('status', 'In Stock')->where('created_at', '<=', $aging60Cutoff);
             }])
             ->withMin(['deviceImeis as min_selling_price' => function ($q) {
                 $q->where('status', 'In Stock');
@@ -136,6 +145,18 @@ class ProductController extends Controller
                         });
                     });
                 });
+            } elseif ($stockStatus === 'aging_30') {
+                $query->where(function ($t) {
+                    $t->whereNull('products.type')->orWhere('products.type', '!=', 'bulk');
+                })->whereHas('deviceImeis', function ($d) use ($aging30Cutoff) {
+                    $d->where('status', 'In Stock')->where('created_at', '<=', $aging30Cutoff);
+                });
+            } elseif ($stockStatus === 'aging_60') {
+                $query->where(function ($t) {
+                    $t->whereNull('products.type')->orWhere('products.type', '!=', 'bulk');
+                })->whereHas('deviceImeis', function ($d) use ($aging60Cutoff) {
+                    $d->where('status', 'In Stock')->where('created_at', '<=', $aging60Cutoff);
+                });
             }
         }
 
@@ -183,6 +204,13 @@ class ProductController extends Controller
         $serializedValue = \App\Models\DeviceImei::where('status', 'In Stock')->sum('cost_price');
         $totalInventoryValue = $bulkValue + $serializedValue;
 
+        $aging30Units = \App\Models\DeviceImei::where('status', 'In Stock')->where('created_at', '<=', $aging30Cutoff)->count();
+        $aging60Units = \App\Models\DeviceImei::where('status', 'In Stock')->where('created_at', '<=', $aging60Cutoff)->count();
+        $aging30Value = (float) \App\Models\DeviceImei::where('status', 'In Stock')->where('created_at', '<=', $aging30Cutoff)->sum('cost_price');
+        $agingProductsCount = Product::where(function ($t) {
+            $t->whereNull('type')->orWhere('type', '!=', 'bulk');
+        })->whereHas('deviceImeis', fn($d) => $d->where('status', 'In Stock')->where('created_at', '<=', $aging30Cutoff))->count();
+
         return Inertia::render('Inventory/Index', [
             'products' => $products,
             'allProducts' => $allProducts,
@@ -196,6 +224,10 @@ class ProductController extends Controller
                 'low_stock_count' => $lowStockCount,
                 'out_of_stock_count' => $outOfStockCount,
                 'inventory_value' => $totalInventoryValue,
+                'aging_30_units' => $aging30Units,
+                'aging_60_units' => $aging60Units,
+                'aging_30_value' => $aging30Value,
+                'aging_products_count' => $agingProductsCount,
             ],
             'partners' => \App\Models\PartnerInvestor::where('is_active', true)->select('id', 'name', 'profit_share_percentage')->get(),
             'paymentAccounts' => PaymentAccount::where('is_active', true)->where('is_personal', false)->orderBy('id')->get(['id', 'name', 'type', 'current_balance']),
@@ -468,6 +500,7 @@ class ProductController extends Controller
             $device->setAttribute('original_supplier_id', $match['supplier_id'] ?? null);
             $device->setAttribute('original_supplier_name', $match['supplier_name'] ?? null);
             $device->setAttribute('original_purchase_id', $match['purchase_id'] ?? null);
+            $device->setAttribute('days_in_stock', $device->created_at ? (int) $device->created_at->diffInDays(now()) : 0);
             return $device;
         });
 
@@ -890,6 +923,118 @@ class ProductController extends Controller
             'success' => true,
             'message' => 'Device received back from supplier and returned to In Stock.',
             'device' => $updated,
+        ]);
+    }
+
+    public function returnBulkToSupplier(Request $request, Product $product)
+    {
+        if ($product->type !== 'bulk') {
+            return response()->json(['message' => 'This endpoint is only for bulk (accessory/part) products.'], 422);
+        }
+        if ((int) $product->quantity <= 0) {
+            return response()->json(['message' => 'No bulk stock available to return.'], 422);
+        }
+
+        $validated = $request->validate([
+            'supplier_id' => 'required|exists:suppliers,id',
+            'quantity' => 'required|integer|min:1|max:' . (int) $product->quantity,
+            'resolution' => 'required|in:refund,supplier_credit,replacement',
+            'amount' => 'required_if:resolution,refund,supplier_credit|nullable|numeric|min:0',
+            'payment_account_id' => 'required_if:resolution,refund|nullable|exists:payment_accounts,id',
+            'reason' => 'required|string|max:1000',
+            'notes' => 'nullable|string|max:1000',
+        ], [
+            'supplier_id.required' => 'Please select the supplier receiving this return.',
+            'payment_account_id.required_if' => 'Please select the business wallet receiving the supplier refund.',
+        ]);
+
+        try {
+            $updatedProduct = DB::transaction(function () use ($product, $validated) {
+                $lockedProduct = Product::with('brand')->lockForUpdate()->findOrFail($product->id);
+                $qty = (int) $validated['quantity'];
+
+                if ($qty > (int) $lockedProduct->quantity) {
+                    throw new \InvalidArgumentException("Requested return quantity ({$qty}) exceeds available stock ({$lockedProduct->quantity}).");
+                }
+
+                $supplier = \App\Models\Supplier::lockForUpdate()->findOrFail($validated['supplier_id']);
+                $resolution = $validated['resolution'];
+                $amount = in_array($resolution, ['refund', 'supplier_credit'])
+                    ? (float) ($validated['amount'] ?? ($qty * (float) ($lockedProduct->cost_price ?? 0)))
+                    : 0.0;
+
+                $productName = trim(($lockedProduct->brand?->name ?? '') . ' ' . $lockedProduct->model_name);
+                $paymentAccountId = null;
+
+                if ($resolution === 'refund') {
+                    $lockedProduct->decrement('quantity', $qty);
+
+                    $account = PaymentAccount::where('is_active', true)
+                        ->where('is_personal', false)
+                        ->lockForUpdate()
+                        ->findOrFail($validated['payment_account_id']);
+                    $paymentAccountId = $account->id;
+
+                    if ($amount > 0) {
+                        TreasuryService::recordInflow(
+                            $account,
+                            $amount,
+                            'Supplier Refund',
+                            $lockedProduct,
+                            "Supplier refund for returned {$qty}x {$productName} from {$supplier->name}: {$validated['reason']}",
+                            null,
+                            auth()->id()
+                        );
+                    }
+                } elseif ($resolution === 'supplier_credit') {
+                    $lockedProduct->decrement('quantity', $qty);
+
+                    if ($amount > 0) {
+                        $supplier->increment('credit_balance', $amount);
+                    }
+                }
+                // For 'replacement', supplier swaps defective bulk units 1-for-1 so net quantity stays unchanged.
+
+                $fullReason = "{$productName} (Qty: {$qty}) — " . trim($validated['reason'])
+                    . (!empty($validated['notes']) ? ' — ' . trim($validated['notes']) : '');
+
+                \App\Models\SupplierReturn::create([
+                    'supplier_id' => $supplier->id,
+                    'return_type' => 'bulk_return',
+                    'resolution' => $resolution,
+                    'status' => 'Completed',
+                    'amount' => $amount,
+                    'payment_account_id' => $paymentAccountId,
+                    'reason' => $fullReason,
+                    'returned_at' => now(),
+                    'user_id' => auth()->id(),
+                ]);
+
+                \App\Models\ActivityLog::log(
+                    'bulk_returned_to_supplier',
+                    'Inventory',
+                    "Returned {$qty}x {$productName} to {$supplier->name} via {$resolution}" . ($amount > 0 ? " (UGX " . number_format($amount) . ")" : '') . ": {$validated['reason']}",
+                    ['product_id' => $lockedProduct->id, 'supplier_id' => $supplier->id, 'quantity' => $qty, 'resolution' => $resolution, 'amount' => $amount]
+                );
+
+                return $lockedProduct->fresh(['brand', 'category']);
+            });
+        } catch (\InvalidArgumentException $e) {
+            return response()->json(['message' => $e->getMessage()], 422);
+        }
+
+        $this->clearInventoryCaches();
+
+        $msg = match ($validated['resolution']) {
+            'refund' => "Returned {$validated['quantity']} unit(s) and credited refund to wallet.",
+            'supplier_credit' => "Returned {$validated['quantity']} unit(s) and added credit to supplier account.",
+            'replacement' => "Logged 1-for-1 replacement swap for {$validated['quantity']} unit(s).",
+        };
+
+        return response()->json([
+            'success' => true,
+            'message' => $msg,
+            'product' => $updatedProduct,
         ]);
     }
 
