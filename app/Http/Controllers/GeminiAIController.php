@@ -211,34 +211,59 @@ class GeminiAIController extends Controller
                 . "USER QUESTION: {$userPrompt}";
 
             $modelsToTry = ['gemini-2.5-flash', 'gemini-2.5-flash-lite', 'gemini-2.0-flash'];
+            $isVertexExpressKey = str_starts_with($geminiKey, 'AQ.');
 
+            $endpointsToTry = [];
             foreach ($modelsToTry as $model) {
+                if ($isVertexExpressKey) {
+                    // Vertex AI Express Mode keys (AQ.*) use aiplatform.googleapis.com
+                    $endpointsToTry[] = [
+                        'label' => "vertex_express ({$model})",
+                        'url' => "https://aiplatform.googleapis.com/v1/publishers/google/models/{$model}:generateContent?key=" . urlencode($geminiKey),
+                        'headers' => ['Content-Type' => 'application/json'],
+                        'body' => [
+                            'contents' => [
+                                ['role' => 'user', 'parts' => [['text' => $contextString]]]
+                            ],
+                        ],
+                    ];
+                }
+                // Standard Google AI Studio keys (AIza*) use generativelanguage.googleapis.com
+                $endpointsToTry[] = [
+                    'label' => "gemini_live ({$model})",
+                    'url' => "https://generativelanguage.googleapis.com/v1beta/models/{$model}:generateContent",
+                    'headers' => [
+                        'x-goog-api-key' => $geminiKey,
+                        'Content-Type' => 'application/json',
+                    ],
+                    'body' => [
+                        'contents' => [
+                            ['parts' => [['text' => $contextString]]]
+                        ],
+                    ],
+                ];
+            }
+
+            foreach ($endpointsToTry as $ep) {
                 try {
                     $response = Http::withoutVerifying()
                         ->timeout(12)
-                        ->withHeaders([
-                            'x-goog-api-key' => $geminiKey,
-                            'Content-Type' => 'application/json',
-                        ])
-                        ->post("https://generativelanguage.googleapis.com/v1beta/models/{$model}:generateContent", [
-                            'contents' => [
-                                ['parts' => [['text' => $contextString]]]
-                            ],
-                        ]);
+                        ->withHeaders($ep['headers'])
+                        ->post($ep['url'], $ep['body']);
 
                     if ($response->successful()) {
                         $replyText = $response->json('candidates.0.content.parts.0.text');
                         if ($replyText) {
                             return response()->json([
                                 'reply' => trim($replyText),
-                                'source' => "gemini_live ({$model})",
+                                'source' => $ep['label'],
                             ]);
                         }
                     } else {
-                        Log::warning("Gemini API ({$model}) HTTP {$response->status()}: " . substr($response->body(), 0, 300));
+                        Log::warning("Gemini API ({$ep['label']}) HTTP {$response->status()}: " . substr($response->body(), 0, 300));
                     }
                 } catch (\Exception $e) {
-                    Log::warning("Gemini API ({$model}) exception: " . $e->getMessage());
+                    Log::warning("Gemini API ({$ep['label']}) exception: " . $e->getMessage());
                 }
             }
         }

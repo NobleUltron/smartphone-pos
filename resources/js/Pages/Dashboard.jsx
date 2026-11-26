@@ -120,7 +120,7 @@ export default function Dashboard({
             const res = await axios.post('/api/gemini/ask', { prompt: query });
             const aiTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
             const src = res.data.source || 'local_engine';
-            const sourceLabel = src.startsWith('gemini_live') ? '✨ Gemini Live' : '⚡ Local Engine';
+            const sourceLabel = (src.startsWith('gemini_live') || src.startsWith('vertex_express')) ? '✨ Gemini Live' : '⚡ Local Engine';
             const aiMsg = { role: 'assistant', text: res.data.reply, time: aiTime, source: sourceLabel };
             setMessages(prev => [...prev, aiMsg]);
         } catch (error) {
