@@ -210,25 +210,18 @@ class GeminiAIController extends Controller
                 . "- Top Selling Brands: " . ($topBrandsSummary ?: 'No sales yet') . "\n\n"
                 . "USER QUESTION: {$userPrompt}";
 
-            $modelsToTry = ['gemini-2.5-flash', 'gemini-2.5-flash-lite', 'gemini-2.0-flash'];
-            $isVertexExpressKey = str_starts_with($geminiKey, 'AQ.');
+            // Models verified live against this key (older gemini-2.5-* / 2.0-* are retired for new keys).
+            // Override with GEMINI_MODEL env var if Google renames models again.
+            $modelsToTry = array_values(array_unique(array_filter([
+                env('GEMINI_MODEL'),
+                'gemini-3.5-flash-lite',
+                'gemini-3.5-flash',
+                'gemini-3.7-flash',
+            ])));
 
+            // Both AI Studio keys (AIza*) and newer AQ.* keys authenticate on generativelanguage.googleapis.com
             $endpointsToTry = [];
             foreach ($modelsToTry as $model) {
-                if ($isVertexExpressKey) {
-                    // Vertex AI Express Mode keys (AQ.*) use aiplatform.googleapis.com
-                    $endpointsToTry[] = [
-                        'label' => "vertex_express ({$model})",
-                        'url' => "https://aiplatform.googleapis.com/v1/publishers/google/models/{$model}:generateContent?key=" . urlencode($geminiKey),
-                        'headers' => ['Content-Type' => 'application/json'],
-                        'body' => [
-                            'contents' => [
-                                ['role' => 'user', 'parts' => [['text' => $contextString]]]
-                            ],
-                        ],
-                    ];
-                }
-                // Standard Google AI Studio keys (AIza*) use generativelanguage.googleapis.com
                 $endpointsToTry[] = [
                     'label' => "gemini_live ({$model})",
                     'url' => "https://generativelanguage.googleapis.com/v1beta/models/{$model}:generateContent",
@@ -247,13 +240,14 @@ class GeminiAIController extends Controller
             foreach ($endpointsToTry as $ep) {
                 try {
                     $response = Http::withoutVerifying()
-                        ->timeout(12)
+                        ->timeout(20)
                         ->withHeaders($ep['headers'])
                         ->post($ep['url'], $ep['body']);
 
                     if ($response->successful()) {
-                        $replyText = $response->json('candidates.0.content.parts.0.text');
-                        if ($replyText) {
+                        $parts = $response->json('candidates.0.content.parts') ?? [];
+                        $replyText = collect($parts)->pluck('text')->filter()->implode("\n");
+                        if (trim($replyText) !== '') {
                             return response()->json([
                                 'reply' => trim($replyText),
                                 'source' => $ep['label'],
