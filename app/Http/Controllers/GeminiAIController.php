@@ -211,53 +211,57 @@ class GeminiAIController extends Controller
                 . "USER QUESTION: {$userPrompt}";
 
             // Models verified live against this key (older gemini-2.5-* / 2.0-* are retired for new keys).
-            // Override with GEMINI_MODEL env var if Google renames models again.
+            // Override with GEMINI_MODEL env var via config('services.gemini.model') if Google renames models again.
             $modelsToTry = array_values(array_unique(array_filter([
-                env('GEMINI_MODEL'),
+                config('services.gemini.model') ?: env('GEMINI_MODEL'),
                 'gemini-3.5-flash-lite',
-                'gemini-3.5-flash',
+                'gemini-3.6-flash',
                 'gemini-3.7-flash',
+                'gemini-3.5-flash',
             ])));
 
             // Both AI Studio keys (AIza*) and newer AQ.* keys authenticate on generativelanguage.googleapis.com
-            $endpointsToTry = [];
-            foreach ($modelsToTry as $model) {
-                $endpointsToTry[] = [
-                    'label' => "gemini_live ({$model})",
-                    'url' => "https://generativelanguage.googleapis.com/v1beta/models/{$model}:generateContent",
-                    'headers' => [
-                        'x-goog-api-key' => $geminiKey,
-                        'Content-Type' => 'application/json',
-                    ],
-                    'body' => [
-                        'contents' => [
-                            ['parts' => [['text' => $contextString]]]
-                        ],
-                    ],
-                ];
-            }
+            foreach ($modelsToTry as $idx => $model) {
+                $label = "gemini_live ({$model})";
+                $url = "https://generativelanguage.googleapis.com/v1beta/models/{$model}:generateContent";
+                $maxAttempts = $idx === 0 ? 2 : 1; // 1 quick retry on primary model if 503 high-demand spike
 
-            foreach ($endpointsToTry as $ep) {
-                try {
-                    $response = Http::withoutVerifying()
-                        ->timeout(20)
-                        ->withHeaders($ep['headers'])
-                        ->post($ep['url'], $ep['body']);
-
-                    if ($response->successful()) {
-                        $parts = $response->json('candidates.0.content.parts') ?? [];
-                        $replyText = collect($parts)->pluck('text')->filter()->implode("\n");
-                        if (trim($replyText) !== '') {
-                            return response()->json([
-                                'reply' => trim($replyText),
-                                'source' => $ep['label'],
+                for ($attempt = 1; $attempt <= $maxAttempts; $attempt++) {
+                    try {
+                        $response = Http::withoutVerifying()
+                            ->timeout(18)
+                            ->withHeaders([
+                                'x-goog-api-key' => $geminiKey,
+                                'Content-Type' => 'application/json',
+                            ])
+                            ->post($url, [
+                                'contents' => [
+                                    ['parts' => [['text' => $contextString]]]
+                                ],
                             ]);
+
+                        if ($response->successful()) {
+                            $parts = $response->json('candidates.0.content.parts') ?? [];
+                            $replyText = collect($parts)->pluck('text')->filter()->implode("\n");
+                            if (trim($replyText) !== '') {
+                                return response()->json([
+                                    'reply' => trim($replyText),
+                                    'source' => $label,
+                                ]);
+                            }
+                        } else {
+                            $status = $response->status();
+                            Log::warning("Gemini API ({$label}, attempt {$attempt}) HTTP {$status}: " . substr($response->body(), 0, 300));
+                            if ($status === 503 && $attempt < $maxAttempts) {
+                                usleep(900000); // 0.9s backoff before retry
+                                continue;
+                            }
+                            break;
                         }
-                    } else {
-                        Log::warning("Gemini API ({$ep['label']}) HTTP {$response->status()}: " . substr($response->body(), 0, 300));
+                    } catch (\Exception $e) {
+                        Log::warning("Gemini API ({$label}, attempt {$attempt}) exception: " . $e->getMessage());
+                        break;
                     }
-                } catch (\Exception $e) {
-                    Log::warning("Gemini API ({$ep['label']}) exception: " . $e->getMessage());
                 }
             }
         }
