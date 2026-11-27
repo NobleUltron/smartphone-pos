@@ -9,6 +9,8 @@ import Card from '@/Components/SaaS/Card';
 import Badge from '@/Components/SaaS/Badge';
 import Button from '@/Components/SaaS/Button';
 import PageHeader from '@/Components/SaaS/PageHeader';
+import DataTable from '@/Components/SaaS/DataTable';
+import Pagination from '@/Components/SaaS/Pagination';
 
 export default function ReceiptsIndex({ auth, sales, summary, filters, settings, inStockDevices = [] }) {
     const [search, setSearch] = useState(filters?.search || '');
@@ -237,246 +239,244 @@ export default function ReceiptsIndex({ auth, sales, summary, filters, settings,
             </div>
 
             <div className="animate-slide-up" style={{ animationDelay: '0.4s' }}>
-                <Card noPadding className="overflow-hidden">
-                    {/* Search & Filter Bar */}
-                    <div className="p-6 border-b border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900">
-                        <div className="flex flex-col lg:flex-row gap-3">
-                            <div className="flex-1 relative">
-                                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
-                                    <Search size={18} />
-                                </div>
-                                <input 
-                                    type="text" 
-                                    className="saas-input !pl-10" 
-                                    placeholder="Search Receipt #, IMEI, Customer, Dealer..." 
-                                    value={search} 
-                                    onChange={(e) => setSearch(e.target.value)} 
-                                />
+                {/* Standalone Search & Filter Bar */}
+                <Card className="mb-6">
+                    <div className="flex flex-col lg:flex-row gap-3">
+                        <div className="flex-1 relative">
+                            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
+                                <Search size={18} />
                             </div>
-                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 lg:flex">
-                                <div className="lg:w-40">
-                                    <select 
-                                        className="saas-input"
-                                        value={paymentMethod} 
-                                        onChange={(e) => setPaymentMethod(e.target.value)}
-                                    >
-                                        <option value="all">All Payments</option>
-                                        <option value="Cash">Cash</option>
-                                        <option value="MTN MoMo">MTN MoMo</option>
-                                        <option value="Airtel Money">Airtel Money</option>
-                                        <option value="Bank Transfer">Bank Transfer</option>
-                                        <option value="Layaway">Layaway</option>
-                                    </select>
-                                </div>
-                                <div className="lg:w-36">
-                                    <select 
-                                        className="saas-input"
-                                        value={paymentStatus} 
-                                        onChange={(e) => setPaymentStatus(e.target.value)}
-                                    >
-                                        <option value="all">All Statuses</option>
-                                        <option value="Paid">Paid</option>
-                                        <option value="Partial">Partial</option>
-                                        <option value="Refunded">Refunded</option>
-                                    </select>
-                                </div>
-                                <div className="lg:w-40">
-                                    <select 
-                                        className="saas-input"
-                                        value={dateFilter} 
-                                        onChange={(e) => setDateFilter(e.target.value)}
-                                    >
-                                        <option value="all">All Dates</option>
-                                        <option value="today">Today</option>
-                                        <option value="yesterday">Yesterday</option>
-                                        <option value="this_week">This Week</option>
-                                        <option value="this_month">This Month</option>
-                                    </select>
-                                </div>
-                            </div>
-                            {(search || paymentMethod !== 'all' || paymentStatus !== 'all' || dateFilter !== 'all') && (
-                                <Button variant="secondary" onClick={handleResetFilters}>
-                                    Clear
-                                </Button>
-                            )}
+                            <input 
+                                type="text" 
+                                className="saas-input !pl-10" 
+                                placeholder="Search Receipt #, IMEI, Customer, Dealer..." 
+                                value={search} 
+                                onChange={(e) => setSearch(e.target.value)} 
+                            />
                         </div>
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 lg:flex">
+                            <div className="lg:w-40">
+                                <select 
+                                    className="saas-input"
+                                    value={paymentMethod} 
+                                    onChange={(e) => setPaymentMethod(e.target.value)}
+                                >
+                                    <option value="all">All Payments</option>
+                                    <option value="Cash">Cash</option>
+                                    <option value="MTN MoMo">MTN MoMo</option>
+                                    <option value="Airtel Money">Airtel Money</option>
+                                    <option value="Bank Transfer">Bank Transfer</option>
+                                    <option value="Layaway">Layaway</option>
+                                </select>
+                            </div>
+                            <div className="lg:w-36">
+                                <select 
+                                    className="saas-input"
+                                    value={paymentStatus} 
+                                    onChange={(e) => setPaymentStatus(e.target.value)}
+                                >
+                                    <option value="all">All Statuses</option>
+                                    <option value="Paid">Paid</option>
+                                    <option value="Partial">Partial</option>
+                                    <option value="Refunded">Refunded</option>
+                                </select>
+                            </div>
+                            <div className="lg:w-40">
+                                <select 
+                                    className="saas-input"
+                                    value={dateFilter} 
+                                    onChange={(e) => setDateFilter(e.target.value)}
+                                >
+                                    <option value="all">All Dates</option>
+                                    <option value="today">Today</option>
+                                    <option value="yesterday">Yesterday</option>
+                                    <option value="this_week">This Week</option>
+                                    <option value="this_month">This Month</option>
+                                </select>
+                            </div>
+                        </div>
+                        {(search || paymentMethod !== 'all' || paymentStatus !== 'all' || dateFilter !== 'all') && (
+                            <Button variant="secondary" onClick={handleResetFilters}>
+                                Clear
+                            </Button>
+                        )}
                     </div>
+                </Card>
 
-                    {/* Desktop Receipts Table */}
-                    <div className="hidden md:block overflow-x-auto">
-                        <table className="saas-table w-full whitespace-nowrap">
-                            <thead>
-                                <tr>
-                                    <th>Receipt #</th>
-                                    <th>Date</th>
-                                    <th>Customer</th>
-                                    <th>Items</th>
-                                    <th>Payment</th>
-                                    <th className="!text-right">Amount</th>
-                                    <th>Cashier</th>
-                                    <th className="!text-center">Actions</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {sales?.data?.length > 0 ? sales.data.map(sale => (
-                                    <tr key={sale.id}>
-                                        <td className="font-mono font-bold text-slate-900 dark:text-white">#{sale.id}</td>
-                                        <td className="text-slate-500 dark:text-slate-400">
-                                            {new Date(sale.sale_date || sale.created_at).toLocaleString([], { month: 'short', day: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
-                                        </td>
-                                        <td>
-                                            {sale.customer ? (
-                                                <div>
-                                                    <div className="font-bold text-slate-900 dark:text-white">{sale.customer.name}</div>
-                                                    <div className="text-sm text-slate-500 dark:text-slate-400">{sale.customer.phone}</div>
-                                                </div>
-                                            ) : sale.dealer_item && sale.dealer_item.length > 0 && sale.dealer_item[0].dealer ? (
-                                                <div>
-                                                    <div className="font-bold text-slate-900 dark:text-white">{sale.dealer_item[0].dealer.name} <span className="text-[10px] font-bold text-indigo-500 dark:text-indigo-400 uppercase ml-1">Dealer</span></div>
-                                                    <div className="text-sm text-slate-500 dark:text-slate-400">{sale.dealer_item[0].dealer.phone}</div>
-                                                </div>
-                                            ) : <span className="text-slate-500 dark:text-slate-400 italic">Walk-in</span>}
-                                        </td>
-                                        <td>
-                                            <div className="text-sm max-w-xs truncate text-slate-700 dark:text-slate-300">
-                                                {sale.repair ? (
-                                                    <span className="block truncate">
-                                                        • Repair: {sale.repair.device_model}
+                {/* Desktop Receipts Table */}
+                <div className="hidden md:block">
+                    <DataTable
+                        headers={[
+                            'Receipt #',
+                            'Date',
+                            'Customer',
+                            'Items',
+                            'Payment',
+                            { label: 'Amount', className: 'text-right' },
+                            'Cashier',
+                            { label: 'Actions', className: 'text-center' },
+                        ]}
+                        isEmpty={!sales?.data || sales.data.length === 0}
+                        emptyState={
+                            <div className="py-12 text-center text-slate-500 dark:text-slate-400">
+                                <Receipt size={40} className="mx-auto text-slate-300 dark:text-slate-600 mb-3" />
+                                <p className="font-semibold text-slate-700 dark:text-slate-300">No receipts found matching your criteria.</p>
+                            </div>
+                        }
+                    >
+                        {sales?.data?.map(sale => (
+                            <tr key={sale.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/40 transition-colors">
+                                <td className="font-mono font-bold text-slate-900 dark:text-white">#{sale.id}</td>
+                                <td className="text-slate-500 dark:text-slate-400">
+                                    {new Date(sale.sale_date || sale.created_at).toLocaleString([], { month: 'short', day: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                                </td>
+                                <td>
+                                    {sale.customer ? (
+                                        <div>
+                                            <div className="font-bold text-slate-900 dark:text-white">{sale.customer.name}</div>
+                                            <div className="text-xs text-slate-500 dark:text-slate-400">{sale.customer.phone}</div>
+                                        </div>
+                                    ) : sale.dealer_item && sale.dealer_item.length > 0 && sale.dealer_item[0].dealer ? (
+                                        <div>
+                                            <div className="font-bold text-slate-900 dark:text-white">{sale.dealer_item[0].dealer.name} <span className="text-[10px] font-bold text-indigo-500 dark:text-indigo-400 uppercase ml-1">Dealer</span></div>
+                                            <div className="text-xs text-slate-500 dark:text-slate-400">{sale.dealer_item[0].dealer.phone}</div>
+                                        </div>
+                                    ) : <span className="text-slate-500 dark:text-slate-400 italic">Walk-in</span>}
+                                </td>
+                                <td>
+                                    <div className="text-sm max-w-xs truncate text-slate-700 dark:text-slate-300">
+                                        {sale.repair ? (
+                                            <span className="block truncate">
+                                                • Repair: {sale.repair.device_model}
+                                            </span>
+                                        ) : sale.sale_items?.length > 0 ? (
+                                            sale.sale_items.map((item, i) => (
+                                                item.device_imei?.product ? (
+                                                    <span key={i} className="block truncate">
+                                                        • {item.device_imei.product.brand?.name} {item.device_imei.product.model_name}
                                                     </span>
-                                                ) : sale.sale_items?.length > 0 ? (
-                                                    sale.sale_items.map((item, i) => (
-                                                        item.device_imei?.product ? (
-                                                            <span key={i} className="block truncate">
-                                                                • {item.device_imei.product.brand?.name} {item.device_imei.product.model_name}
-                                                            </span>
-                                                        ) : item.product ? (
-                                                            <span key={i} className="block truncate">
-                                                                • {item.quantity}x {item.product.brand?.name} {item.product.model_name}
-                                                            </span>
-                                                        ) : null
-                                                    ))
-                                                ) : (
-                                                    <span className="text-slate-400 italic">No Items</span>
-                                                )}
-                                            </div>
-                                        </td>
-                                        <td>
-                                            <div className="flex items-center gap-1.5">
-                                                <Badge variant="neutral">{sale.payment_method}</Badge>
-                                                {sale.payment_status === 'Partial' && (
-                                                    <Badge variant="warning">Partial</Badge>
-                                                )}
-                                                {sale.payment_status === 'Refunded' && (
-                                                    <Badge variant="danger">Refunded</Badge>
-                                                )}
-                                            </div>
-                                        </td>
-                                        <td className="text-right">
-                                            {sale.payment_status === 'Refunded' ? (
-                                                <div>
-                                                    <span className="text-slate-400 line-through mr-2">{Number(sale.final_amount).toLocaleString()} UGX</span>
-                                                    <span className="text-xs font-bold text-rose-500">[REFUNDED]</span>
-                                                </div>
-                                            ) : (
-                                                <div className="flex flex-col items-end">
-                                                    <span className="font-bold text-slate-900 dark:text-white">{Number(sale.final_amount).toLocaleString()} UGX</span>
-                                                    {(sale.payment_method === 'Layaway' || sale.payment_status === 'Partial') && (
-                                                        <span className="text-[11px] font-bold text-emerald-600 dark:text-emerald-400">
-                                                            Paid: {Number(sale.layaway_payments?.reduce((s, p) => s + Number(p.amount_paid), 0) || 0).toLocaleString()} UGX
-                                                        </span>
-                                                    )}
-                                                </div>
+                                                ) : item.product ? (
+                                                    <span key={i} className="block truncate">
+                                                        • {item.quantity}x {item.product.brand?.name} {item.product.model_name}
+                                                    </span>
+                                                ) : null
+                                            ))
+                                        ) : (
+                                            <span className="text-slate-400 italic">No Items</span>
+                                        )}
+                                    </div>
+                                </td>
+                                <td>
+                                    <div className="flex items-center gap-1.5">
+                                        <Badge variant="neutral">{sale.payment_method}</Badge>
+                                        {sale.payment_status === 'Partial' && (
+                                            <Badge variant="warning">Partial</Badge>
+                                        )}
+                                        {sale.payment_status === 'Refunded' && (
+                                            <Badge variant="danger">Refunded</Badge>
+                                        )}
+                                    </div>
+                                </td>
+                                <td className="text-right">
+                                    {sale.payment_status === 'Refunded' ? (
+                                        <div>
+                                            <span className="text-slate-400 line-through mr-2">{Number(sale.final_amount).toLocaleString()} UGX</span>
+                                            <span className="text-xs font-bold text-rose-500">[REFUNDED]</span>
+                                        </div>
+                                    ) : (
+                                        <div className="flex flex-col items-end">
+                                            <span className="font-bold text-slate-900 dark:text-white">{Number(sale.final_amount).toLocaleString()} UGX</span>
+                                            {(sale.payment_method === 'Layaway' || sale.payment_status === 'Partial') && (
+                                                <span className="text-[11px] font-bold text-emerald-600 dark:text-emerald-400">
+                                                    Paid: {Number(sale.layaway_payments?.reduce((s, p) => s + Number(p.amount_paid), 0) || 0).toLocaleString()} UGX
+                                                </span>
                                             )}
-                                            {sale.discount > 0 && (
-                                                <div className="text-xs text-slate-400">
-                                                    Disc: {Number(sale.discount).toLocaleString()} UGX
-                                                </div>
-                                            )}
-                                        </td>
-                                        <td className="text-slate-500 dark:text-slate-400">
-                                            <div className="flex items-center gap-2">
-                                                {sale.user ? (
-                                                    <div className="w-6 h-6 rounded-full border border-slate-200 dark:border-slate-700 overflow-hidden bg-slate-100 dark:bg-slate-800 flex-shrink-0">
-                                                        <img 
-                                                            src={sale.user.profile_photo_url} 
-                                                            alt={sale.user.name}
-                                                            className="w-6 h-6 rounded-full object-cover shadow-sm"
-                                                        />
-                                                    </div>
-                                                ) : (
-                                                    <div className="w-6 h-6 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-[10px] font-bold text-slate-400">
-                                                        S
-                                                    </div>
-                                                )}
-                                                <span className="text-sm font-medium">{sale.user?.name || 'System'}</span>
+                                        </div>
+                                    )}
+                                    {sale.discount > 0 && (
+                                        <div className="text-xs text-slate-400">
+                                            Disc: {Number(sale.discount).toLocaleString()} UGX
+                                        </div>
+                                    )}
+                                </td>
+                                <td className="text-slate-500 dark:text-slate-400">
+                                    <div className="flex items-center gap-2">
+                                        {sale.user ? (
+                                            <div className="w-6 h-6 rounded-full border border-slate-200 dark:border-slate-700 overflow-hidden bg-slate-100 dark:bg-slate-800 flex-shrink-0">
+                                                <img 
+                                                    src={sale.user.profile_photo_url} 
+                                                    alt={sale.user.name}
+                                                    className="w-6 h-6 rounded-full object-cover shadow-sm"
+                                                />
                                             </div>
-                                        </td>
-                                        <td className="text-center">
-                                            <div className="flex items-center justify-center gap-2">
-                                                <button 
-                                                    type="button"
-                                                    className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 rounded-lg transition-colors" 
-                                                    title="Preview"
-                                                    onClick={() => openPreview(sale)}
-                                                >
-                                                    <Eye size={16} />
-                                                </button>
-                                                <a 
-                                                    href={`/pos/receipt/${sale.id}`} 
-                                                    target="_blank" 
-                                                    rel="noopener noreferrer"
-                                                    className="p-2 text-slate-400 hover:text-pink-600 hover:bg-pink-50 dark:hover:bg-pink-900/30 rounded-lg transition-colors"
-                                                    title="Thermal Print"
-                                                >
-                                                    <Printer size={16} />
-                                                </a>
-                                                <button
-                                                    type="button"
-                                                    className="p-2 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-900/30 rounded-lg transition-colors"
-                                                    title="Send Receipt via WhatsApp"
-                                                    onClick={() => {
-                                                        const phone = sale.customer?.phone || sale.dealer_item?.[0]?.dealer?.phone || '';
-                                                        openWhatsApp(phone, buildSaleReceiptMessage(sale, settings));
-                                                    }}
-                                                >
-                                                    <MessageCircle size={16} />
-                                                </button>
-                                                {sale.payment_status === 'Paid' && sale.sale_items?.some(i => i.device_imei_id) && auth?.permissions?.issue_refunds !== false && (
-                                                    <button
-                                                        type="button"
-                                                        className="p-2 text-slate-400 hover:text-purple-600 hover:bg-purple-50 dark:hover:bg-purple-900/30 rounded-lg transition-colors"
-                                                        title="Exchange / Swap Device"
-                                                        onClick={() => openExchangeModal(sale)}
-                                                    >
-                                                        <ArrowLeftRight size={16} />
-                                                    </button>
-                                                )}
-                                                {sale.payment_status !== 'Refunded' && auth?.permissions?.issue_refunds !== false && (
-                                                    <button 
-                                                        type="button"
-                                                        className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-900/30 rounded-lg transition-colors"
-                                                        title="Refund"
-                                                        onClick={() => openRefundModal(sale)}
-                                                    >
-                                                        <DollarSign size={16} />
-                                                    </button>
-                                                )}
+                                        ) : (
+                                            <div className="w-6 h-6 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-[10px] font-bold text-slate-400">
+                                                S
                                             </div>
-                                        </td>
-                                    </tr>
-                                )) : (
-                                    <tr>
-                                        <td colSpan="8" className="text-center py-12 text-slate-500 dark:text-slate-400">
-                                            No receipts found matching your criteria.
-                                        </td>
-                                    </tr>
-                                )}
-                            </tbody>
-                        </table>
-                    </div>
+                                        )}
+                                        <span className="text-sm font-medium">{sale.user?.name || 'System'}</span>
+                                    </div>
+                                </td>
+                                <td className="text-center">
+                                    <div className="flex items-center justify-center gap-1.5">
+                                        <button 
+                                            type="button"
+                                            className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 rounded-lg transition-colors" 
+                                            title="Preview"
+                                            onClick={() => openPreview(sale)}
+                                        >
+                                            <Eye size={16} />
+                                        </button>
+                                        <a 
+                                            href={`/pos/receipt/${sale.id}`} 
+                                            target="_blank" 
+                                            rel="noopener noreferrer"
+                                            className="p-2 text-slate-400 hover:text-pink-600 hover:bg-pink-50 dark:hover:bg-pink-900/30 rounded-lg transition-colors"
+                                            title="Thermal Print"
+                                        >
+                                            <Printer size={16} />
+                                        </a>
+                                        <button
+                                            type="button"
+                                            className="p-2 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-900/30 rounded-lg transition-colors"
+                                            title="Send Receipt via WhatsApp"
+                                            onClick={() => {
+                                                const phone = sale.customer?.phone || sale.dealer_item?.[0]?.dealer?.phone || '';
+                                                openWhatsApp(phone, buildSaleReceiptMessage(sale, settings));
+                                            }}
+                                        >
+                                            <MessageCircle size={16} />
+                                        </button>
+                                        {sale.payment_status === 'Paid' && sale.sale_items?.some(i => i.device_imei_id) && auth?.permissions?.issue_refunds !== false && (
+                                            <button
+                                                type="button"
+                                                className="p-2 text-slate-400 hover:text-purple-600 hover:bg-purple-50 dark:hover:bg-purple-900/30 rounded-lg transition-colors"
+                                                title="Exchange / Swap Device"
+                                                onClick={() => openExchangeModal(sale)}
+                                            >
+                                                <ArrowLeftRight size={16} />
+                                            </button>
+                                        )}
+                                        {sale.payment_status !== 'Refunded' && auth?.permissions?.issue_refunds !== false && (
+                                            <button 
+                                                type="button"
+                                                className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-900/30 rounded-lg transition-colors"
+                                                title="Refund"
+                                                onClick={() => openRefundModal(sale)}
+                                            >
+                                                <DollarSign size={16} />
+                                            </button>
+                                        )}
+                                    </div>
+                                </td>
+                            </tr>
+                        ))}
+                    </DataTable>
+                </div>
 
-                    {/* Mobile Receipts Card List */}
-                    <div className="md:hidden divide-y divide-slate-100 dark:divide-slate-800">
+                {/* Mobile Receipts Card List */}
+                <Card noPadding className="md:hidden overflow-hidden">
+                    <div className="divide-y divide-slate-100 dark:divide-slate-800">
                         {sales?.data?.length > 0 ? sales.data.map(sale => (
                             <div key={sale.id} className="p-4 space-y-2.5 bg-white dark:bg-slate-900">
                                 <div className="flex items-start justify-between gap-2">
@@ -538,27 +538,10 @@ export default function ReceiptsIndex({ auth, sales, summary, filters, settings,
                             </div>
                         )}
                     </div>
-                    
-                    {/* Pagination Component */}
-                    {sales.links && sales.links.length > 3 && (
-                        <div className="flex justify-center p-6 border-t border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900">
-                            <nav className="inline-flex flex-wrap bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden">
-                                {sales.links.map((link, k) => (
-                                    <Link 
-                                        key={k}
-                                        href={link.url || '#'}
-                                        preserveScroll
-                                        preserveState
-                                        className={`px-4 py-2 text-sm font-medium border-r border-slate-200 dark:border-slate-700 last:border-0 ${
-                                            link.active ? 'bg-indigo-50 dark:bg-indigo-900/40 text-indigo-600 dark:text-indigo-300 font-bold' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700'
-                                        } ${link.url === null ? 'opacity-50 cursor-not-allowed pointer-events-none' : ''}`}
-                                        dangerouslySetInnerHTML={{ __html: link.label }}
-                                    />
-                                ))}
-                            </nav>
-                        </div>
-                    )}
                 </Card>
+
+                {/* Pagination Component */}
+                <Pagination data={sales} />
             </div>
 
             {/* Receipt Preview Modal */}

@@ -8,6 +8,8 @@ import PageHeader from '@/Components/SaaS/PageHeader';
 import Card from '@/Components/SaaS/Card';
 import Button from '@/Components/SaaS/Button';
 import Badge from '@/Components/SaaS/Badge';
+import DataTable from '@/Components/SaaS/DataTable';
+import Pagination from '@/Components/SaaS/Pagination';
 import Modal from '@/Components/Modal';
 
 export default function CustomersIndex({ auth, customers = {}, summary, filters = {} }) {
@@ -247,176 +249,184 @@ export default function CustomersIndex({ auth, customers = {}, summary, filters 
                     </div>
                 )}
 
-                <Card noPadding className="animate-slide-up relative overflow-hidden" style={{ animationDelay: '0.3s' }}>
-                    <div className="p-4 border-b border-slate-100 dark:border-slate-800 flex flex-col lg:flex-row lg:items-center justify-between gap-3">
-                        <div className="relative flex-1 max-w-md">
-                            <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                {/* Segmented Type Tabs */}
+                <div className="flex items-center justify-between flex-wrap gap-3 mb-4 animate-slide-up" style={{ animationDelay: '0.15s' }}>
+                    <div className="flex items-center gap-1.5 p-1 bg-slate-100 dark:bg-slate-800/80 rounded-2xl border border-slate-200/70 dark:border-slate-700/60 shadow-inner">
+                        {[
+                            { key: 'all', label: 'All Customers' },
+                            { key: 'corporate', label: 'Corporate' },
+                            { key: 'individual', label: 'Individual' },
+                        ].map(tab => (
+                            <button
+                                key={tab.key}
+                                type="button"
+                                onClick={() => setTypeFilter(tab.key)}
+                                className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                                    typeFilter === tab.key
+                                        ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-sm ring-1 ring-slate-900/5'
+                                        : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-white/50'
+                                }`}
+                            >
+                                {tab.label}
+                            </button>
+                        ))}
+                    </div>
+                </div>
+
+                {/* Standalone Search & Filter Bar Card */}
+                <Card className="mb-6 animate-slide-up" style={{ animationDelay: '0.2s' }}>
+                    <div className="flex flex-col md:flex-row gap-4 items-center">
+                        <div className="flex-1 w-full saas-input-icon-wrapper relative">
+                            <Search size={18} className="saas-input-icon" />
                             <input
                                 type="text"
-                                className="saas-input !pl-10 text-sm"
+                                className="saas-input pr-10"
                                 placeholder="Search customers by name, phone, email, or company..."
                                 value={search}
                                 onChange={(e) => setSearch(e.target.value)}
                             />
+                            {search && (
+                                <button
+                                    type="button"
+                                    onClick={() => setSearch('')}
+                                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-1"
+                                >
+                                    <X size={16} />
+                                </button>
+                            )}
                         </div>
-
-                        <div className="flex flex-wrap items-center gap-2.5">
-                            {/* Type Tabs */}
-                            <div className="inline-flex rounded-xl bg-slate-100 dark:bg-slate-800 p-1 border border-slate-200 dark:border-slate-700">
-                                {[
-                                    { key: 'all', label: 'All' },
-                                    { key: 'corporate', label: 'Corporate' },
-                                    { key: 'individual', label: 'Individual' },
-                                ].map(tab => (
-                                    <button
-                                        key={tab.key}
-                                        type="button"
-                                        onClick={() => setTypeFilter(tab.key)}
-                                        className={`px-3 py-1 rounded-lg text-xs font-bold transition-all ${
-                                            typeFilter === tab.key
-                                                ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-sm'
-                                                : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200'
-                                        }`}
-                                    >
-                                        {tab.label}
-                                    </button>
-                                ))}
-                            </div>
-
+                        <div className="w-full md:w-48">
                             <select
                                 value={sortBy}
                                 onChange={(e) => setSortBy(e.target.value)}
-                                className="saas-input !py-1.5 !text-xs !w-auto font-semibold"
+                                className="saas-input pl-4"
                             >
                                 <option value="newest">Newest First</option>
                                 <option value="top_spenders">Top Spenders</option>
                                 <option value="most_orders">Most Orders</option>
                             </select>
-
-                            {(search || typeFilter !== 'all' || sortBy !== 'newest') && (
-                                <button
-                                    type="button"
-                                    onClick={() => { setSearch(''); setTypeFilter('all'); setSortBy('newest'); }}
-                                    className="px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 text-xs font-bold"
-                                >
-                                    Clear
-                                </button>
-                            )}
                         </div>
+                        {(search || typeFilter !== 'all' || sortBy !== 'newest') && (
+                            <Button
+                                variant="secondary"
+                                className="!py-2 !px-4 !text-xs whitespace-nowrap"
+                                onClick={() => { setSearch(''); setTypeFilter('all'); setSortBy('newest'); }}
+                            >
+                                Reset
+                            </Button>
+                        )}
                     </div>
+                </Card>
 
-                    {/* Desktop Table */}
-                    <div className="hidden md:block overflow-x-auto">
-                        <table className="w-full text-left border-collapse">
-                            <thead>
-                                <tr className="bg-slate-50/50 dark:bg-slate-800">
-                                    <th className="py-4 px-6 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider border-b border-slate-100 dark:border-slate-800">Customer</th>
-                                    <th className="py-4 px-6 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider border-b border-slate-100 dark:border-slate-800">Contact</th>
-                                    <th className="py-4 px-6 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider border-b border-slate-100 dark:border-slate-800 text-center">Activity</th>
-                                    <th className="py-4 px-6 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider border-b border-slate-100 dark:border-slate-800 text-right">Total Spent</th>
-                                    <th className="py-4 px-6 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider border-b border-slate-100 dark:border-slate-800 text-center">Actions</th>
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                                {customers.data?.map(customer => (
-                                    <tr key={customer.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/40 transition-colors group">
-                                        <td className="py-4 px-6">
-                                            <div className="flex items-center gap-3">
-                                                <img 
-                                                    src={`https://ui-avatars.com/api/?name=${encodeURIComponent(customer.name)}&color=4F46E5&background=EEF2FF&rounded=true`} 
-                                                    alt={customer.name} 
-                                                    className="w-10 h-10 rounded-full shadow-sm shrink-0" 
-                                                />
-                                                <div>
-                                                    <div className="font-semibold text-slate-900 dark:text-white flex items-center gap-1.5 flex-wrap">
-                                                        <span>{customer.name}</span>
-                                                        {customer.company_name && (
-                                                            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
-                                                                {customer.company_name}
-                                                            </span>
-                                                        )}
-                                                    </div>
-                                                    <div className="text-xs text-slate-500 dark:text-slate-400">
-                                                        Joined {new Date(customer.created_at).toLocaleDateString()}
-                                                        {customer.tin_number && ` • TIN: ${customer.tin_number}`}
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        </td>
-                                        <td className="py-4 px-6">
-                                            <div className="flex flex-col space-y-1">
-                                                <div className="flex items-center text-sm text-slate-600 dark:text-slate-300 gap-2">
-                                                    <Phone size={14} className="text-slate-400 shrink-0" />
-                                                    {customer.phone}
-                                                </div>
-                                                {customer.email && (
-                                                    <div className="flex items-center text-sm text-slate-600 dark:text-slate-300 gap-2">
-                                                        <Mail size={14} className="text-slate-400 shrink-0" />
-                                                        {customer.email}
-                                                    </div>
+                {/* Desktop DataTable (Inventory Benchmark) */}
+                <div className="hidden md:block animate-slide-up" style={{ animationDelay: '0.25s' }}>
+                    <DataTable
+                        headers={[
+                            'Customer',
+                            'Contact',
+                            { label: 'Activity', className: '!text-center' },
+                            { label: 'Total Spent', className: '!text-right' },
+                            { label: 'Actions', className: '!text-center' }
+                        ]}
+                        isEmpty={!customers.data || customers.data.length === 0}
+                        emptyState={
+                            <div className="py-16 text-center text-slate-500 dark:text-slate-400">
+                                <UserSquare size={44} className="mx-auto text-slate-300 dark:text-slate-600 mb-3" />
+                                <p className="font-bold text-slate-900 dark:text-white">No customers found.</p>
+                            </div>
+                        }
+                    >
+                        {customers.data?.map(customer => (
+                            <tr key={customer.id}>
+                                <td>
+                                    <div className="flex items-center gap-3">
+                                        <div className="w-10 h-10 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200/60 dark:border-slate-700/60 text-indigo-600 dark:text-indigo-400 flex items-center justify-center font-bold text-sm shrink-0">
+                                            {(customer.name || 'C').substring(0, 2).toUpperCase()}
+                                        </div>
+                                        <div>
+                                            <div className="font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
+                                                <span>{customer.name}</span>
+                                                {customer.company_name && (
+                                                    <Badge variant="primary">{customer.company_name}</Badge>
                                                 )}
                                             </div>
-                                        </td>
-                                        <td className="py-4 px-6 text-center">
-                                            <div className="flex flex-col items-center gap-1">
-                                                <Badge variant={customer.sales_count > 0 ? "primary" : "neutral"}>
-                                                    {customer.sales_count || 0} POS Order{customer.sales_count === 1 ? '' : 's'}
-                                                </Badge>
-                                                {customer.invoices_count > 0 && (
-                                                    <span className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400">
-                                                        {customer.invoices_count} Invoice{customer.invoices_count === 1 ? '' : 's'}
-                                                    </span>
-                                                )}
+                                            <div className="text-xs text-slate-400 mt-0.5">
+                                                Joined {new Date(customer.created_at).toLocaleDateString()}
+                                                {customer.tin_number && ` • TIN: ${customer.tin_number}`}
                                             </div>
-                                        </td>
-                                        <td className="py-4 px-6 text-right font-bold text-slate-900 dark:text-white whitespace-nowrap">
-                                            {Number(customer.sales_sum_final_amount || 0).toLocaleString()} UGX
-                                        </td>
-                                        <td className="py-4 px-6 text-center">
-                                            <div className="flex items-center justify-center gap-2">
-                                                <Button 
-                                                    variant="primary"
-                                                    onClick={() => handleViewHistory(customer)}
-                                                    className="!px-3 !py-1.5 text-xs"
-                                                >
-                                                    <History size={14} /> History
-                                                </Button>
-                                                <Button 
-                                                    variant="secondary"
-                                                    onClick={() => openStatementModal(customer)}
-                                                    className="!px-3 !py-1.5 text-xs"
-                                                >
-                                                    <FileText size={14} /> Statement
-                                                </Button>
-                                                <Button 
-                                                    variant="secondary"
-                                                    onClick={() => handleEdit(customer)}
-                                                    className="!px-3 !py-1.5 text-xs"
-                                                >
-                                                    <Pencil size={14} /> Edit
-                                                </Button>
-                                                <Button 
-                                                    variant="danger"
-                                                    onClick={() => setDeletingCustomer(customer)}
-                                                    className="!px-3 !py-1.5 text-xs"
-                                                >
-                                                    <Trash2 size={14} />
-                                                </Button>
+                                        </div>
+                                    </div>
+                                </td>
+                                <td>
+                                    <div className="space-y-0.5 text-xs text-slate-500 dark:text-slate-400">
+                                        <div className="flex items-center gap-1.5 text-slate-700 dark:text-slate-300 font-medium">
+                                            <Phone size={12} className="text-slate-400 shrink-0" /> {customer.phone}
+                                        </div>
+                                        {customer.email && (
+                                            <div className="flex items-center gap-1.5">
+                                                <Mail size={12} className="text-slate-400 shrink-0" /> {customer.email}
                                             </div>
-                                        </td>
-                                    </tr>
-                                ))}
-                                {(!customers.data || customers.data.length === 0) && (
-                                    <tr>
-                                        <td colSpan="5" className="py-12 text-center text-slate-500 dark:text-slate-400">
-                                            <UserSquare size={48} className="mx-auto text-slate-300 dark:text-slate-600 mb-3" />
-                                            <p>No customers found.</p>
-                                        </td>
-                                    </tr>
-                                )}
-                            </tbody>
-                        </table>
-                    </div>
+                                        )}
+                                    </div>
+                                </td>
+                                <td className="text-center">
+                                    <div className="flex flex-col items-center gap-1">
+                                        <Badge variant={customer.sales_count > 0 ? "primary" : "neutral"}>
+                                            {customer.sales_count || 0} POS Order{customer.sales_count === 1 ? '' : 's'}
+                                        </Badge>
+                                        {customer.invoices_count > 0 && (
+                                            <span className="text-[11px] font-bold text-indigo-600 dark:text-indigo-400">
+                                                {customer.invoices_count} Invoice{customer.invoices_count === 1 ? '' : 's'}
+                                            </span>
+                                        )}
+                                    </div>
+                                </td>
+                                <td className="text-right font-bold text-slate-900 dark:text-white">
+                                    UGX {Number(customer.sales_sum_final_amount || 0).toLocaleString()}
+                                </td>
+                                <td className="text-center">
+                                    <div className="flex items-center justify-center gap-2">
+                                        <Button
+                                            variant="outline"
+                                            className="!py-1.5 !px-3 !text-xs whitespace-nowrap"
+                                            icon={History}
+                                            onClick={() => handleViewHistory(customer)}
+                                        >
+                                            History
+                                        </Button>
+                                        <button
+                                            type="button"
+                                            title="Edit Customer"
+                                            className="p-2 text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950/50 rounded-lg transition-colors"
+                                            onClick={() => handleEdit(customer)}
+                                        >
+                                            <Pencil size={16} />
+                                        </button>
+                                        <button
+                                            type="button"
+                                            title="Delete Customer"
+                                            className="p-2 text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/50 rounded-lg transition-colors"
+                                            onClick={() => setDeletingCustomer(customer)}
+                                        >
+                                            <Trash2 size={16} />
+                                        </button>
+                                        <Button
+                                            variant="secondary"
+                                            className="!py-1.5 !px-3 !text-xs whitespace-nowrap"
+                                            icon={FileText}
+                                            onClick={() => openStatementModal(customer)}
+                                        >
+                                            Statement
+                                        </Button>
+                                    </div>
+                                </td>
+                            </tr>
+                        ))}
+                    </DataTable>
+                </div>
+
+                {/* Mobile Cards Wrapper */}
+                <Card noPadding className="md:hidden overflow-hidden">
 
                     {/* Mobile Cards View */}
                     <div className="md:hidden divide-y divide-slate-100 dark:divide-slate-800">
@@ -461,30 +471,10 @@ export default function CustomersIndex({ auth, customers = {}, summary, filters 
                             <div className="py-10 text-center text-sm text-slate-400">No customers found.</div>
                         )}
                     </div>
-
-                    {/* Pagination Component */}
-                    {customers.links && customers.links.length > 3 && (
-                        <div className="flex flex-wrap items-center justify-between gap-3 p-5 border-t border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900">
-                            <span className="text-xs text-slate-500 dark:text-slate-400">
-                                Showing {customers.from || 0}–{customers.to || 0} of {customers.total || 0}
-                            </span>
-                            <nav className="inline-flex flex-wrap bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden">
-                                {customers.links.map((link, k) => (
-                                    <Link 
-                                        key={k}
-                                        href={link.url || '#'}
-                                        preserveScroll
-                                        preserveState
-                                        className={`px-3.5 py-2 text-xs font-semibold border-r border-slate-200 dark:border-slate-700 last:border-0 ${
-                                            link.active ? 'bg-indigo-50 dark:bg-indigo-900/40 text-indigo-600 dark:text-indigo-300 font-bold' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700'
-                                        } ${link.url === null ? 'opacity-50 cursor-not-allowed pointer-events-none' : ''}`}
-                                        dangerouslySetInnerHTML={{ __html: link.label }}
-                                    />
-                                ))}
-                            </nav>
-                        </div>
-                    )}
                 </Card>
+
+                {/* Pagination Component */}
+                <Pagination data={customers} />
             </div>
 
             {/* Edit/Add Customer Modal */}
@@ -612,25 +602,22 @@ export default function CustomersIndex({ auth, customers = {}, summary, filters 
                 <div className="flex flex-col max-h-[90vh] bg-white dark:bg-slate-900 rounded-2xl overflow-hidden shadow-2xl border border-slate-200 dark:border-slate-800">
                     
                     {/* Fixed Header */}
-                    <div className="px-8 py-6 bg-slate-900 text-white flex items-center justify-between border-b border-slate-800 shrink-0 relative overflow-hidden">
-                        {/* Decorative background glow */}
-                        <div className="absolute top-0 right-1/4 w-64 h-64 bg-indigo-500/10 rounded-full blur-3xl pointer-events-none"></div>
-                        
+                    <div className="px-8 py-5 bg-white dark:bg-slate-900 flex items-center justify-between border-b border-slate-200 dark:border-slate-800 shrink-0 relative overflow-hidden">
                         <div className="flex items-center gap-4 relative z-10">
-                            <div className="w-14 h-14 rounded-2xl bg-gradient-to-tr from-indigo-500 to-blue-500 flex items-center justify-center text-white shadow-lg shadow-indigo-500/30">
-                                <History size={28} />
+                            <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-indigo-500 to-blue-500 flex items-center justify-center text-white shadow-lg shadow-indigo-500/25 shrink-0">
+                                <History size={24} />
                             </div>
                             <div>
-                                <h2 className="text-2xl font-black text-white tracking-tight">Customer History</h2>
-                                <p className="text-sm font-medium text-slate-400 mt-0.5">Purchases and interactions timeline</p>
+                                <h2 className="text-xl font-bold text-slate-900 dark:text-white tracking-tight">Customer History</h2>
+                                <p className="text-xs font-medium text-slate-500 dark:text-slate-400 mt-0.5">Purchases and interactions timeline</p>
                             </div>
                         </div>
                         <button 
                             type="button" 
                             onClick={() => setShowHistoryModal(false)}
-                            className="w-10 h-10 rounded-xl bg-white/5 hover:bg-white/10 text-slate-400 hover:text-white flex items-center justify-center transition-all duration-200 relative z-10"
+                            className="w-9 h-9 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-white flex items-center justify-center transition-all duration-200 relative z-10"
                         >
-                            <X size={22} />
+                            <X size={20} />
                         </button>
                     </div>
 

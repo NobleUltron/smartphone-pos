@@ -5,6 +5,7 @@ import { Handshake, X, Search, Package, Check, Smartphone, Layers, Calendar, Arr
 import axios from 'axios';
 import { debounce } from 'lodash';
 import dayjs from 'dayjs';
+import toast from 'react-hot-toast';
 
 export default function IssueStockModal({
     isOpen,
@@ -134,7 +135,7 @@ export default function IssueStockModal({
 
         // Prevent adding duplicate IMEI
         if (isSerialized && stagedItems.some(i => i.device_imei_id === newItem.device_imei_id)) {
-            alert('This device IMEI is already in the consignment slip.');
+            toast.error('This device IMEI is already in the consignment slip.');
             return;
         }
 
@@ -537,7 +538,7 @@ export default function IssueStockModal({
                                         {stagedItems.map((staged, idx) => (
                                             <div key={idx} className="p-3 flex items-center justify-between hover:bg-white dark:hover:bg-slate-800/80 transition-colors">
                                                 <div className="flex items-center gap-2.5">
-                                                    <div className={`p-1.5 rounded-lg ${staged.type === 'serialized' ? 'bg-amber-100 text-amber-700' : 'bg-blue-100 text-blue-700'}`}>
+                                                    <div className={`p-1.5 rounded-lg ${staged.type === 'serialized' ? 'bg-amber-100 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300' : 'bg-blue-100 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300'}`}>
                                                         {staged.type === 'serialized' ? <Smartphone size={14} /> : <Layers size={14} />}
                                                     </div>
                                                     <div>

@@ -5,6 +5,8 @@ import PageHeader from '@/Components/SaaS/PageHeader';
 import Card from '@/Components/SaaS/Card';
 import Button from '@/Components/SaaS/Button';
 import Badge from '@/Components/SaaS/Badge';
+import DataTable from '@/Components/SaaS/DataTable';
+import Pagination from '@/Components/SaaS/Pagination';
 import { Package, Building2, Phone, Mail, MapPin, Receipt, DollarSign, Calendar, Info, X, Trash2, AlertTriangle, Plus, ArrowLeft, Ban, Undo2, Wallet, CreditCard, RotateCcw, FileText, MessageCircle } from 'lucide-react';
 import toast from 'react-hot-toast';
 import Modal from '@/Components/Modal';
@@ -25,6 +27,10 @@ export default function SuppliersShow({ auth, supplier, paymentAccounts = [] }) 
     const [paymentModalPurchase, setPaymentModalPurchase] = useState(null);
     const [cancelModalPurchase, setCancelModalPurchase] = useState(null);
     const [showCreditRefundModal, setShowCreditRefundModal] = useState(false);
+    const [purchasePage, setPurchasePage] = useState(1);
+    const [purchasePerPage, setPurchasePerPage] = useState(10);
+    const [returnPage, setReturnPage] = useState(1);
+    const [returnPerPage, setReturnPerPage] = useState(10);
 
     const defaultAccountId = paymentAccounts[0]?.id || '';
     const defaultAccountName = paymentAccounts[0]?.name || 'Cash';
@@ -367,19 +373,18 @@ export default function SuppliersShow({ auth, supplier, paymentAccounts = [] }) 
                         </div>
 
                         {supplier.purchases && supplier.purchases.length > 0 ? (
-                            <Card noPadding className="overflow-hidden">
-                                <div className="overflow-x-auto">
-                                    <table className="w-full text-left text-sm">
-                                        <thead className="bg-slate-50 border-b border-slate-200 text-slate-500">
-                                            <tr>
-                                                <th className="px-6 py-4 font-semibold">Purchase Info</th>
-                                                <th className="px-6 py-4 font-semibold">Amount</th>
-                                                <th className="px-6 py-4 font-semibold">Status</th>
-                                                <th className="px-6 py-4 font-semibold text-right">Actions</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody className="divide-y divide-slate-100">
-                                            {supplier.purchases.map(purchase => (
+                            <>
+                            <DataTable
+                                headers={[
+                                    'Purchase Info',
+                                    'Amount',
+                                    'Status',
+                                    { label: 'Actions', className: 'text-right' },
+                                ]}
+                            >
+                                            {supplier.purchases
+                                                .slice((purchasePage - 1) * purchasePerPage, purchasePage * purchasePerPage)
+                                                .map(purchase => (
                                                 <tr key={purchase.id} className="hover:bg-slate-50 transition-colors">
                                                     <td className="px-6 py-4">
                                                         <div className="font-bold text-slate-900 flex items-center gap-2">
@@ -454,10 +459,15 @@ export default function SuppliersShow({ auth, supplier, paymentAccounts = [] }) 
                                                     </td>
                                                 </tr>
                                             ))}
-                                        </tbody>
-                                    </table>
-                                </div>
-                            </Card>
+                            </DataTable>
+                            <Pagination
+                                total={supplier.purchases.length}
+                                currentPage={purchasePage}
+                                perPage={purchasePerPage}
+                                onPageChange={setPurchasePage}
+                                onPerPageChange={setPurchasePerPage}
+                            />
+                            </>
                         ) : (
                             <Card className="text-center py-12">
                                 <Package size={48} className="mx-auto text-slate-200 mb-4" />
@@ -485,19 +495,18 @@ export default function SuppliersShow({ auth, supplier, paymentAccounts = [] }) 
                             </div>
 
                             {supplier.supplier_returns && supplier.supplier_returns.length > 0 ? (
-                                <Card noPadding className="overflow-hidden">
-                                    <div className="overflow-x-auto">
-                                        <table className="w-full text-left text-sm">
-                                            <thead className="bg-slate-50 dark:bg-slate-800/70 border-b border-slate-200 dark:border-slate-800 text-slate-500">
-                                                <tr>
-                                                    <th className="px-5 py-3.5 font-semibold">Date & Type</th>
-                                                    <th className="px-5 py-3.5 font-semibold">Item / Purchase</th>
-                                                    <th className="px-5 py-3.5 font-semibold">Resolution</th>
-                                                    <th className="px-5 py-3.5 font-semibold text-right">Amount</th>
-                                                </tr>
-                                            </thead>
-                                            <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                                                {supplier.supplier_returns.map(ret => {
+                                <>
+                                <DataTable
+                                    headers={[
+                                        'Date & Type',
+                                        'Item / Purchase',
+                                        'Resolution',
+                                        { label: 'Amount', className: 'text-right' },
+                                    ]}
+                                >
+                                                {supplier.supplier_returns
+                                                    .slice((returnPage - 1) * returnPerPage, returnPage * returnPerPage)
+                                                    .map(ret => {
                                                     const resolutionLabel = {
                                                         refund: 'Refund to Wallet',
                                                         supplier_credit: 'Supplier Credit',
@@ -573,10 +582,15 @@ export default function SuppliersShow({ auth, supplier, paymentAccounts = [] }) 
                                                         </tr>
                                                     );
                                                 })}
-                                            </tbody>
-                                        </table>
-                                    </div>
-                                </Card>
+                                </DataTable>
+                                <Pagination
+                                    total={supplier.supplier_returns.length}
+                                    currentPage={returnPage}
+                                    perPage={returnPerPage}
+                                    onPageChange={setReturnPage}
+                                    onPerPageChange={setReturnPerPage}
+                                />
+                                </>
                             ) : (
                                 <Card className="text-center py-8">
                                     <p className="text-sm text-slate-500">No supplier returns, RMAs, or cancelled orders recorded yet.</p>
@@ -617,44 +631,38 @@ export default function SuppliersShow({ auth, supplier, paymentAccounts = [] }) 
                         </div>
 
                         <h3 className="font-bold text-slate-900 dark:text-white mb-3 text-sm uppercase tracking-wider">Items in Purchase</h3>
-                        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl overflow-hidden">
-                            <table className="w-full text-left text-sm">
-                                <thead className="bg-slate-50 dark:bg-slate-800/80 border-b border-slate-200 dark:border-slate-800">
-                                    <tr>
-                                        <th className="px-4 py-3 font-semibold text-slate-600 dark:text-slate-300">Product</th>
-                                        <th className="px-4 py-3 font-semibold text-slate-600 dark:text-slate-300 text-center">Qty</th>
-                                        <th className="px-4 py-3 font-semibold text-slate-600 dark:text-slate-300 text-right">Unit Cost</th>
-                                        <th className="px-4 py-3 font-semibold text-slate-600 dark:text-slate-300 text-right">Total</th>
-                                    </tr>
-                                </thead>
-                                <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                                    {selectedPurchase.items?.map(item => (
-                                        <tr key={item.id}>
-                                            <td className="px-4 py-3">
-                                                <div className="font-semibold text-slate-900 dark:text-white">
-                                                    {item.product ? `${item.product.brand?.name ? item.product.brand.name + ' ' : ''}${item.product.model_name}` : 'Unknown Product'}
-                                                </div>
-                                                {item.imeis && item.imeis.length > 0 && (
-                                                    <div className="text-xs text-slate-500 dark:text-slate-400 mt-1 max-w-[200px] truncate" title={item.imeis.join(', ')}>
-                                                        IMEIs: {item.imeis.join(', ')}
-                                                    </div>
-                                                )}
-                                            </td>
-                                            <td className="px-4 py-3 text-center text-slate-700 dark:text-slate-300">{item.quantity}</td>
-                                            <td className="px-4 py-3 text-right text-slate-700 dark:text-slate-300">{Number(item.unit_cost).toLocaleString()}</td>
-                                            <td className="px-4 py-3 text-right font-medium text-slate-900 dark:text-white">{Number(item.total_cost).toLocaleString()}</td>
-                                        </tr>
-                                    ))}
-                                    {(!selectedPurchase.items || selectedPurchase.items.length === 0) && (
-                                        <tr>
-                                            <td colSpan="4" className="px-4 py-6 text-center text-slate-500 dark:text-slate-400">
-                                                No items found for this purchase.
-                                            </td>
-                                        </tr>
-                                    )}
-                                </tbody>
-                            </table>
-                        </div>
+                        <DataTable
+                            headers={[
+                                'Product',
+                                { label: 'Qty', className: 'text-center' },
+                                { label: 'Unit Cost', className: 'text-right' },
+                                { label: 'Total', className: 'text-right' },
+                            ]}
+                            isEmpty={!selectedPurchase.items || selectedPurchase.items.length === 0}
+                            emptyState={
+                                <div className="py-8 text-center text-slate-500 dark:text-slate-400">
+                                    No items found for this purchase.
+                                </div>
+                            }
+                        >
+                            {selectedPurchase.items?.map(item => (
+                                <tr key={item.id}>
+                                    <td>
+                                        <div className="font-semibold text-slate-900 dark:text-white">
+                                            {item.product ? `${item.product.brand?.name ? item.product.brand.name + ' ' : ''}${item.product.model_name}` : 'Unknown Product'}
+                                        </div>
+                                        {item.imeis && item.imeis.length > 0 && (
+                                            <div className="text-xs font-mono text-slate-500 dark:text-slate-400 mt-1 max-w-xs truncate" title={item.imeis.join(', ')}>
+                                                IMEIs: {item.imeis.join(', ')}
+                                            </div>
+                                        )}
+                                    </td>
+                                    <td className="text-center text-slate-700 dark:text-slate-300">{item.quantity}</td>
+                                    <td className="text-right font-mono text-slate-700 dark:text-slate-300">{Number(item.unit_cost).toLocaleString()}</td>
+                                    <td className="text-right font-mono font-bold text-slate-900 dark:text-white">{Number(item.total_cost).toLocaleString()}</td>
+                                </tr>
+                            ))}
+                        </DataTable>
                     </div>
                 )}
             </Modal>

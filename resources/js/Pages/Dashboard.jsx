@@ -786,66 +786,50 @@ export default function Dashboard({
 
                 {/* Desktop Table */}
                 <div className="hidden sm:block overflow-x-auto">
-                    <table className="w-full text-left border-collapse">
+                    <table className="saas-table w-full whitespace-nowrap">
                         <thead>
-                            <tr className="bg-slate-50/50 dark:bg-slate-800/60">
-                                <th className="py-4 px-6 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider border-b border-slate-100 dark:border-slate-800">
-                                    <div className="w-56 mx-auto text-left">Customer</div>
-                                </th>
-                                <th className="py-4 px-6 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider border-b border-slate-100 dark:border-slate-800">
-                                    <div className="w-36 mx-auto text-left">Amount</div>
-                                </th>
-                                <th className="py-4 px-6 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider border-b border-slate-100 dark:border-slate-800">
-                                    <div className="w-24 mx-auto text-center">Status</div>
-                                </th>
-                                <th className="py-4 px-6 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider border-b border-slate-100 dark:border-slate-800">
-                                    <div className="w-32 mx-auto text-left">Time</div>
-                                </th>
-                                <th className="py-4 px-6 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider border-b border-slate-100 dark:border-slate-800">
-                                    <div className="w-40 mx-auto text-left">Cashier</div>
-                                </th>
+                            <tr>
+                                <th>Customer</th>
+                                <th className="!text-right">Amount</th>
+                                <th className="!text-center">Status</th>
+                                <th>Time</th>
+                                <th>Cashier</th>
                             </tr>
                         </thead>
-                        <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                        <tbody>
                             {recentSales?.length > 0 ? recentSales.map(sale => (
                                 <tr key={sale.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/40 transition-colors">
-                                    <td className="py-4 px-6">
-                                        <a href={`/pos/receipt/${sale.id}`} target="_blank" rel="noreferrer" className="flex items-center gap-3 w-56 mx-auto whitespace-nowrap group">
-                                            <div className="w-10 h-10 rounded-full bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 flex items-center justify-center font-bold shrink-0">
-                                                <User size={18} />
+                                    <td>
+                                        <a href={`/pos/receipt/${sale.id}`} target="_blank" rel="noreferrer" className="flex items-center gap-3 group">
+                                            <div className="w-9 h-9 rounded-xl bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 flex items-center justify-center font-bold text-xs shrink-0">
+                                                {(sale.customer_name || 'W').substring(0, 2).toUpperCase()}
                                             </div>
-                                            <span className="font-semibold text-slate-900 dark:text-white group-hover:text-indigo-600 dark:group-hover:text-indigo-400 text-left transition-colors">{sale.customer_name}</span>
+                                            <span className="font-bold text-slate-900 dark:text-white group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">{sale.customer_name}</span>
                                         </a>
                                     </td>
-                                    <td className="py-4 px-6">
-                                        <div className="w-36 mx-auto font-bold text-slate-900 dark:text-white text-left whitespace-nowrap">
-                                            {Number(sale.amount).toLocaleString()} UGX
-                                        </div>
+                                    <td className="text-right font-bold font-mono text-slate-900 dark:text-white">
+                                        {Number(sale.amount).toLocaleString()} UGX
                                     </td>
-                                    <td className="py-4 px-6">
-                                        <div className="w-24 mx-auto text-center whitespace-nowrap">
-                                            {sale.payment_status === 'Refunded' ? (
-                                                <Badge variant="danger">Refunded</Badge>
-                                            ) : sale.payment_status === 'Partial' ? (
-                                                <Badge variant="warning">Partial</Badge>
-                                            ) : (
-                                                <Badge variant="success">Paid</Badge>
-                                            )}
-                                        </div>
+                                    <td className="text-center">
+                                        {sale.payment_status === 'Refunded' ? (
+                                            <Badge variant="danger">Refunded</Badge>
+                                        ) : sale.payment_status === 'Partial' ? (
+                                            <Badge variant="warning">Partial</Badge>
+                                        ) : (
+                                            <Badge variant="success">Paid</Badge>
+                                        )}
                                     </td>
-                                    <td className="py-4 px-6">
-                                        <div className="w-32 mx-auto text-left whitespace-nowrap">
-                                            <Badge variant="neutral">{sale.time}</Badge>
-                                        </div>
+                                    <td>
+                                        <Badge variant="neutral">{sale.time}</Badge>
                                     </td>
-                                    <td className="py-4 px-6">
-                                        <div className="flex items-center gap-2 w-40 mx-auto whitespace-nowrap">
+                                    <td>
+                                        <div className="flex items-center gap-2">
                                             <img 
                                                 src={sale.cashier_photo} 
                                                 alt={sale.cashier}
                                                 className="w-6 h-6 rounded-full object-cover shadow-sm border border-slate-200 dark:border-slate-700 shrink-0"
                                             />
-                                            <span className="text-slate-600 dark:text-slate-300 text-sm font-medium text-left">{sale.cashier}</span>
+                                            <span className="text-slate-600 dark:text-slate-300 text-sm font-medium">{sale.cashier}</span>
                                         </div>
                                     </td>
                                 </tr>

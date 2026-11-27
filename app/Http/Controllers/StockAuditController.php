@@ -14,11 +14,13 @@ use Carbon\Carbon;
 
 class StockAuditController extends Controller
 {
-    public function index()
+    public function index(Request $request)
     {
+        $perPage = max(10, min(100, (int) $request->input('per_page', 10)));
         $audits = StockAudit::with('user')
             ->orderBy('created_at', 'desc')
-            ->paginate(10);
+            ->paginate($perPage)
+            ->withQueryString();
 
         $metrics = [
             'total_audits' => StockAudit::count(),

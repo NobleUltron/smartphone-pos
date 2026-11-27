@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import { Head, Link, router, useForm } from '@inertiajs/react';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
+import DataTable from '@/Components/SaaS/DataTable';
+import Pagination from '@/Components/SaaS/Pagination';
 import Modal from '@/Components/Modal';
 import PrimaryButton from '@/Components/PrimaryButton';
 import SecondaryButton from '@/Components/SecondaryButton';
@@ -310,101 +312,75 @@ export default function AccountShow({ account, allAccounts, transactions, trends
                     </div>
 
                     {/* Table */}
-                    <div className="overflow-x-auto">
-                        <table className="w-full text-left text-xs border-collapse">
-                            <thead>
-                                <tr className="border-b border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider text-[11px] bg-slate-50/50 dark:bg-slate-800/30">
-                                    <th className="py-3 px-4">Date & Time</th>
-                                    <th className="py-3 px-4">Category</th>
-                                    <th className="py-3 px-4">Description / Reference</th>
-                                    <th className="py-3 px-4 text-right">Credit (+)</th>
-                                    <th className="py-3 px-4 text-right">Debit (&minus;)</th>
-                                    <th className="py-3 px-4 text-right">Running Balance</th>
-                                    <th className="py-3 px-4">User</th>
+                    <DataTable
+                        headers={[
+                            'Date & Time',
+                            'Category',
+                            'Description / Reference',
+                            { label: 'Credit (+)', className: 'text-right' },
+                            { label: 'Debit (−)', className: 'text-right' },
+                            { label: 'Running Balance', className: 'text-right' },
+                            'User',
+                        ]}
+                        isEmpty={transactions.data.length === 0}
+                        emptyState={
+                            <div className="py-10 text-center text-slate-400">
+                                No transactions recorded in this account passbook yet.
+                            </div>
+                        }
+                    >
+                        {transactions.data.map(trx => {
+                            const isPositiveAdjustment = trx.type === 'adjustment' && (
+                                (trx.category && trx.category.toLowerCase().includes('positive')) ||
+                                (trx.balance_after != null && trx.balance_before != null && Number(trx.balance_after) >= Number(trx.balance_before))
+                            );
+                            const isInflow = trx.type === 'inflow' || trx.type === 'transfer_in' || isPositiveAdjustment;
+                            const isOutflow = trx.type === 'outflow' || trx.type === 'transfer_out' || (trx.type === 'adjustment' && !isPositiveAdjustment);
+                            return (
+                                <tr key={trx.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/40 transition-colors">
+                                    <td className="font-medium text-slate-500 dark:text-slate-400 text-xs">
+                                        {dayjs(trx.transaction_date).format('DD MMM YYYY, hh:mm A')}
+                                    </td>
+                                    <td>
+                                        <span className={`px-2.5 py-0.5 rounded-full text-[11px] font-bold ${
+                                            isInflow 
+                                                ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300'
+                                                : (isOutflow 
+                                                    ? 'bg-rose-100 text-rose-800 dark:bg-rose-950/60 dark:text-rose-300' 
+                                                    : 'bg-indigo-100 text-indigo-800 dark:bg-indigo-950/60 dark:text-indigo-300')
+                                        }`}>
+                                            {trx.category}
+                                        </span>
+                                    </td>
+                                    <td className="max-w-xs">
+                                        <div className="font-medium text-slate-900 dark:text-white text-xs truncate" title={trx.description}>
+                                            {trx.description}
+                                        </div>
+                                        {trx.transaction_reference && (
+                                            <div className="text-[10px] text-slate-400 font-mono mt-0.5">
+                                                Ref: {trx.transaction_reference}
+                                            </div>
+                                        )}
+                                    </td>
+                                    <td className="text-right font-black text-xs font-mono text-emerald-600 dark:text-emerald-400">
+                                        {isInflow ? `+ UGX ${Number(trx.amount).toLocaleString()}` : '—'}
+                                    </td>
+                                    <td className="text-right font-black text-xs font-mono text-rose-600 dark:text-rose-400">
+                                        {isOutflow ? `- UGX ${Number(trx.amount).toLocaleString()}` : '—'}
+                                    </td>
+                                    <td className="text-right font-black text-xs font-mono text-slate-900 dark:text-white">
+                                        UGX {Number(trx.balance_after).toLocaleString()}
+                                    </td>
+                                    <td className="text-slate-500 dark:text-slate-400 text-xs">
+                                        {trx.user?.name || 'System'}
+                                    </td>
                                 </tr>
-                            </thead>
-                            <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-slate-700 dark:text-slate-300">
-                                {transactions.data.map(trx => {
-                                    const isPositiveAdjustment = trx.type === 'adjustment' && (
-                                        (trx.category && trx.category.toLowerCase().includes('positive')) ||
-                                        (trx.balance_after != null && trx.balance_before != null && Number(trx.balance_after) >= Number(trx.balance_before))
-                                    );
-                                    const isInflow = trx.type === 'inflow' || trx.type === 'transfer_in' || isPositiveAdjustment;
-                                    const isOutflow = trx.type === 'outflow' || trx.type === 'transfer_out' || (trx.type === 'adjustment' && !isPositiveAdjustment);
-                                    return (
-                                        <tr key={trx.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors">
-                                            <td className="py-3 px-4 whitespace-nowrap font-medium text-slate-500 dark:text-slate-400">
-                                                {dayjs(trx.transaction_date).format('DD MMM YYYY, hh:mm A')}
-                                            </td>
-                                            <td className="py-3 px-4 whitespace-nowrap">
-                                                <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold ${
-                                                    isInflow 
-                                                        ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300'
-                                                        : (isOutflow 
-                                                            ? 'bg-rose-100 text-rose-800 dark:bg-rose-950/60 dark:text-rose-300' 
-                                                            : 'bg-indigo-100 text-indigo-800 dark:bg-indigo-950/60 dark:text-indigo-300')
-                                                }`}>
-                                                    {trx.category}
-                                                </span>
-                                            </td>
-                                            <td className="py-3 px-4">
-                                                <div className="font-medium text-slate-900 dark:text-white">
-                                                    {trx.description}
-                                                </div>
-                                                {trx.transaction_reference && (
-                                                    <div className="text-[10px] text-slate-400 font-mono mt-0.5">
-                                                        Ref: {trx.transaction_reference}
-                                                    </div>
-                                                )}
-                                            </td>
-                                            <td className="py-3 px-4 text-right font-black whitespace-nowrap text-emerald-600 dark:text-emerald-400">
-                                                {isInflow ? `+ UGX ${Number(trx.amount).toLocaleString()}` : '—'}
-                                            </td>
-                                            <td className="py-3 px-4 text-right font-black whitespace-nowrap text-rose-600 dark:text-rose-400">
-                                                {isOutflow ? `- UGX ${Number(trx.amount).toLocaleString()}` : '—'}
-                                            </td>
-                                            <td className="py-3 px-4 text-right font-black whitespace-nowrap text-slate-900 dark:text-white">
-                                                UGX {Number(trx.balance_after).toLocaleString()}
-                                            </td>
-                                            <td className="py-3 px-4 whitespace-nowrap text-slate-500 dark:text-slate-400 text-[11px]">
-                                                {trx.user?.name || 'System'}
-                                            </td>
-                                        </tr>
-                                    );
-                                })}
-                                {transactions.data.length === 0 && (
-                                    <tr>
-                                        <td colSpan="7" className="text-center py-10 text-slate-400">
-                                            No transactions recorded in this account passbook yet.
-                                        </td>
-                                    </tr>
-                                )}
-                            </tbody>
-                        </table>
-                    </div>
+                            );
+                        })}
+                    </DataTable>
 
                     {/* Pagination */}
-                    {transactions.links && transactions.links.length > 3 && (
-                        <div className="mt-6 flex items-center justify-between pt-4 border-t border-slate-100 dark:border-slate-800">
-                            <div className="text-xs text-slate-500">
-                                Showing {transactions.from || 0} to {transactions.to || 0} of {transactions.total} entries
-                            </div>
-                            <div className="flex items-center gap-1">
-                                {transactions.links.map((link, idx) => (
-                                    <Link
-                                        key={idx}
-                                        href={link.url || '#'}
-                                        dangerouslySetInnerHTML={{ __html: link.label }}
-                                        className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors ${
-                                            link.active
-                                                ? 'bg-indigo-600 text-white'
-                                                : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
-                                        } ${!link.url ? 'opacity-40 cursor-not-allowed' : ''}`}
-                                    />
-                                ))}
-                            </div>
-                        </div>
-                    )}
+                    <Pagination data={transactions} className="mt-6" />
                 </div>
             </div>
 

@@ -78,8 +78,9 @@ class LayawayController extends Controller
             });
         }
 
+        $perPage = max(10, min(100, (int) $request->input('per_page', 15)));
         $layaways = $query->orderBy('created_at', 'desc')
-            ->paginate(15)
+            ->paginate($perPage)
             ->withQueryString();
 
         $hasActiveDrawer = \App\Models\CashDrawer::where('user_id', auth()->id())

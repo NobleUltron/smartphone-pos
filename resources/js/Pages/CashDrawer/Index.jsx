@@ -488,19 +488,19 @@ export default function Index({ auth, activeDrawer, accounts = [] }) {
 
                                     {activeDrawer.expenses?.length > 0 ? (
                                         <div className="overflow-x-auto">
-                                            <table className="w-full text-left border-collapse text-sm">
+                                            <table className="saas-table w-full whitespace-nowrap">
                                                 <thead>
-                                                    <tr className="bg-slate-50/70 dark:bg-slate-800/60 border-b border-slate-100 dark:border-slate-800 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
-                                                        <th className="px-5 py-3">Category</th>
-                                                        <th className="px-5 py-3">Description</th>
-                                                        <th className="px-5 py-3 text-right">Amount</th>
+                                                    <tr>
+                                                        <th>Category</th>
+                                                        <th>Description</th>
+                                                        <th className="!text-right">Amount</th>
                                                     </tr>
                                                 </thead>
-                                                <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                                                <tbody>
                                                     {activeDrawer.expenses.map((expense) => (
-                                                        <tr key={expense.id} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/50 transition-colors">
-                                                            <td className="px-5 py-3.5 font-semibold text-slate-900 dark:text-white">
-                                                                <span className={`inline-block px-2.5 py-0.5 rounded-md text-xs border ${
+                                                        <tr key={expense.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/40 transition-colors">
+                                                            <td className="font-semibold text-slate-900 dark:text-white">
+                                                                <span className={`inline-block px-2.5 py-0.5 rounded-full text-xs font-bold border ${
                                                                     expense.category === 'Cash In' 
                                                                     ? 'bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800'
                                                                     : isRefundCategory(expense.category)
@@ -510,10 +510,10 @@ export default function Index({ auth, activeDrawer, accounts = [] }) {
                                                                     {expense.category}
                                                                 </span>
                                                             </td>
-                                                            <td className="px-5 py-3.5 text-slate-600 dark:text-slate-300 text-xs">
+                                                            <td className="text-slate-600 dark:text-slate-300 text-xs max-w-xs truncate" title={expense.description || ''}>
                                                                 {expense.description || <span className="text-slate-400 italic">No description</span>}
                                                             </td>
-                                                            <td className={`px-5 py-3.5 text-right font-bold text-sm ${expense.category === 'Cash In' ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
+                                                            <td className={`text-right font-extrabold font-mono text-sm ${expense.category === 'Cash In' ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
                                                                 {expense.category === 'Cash In' ? '+' : '-'} UGX {Number(expense.amount).toLocaleString()}
                                                             </td>
                                                         </tr>

@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import toast from 'react-hot-toast';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import { Head, Link, router, useForm, usePage } from '@inertiajs/react';
@@ -15,6 +15,8 @@ import PageHeader from '@/Components/SaaS/PageHeader';
 import Card from '@/Components/SaaS/Card';
 import Button from '@/Components/SaaS/Button';
 import Badge from '@/Components/SaaS/Badge';
+import DataTable from '@/Components/SaaS/DataTable';
+import Pagination from '@/Components/SaaS/Pagination';
 import Modal from '@/Components/Modal';
 import ReceiveStockModal from './Partials/ReceiveStockModal';
 import IssueStockModal from './Partials/IssueStockModal';
@@ -61,6 +63,20 @@ export default function Dashboard({
     // Inward filters & search
     const [inwardFilter, setInwardFilter] = useState('all'); // 'all' | 'owed' | 'in_stock' | 'settled'
     const [inwardSearch, setInwardSearch] = useState('');
+
+    // Client-side pagination state for Inward & Outward tables
+    const [inwardPage, setInwardPage] = useState(1);
+    const [inwardPerPage, setInwardPerPage] = useState(10);
+    const [outwardPage, setOutwardPage] = useState(1);
+    const [outwardPerPage, setOutwardPerPage] = useState(10);
+
+    useEffect(() => {
+        setInwardPage(1);
+    }, [inwardFilter, inwardSearch]);
+
+    useEffect(() => {
+        setOutwardPage(1);
+    }, [outwardSearch, outwardOverdueOnly, viewMode]);
 
     // Settlement state
     const [settleItem, setSettleItem] = useState(null);
@@ -225,6 +241,21 @@ export default function Dashboard({
     const countSettled = useMemo(() => {
         return computedInwardItems.filter(i => i.isSettled).length;
     }, [computedInwardItems]);
+
+    const paginatedInwardItems = useMemo(() => {
+        const start = (inwardPage - 1) * inwardPerPage;
+        return filteredInwardItems.slice(start, start + inwardPerPage);
+    }, [filteredInwardItems, inwardPage, inwardPerPage]);
+
+    const paginatedOutwardItems = useMemo(() => {
+        const start = (outwardPage - 1) * outwardPerPage;
+        return filteredPendingItems.slice(start, start + outwardPerPage);
+    }, [filteredPendingItems, outwardPage, outwardPerPage]);
+
+    const paginatedGroupedDealers = useMemo(() => {
+        const start = (outwardPage - 1) * outwardPerPage;
+        return groupedByDealer.slice(start, start + outwardPerPage);
+    }, [groupedByDealer, outwardPage, outwardPerPage]);
 
     // Settle Modal Handlers
     const openSettleModal = (item) => {
@@ -543,56 +574,54 @@ export default function Dashboard({
             </div>
 
             {/* Main Operations Hub: Two-Way Consignment Center */}
-            <Card>
+            <div className="space-y-6">
                 {/* Primary Direction Selector (Taken from Dealers vs Given to Dealers) */}
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-5 border-b border-slate-100 dark:border-slate-800 mb-6">
-                    <div>
-                        <div className="flex flex-wrap items-center gap-2">
-                            <button
-                                type="button"
-                                onClick={() => setActiveDirectionTab('inward')}
-                                className={`px-4 py-2.5 rounded-xl font-bold text-xs sm:text-sm flex items-center gap-2 transition-all ${
-                                    activeDirectionTab === 'inward'
-                                        ? 'bg-indigo-600 text-white shadow-md shadow-indigo-500/20'
-                                        : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200'
-                                }`}
-                            >
-                                <ArrowDownLeft size={16} />
-                                <span>Items Taken from Dealers (Inward & Payouts)</span>
-                                <span className={`px-2 py-0.5 rounded-full text-[11px] font-black ${
-                                    activeDirectionTab === 'inward' ? 'bg-indigo-700 text-indigo-100' : 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300'
-                                }`}>
-                                    {inwardItems.length}
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                    <div className="flex flex-wrap items-center gap-2">
+                        <button
+                            type="button"
+                            onClick={() => setActiveDirectionTab('inward')}
+                            className={`px-4 py-2.5 rounded-xl font-bold text-xs sm:text-sm flex items-center gap-2 transition-all ${
+                                activeDirectionTab === 'inward'
+                                    ? 'bg-indigo-600 text-white shadow-md shadow-indigo-500/20'
+                                    : 'bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800'
+                            }`}
+                        >
+                            <ArrowDownLeft size={16} />
+                            <span>Items Taken from Dealers (Inward & Payouts)</span>
+                            <span className={`px-2 py-0.5 rounded-full text-[11px] font-black ${
+                                activeDirectionTab === 'inward' ? 'bg-indigo-700 text-indigo-100' : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300'
+                            }`}>
+                                {inwardItems.length}
+                            </span>
+                            {countAwaitingPayback > 0 && (
+                                <span className="px-2 py-0.5 rounded-full text-[11px] font-black bg-rose-500 text-white animate-pulse">
+                                    ⚡ {countAwaitingPayback} to pay
                                 </span>
-                                {countAwaitingPayback > 0 && (
-                                    <span className="px-2 py-0.5 rounded-full text-[11px] font-black bg-rose-500 text-white animate-pulse">
-                                        ⚡ {countAwaitingPayback} to pay
-                                    </span>
-                                )}
-                            </button>
+                            )}
+                        </button>
 
-                            <button
-                                type="button"
-                                onClick={() => setActiveDirectionTab('outward')}
-                                className={`px-4 py-2.5 rounded-xl font-bold text-xs sm:text-sm flex items-center gap-2 transition-all ${
-                                    activeDirectionTab === 'outward'
-                                        ? 'bg-amber-600 text-white shadow-md shadow-amber-500/20'
-                                        : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200'
-                                }`}
-                            >
-                                <PackageOpen size={16} />
-                                <span>Items Given to Dealers (Outward Consignments)</span>
-                                <span className={`px-2 py-0.5 rounded-full text-[11px] font-black ${
-                                    activeDirectionTab === 'outward' ? 'bg-amber-700 text-amber-100' : 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300'
-                                }`}>
-                                    {pendingItems.length}
-                                </span>
-                            </button>
-                        </div>
+                        <button
+                            type="button"
+                            onClick={() => setActiveDirectionTab('outward')}
+                            className={`px-4 py-2.5 rounded-xl font-bold text-xs sm:text-sm flex items-center gap-2 transition-all ${
+                                activeDirectionTab === 'outward'
+                                    ? 'bg-amber-600 text-white shadow-md shadow-amber-500/20'
+                                    : 'bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800'
+                            }`}
+                        >
+                            <PackageOpen size={16} />
+                            <span>Items Given to Dealers (Outward Consignments)</span>
+                            <span className={`px-2 py-0.5 rounded-full text-[11px] font-black ${
+                                activeDirectionTab === 'outward' ? 'bg-amber-700 text-amber-100' : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300'
+                            }`}>
+                                {pendingItems.length}
+                            </span>
+                        </button>
                     </div>
 
                     {/* Quick Action in Context */}
-                    <div>
+                    <div className="shrink-0">
                         {activeDirectionTab === 'inward' ? (
                             <Button
                                 variant="success"
@@ -618,27 +647,38 @@ export default function Dashboard({
 
                 {/* TAB 1: INWARD SOURCED ITEMS (Taken from Dealer & Settlements) */}
                 {activeDirectionTab === 'inward' && (
-                    <div>
-                        <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 mb-6">
-                            <div>
-                                <h3 className="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
-                                    <span>Sourced Dealer Inventory & Consignment Payouts</span>
-                                </h3>
-                                <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                                    Items sourced from partner dealers to sell in your shop. When sold, record cash/mobile money payouts to settle with the dealer.
-                                </p>
-                            </div>
+                    <div className="space-y-6">
+                        {/* Standalone Search & Sub-Filter Card */}
+                        <Card>
+                            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+                                <div className="relative flex-1">
+                                    <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" size={18} />
+                                    <input
+                                        type="text"
+                                        placeholder="Search Dealer, IMEI, SKU, or Model..."
+                                        className="saas-input !pl-10 w-full"
+                                        value={inwardSearch}
+                                        onChange={(e) => setInwardSearch(e.target.value)}
+                                    />
+                                    {inwardSearch && (
+                                        <button
+                                            type="button"
+                                            onClick={() => setInwardSearch('')}
+                                            className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+                                        >
+                                            <X size={15} />
+                                        </button>
+                                    )}
+                                </div>
 
-                            {/* Sub Filters & Search */}
-                            <div className="flex flex-wrap items-center gap-2">
-                                <div className="flex items-center bg-slate-100 dark:bg-slate-800 p-1 rounded-xl border border-slate-200/80 dark:border-slate-700">
+                                <div className="flex flex-wrap items-center bg-slate-100 dark:bg-slate-800/80 p-1 rounded-xl border border-slate-200/80 dark:border-slate-700/80 w-fit">
                                     <button
                                         type="button"
                                         onClick={() => setInwardFilter('all')}
-                                        className={`px-3 py-1 rounded-lg text-xs font-bold transition-all ${
+                                        className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap ${
                                             inwardFilter === 'all'
                                                 ? 'bg-white dark:bg-slate-900 text-indigo-600 dark:text-indigo-400 shadow-sm'
-                                                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
+                                                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
                                         }`}
                                     >
                                         All ({inwardItems.length})
@@ -646,10 +686,10 @@ export default function Dashboard({
                                     <button
                                         type="button"
                                         onClick={() => setInwardFilter('owed')}
-                                        className={`px-3 py-1 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
+                                        className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 whitespace-nowrap ${
                                             inwardFilter === 'owed'
-                                                ? 'bg-white dark:bg-slate-900 text-rose-600 shadow-sm'
-                                                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
+                                                ? 'bg-white dark:bg-slate-900 text-rose-600 dark:text-rose-400 shadow-sm'
+                                                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
                                         }`}
                                     >
                                         <span className="w-1.5 h-1.5 rounded-full bg-rose-500"></span>
@@ -658,10 +698,10 @@ export default function Dashboard({
                                     <button
                                         type="button"
                                         onClick={() => setInwardFilter('in_stock')}
-                                        className={`px-3 py-1 rounded-lg text-xs font-bold transition-all ${
+                                        className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap ${
                                             inwardFilter === 'in_stock'
                                                 ? 'bg-white dark:bg-slate-900 text-indigo-600 dark:text-indigo-400 shadow-sm'
-                                                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
+                                                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
                                         }`}
                                     >
                                         In Store ({countInStock})
@@ -669,358 +709,304 @@ export default function Dashboard({
                                     <button
                                         type="button"
                                         onClick={() => setInwardFilter('settled')}
-                                        className={`px-3 py-1 rounded-lg text-xs font-bold transition-all ${
+                                        className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap ${
                                             inwardFilter === 'settled'
-                                                ? 'bg-white dark:bg-slate-900 text-emerald-600 shadow-sm'
-                                                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
+                                                ? 'bg-white dark:bg-slate-900 text-emerald-600 dark:text-emerald-400 shadow-sm'
+                                                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
                                         }`}
                                     >
                                         Settled ({countSettled})
                                     </button>
                                 </div>
+                            </div>
+                        </Card>
 
-                                <div className="relative min-w-[200px]">
-                                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={14} />
-                                    <input
-                                        type="text"
-                                        placeholder="Search Dealer, IMEI, Model..."
-                                        className="w-full pl-8 pr-3 py-1.5 text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
-                                        value={inwardSearch}
-                                        onChange={(e) => setInwardSearch(e.target.value)}
-                                    />
-                                    {inwardSearch && (
-                                        <button
-                                            onClick={() => setInwardSearch('')}
-                                            className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 text-xs"
+                        {/* Desktop Table */}
+                        <div className="hidden md:block">
+                            <DataTable
+                                headers={[
+                                    'Dealer / Partner',
+                                    'Sourced Device / Item',
+                                    'Store Status',
+                                    'Cost & Balance Owed',
+                                    { label: 'Settlement & Actions', className: 'text-right' },
+                                ]}
+                                isEmpty={filteredInwardItems.length === 0}
+                                emptyState={
+                                    <div className="py-12 text-center">
+                                        <ArrowDownLeft className="mx-auto text-slate-300 dark:text-slate-600 mb-3" size={44} />
+                                        <p className="text-slate-700 dark:text-slate-300 font-bold mb-1">No inward dealer items found</p>
+                                        <p className="text-xs text-slate-500 dark:text-slate-400 max-w-md mx-auto mb-4">
+                                            {inwardFilter === 'owed' 
+                                                ? 'Great! There are no sold inward items awaiting settlement. All dealer payouts are up to date.'
+                                                : 'Items sourced from dealers via the "Receive Item" intake will show up here.'}
+                                        </p>
+                                        <Button 
+                                            variant="success" 
+                                            size="sm" 
+                                            icon={Download} 
+                                            onClick={() => !isDealerIntakeLocked && setShowInwardModal(true)}
+                                            disabled={isDealerIntakeLocked}
                                         >
-                                            ×
-                                        </button>
-                                    )}
-                                </div>
-                            </div>
-                        </div>
-
-                        {filteredInwardItems.length === 0 ? (
-                            <div className="p-12 text-center border border-dashed border-slate-200 dark:border-slate-800 rounded-2xl bg-slate-50/50 dark:bg-slate-900/30">
-                                <ArrowDownLeft className="mx-auto text-slate-300 dark:text-slate-600 mb-3" size={48} />
-                                <p className="text-slate-700 dark:text-slate-300 font-bold mb-1">No inward dealer items found</p>
-                                <p className="text-xs text-slate-500 dark:text-slate-400 max-w-md mx-auto mb-4">
-                                    {inwardFilter === 'owed' 
-                                        ? 'Great! There are no sold inward items awaiting settlement. All dealer payouts are up to date.'
-                                        : 'Items sourced from dealers via the "Receive Item" intake will show up here.'}
-                                </p>
-                                <Button 
-                                    variant="success" 
-                                    size="sm" 
-                                    icon={Download} 
-                                    onClick={() => !isDealerIntakeLocked && setShowInwardModal(true)}
-                                    disabled={isDealerIntakeLocked}
-                                >
-                                    Receive Stock from Dealer
-                                </Button>
-                            </div>
-                        ) : (
-                            <>
-                            <div className="hidden md:block overflow-x-auto">
-                                <table className="w-full text-sm text-left">
-                                    <thead className="text-[11px] text-slate-400 uppercase bg-slate-50/80 dark:bg-slate-800/50 border-b border-slate-100 dark:border-slate-800">
-                                        <tr>
-                                            <th className="px-6 py-3.5 font-semibold">Dealer / Partner</th>
-                                            <th className="px-6 py-3.5 font-semibold">Sourced Device / Item</th>
-                                            <th className="px-6 py-3.5 font-semibold">Store Status</th>
-                                            <th className="px-6 py-3.5 font-semibold">Cost & Balance Owed</th>
-                                            <th className="px-6 py-3.5 font-semibold text-right">Settlement & Actions</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                                        {filteredInwardItems.map((item) => {
-                                            const isSerial = item.type === 'serialized';
-                                            const brand = isSerial ? item.device_imei?.product?.brand?.name : item.product?.brand?.name;
-                                            const model = isSerial ? item.device_imei?.product?.model_name : item.product?.model_name;
-                                            const imei = isSerial ? item.device_imei?.imei : null;
-                                            const sku = !isSerial ? item.product?.sku : null;
-
-                                            const isAwaitingPay = item.qtySold > 0 && item.remainingOwed > 0;
-
-                                            return (
-                                                <tr key={item.id} className="hover:bg-slate-50/70 dark:hover:bg-slate-800/40 transition-colors">
-                                                    {/* Dealer */}
-                                                    <td className="px-6 py-4">
-                                                        <Link 
-                                                            href={route('dealers.show', item.dealer_id)}
-                                                            className="font-bold text-slate-900 dark:text-white hover:text-indigo-600 transition-colors block"
-                                                        >
-                                                            {item.dealer?.name || 'Partner Dealer'}
-                                                        </Link>
-                                                        <div className="text-xs text-slate-500 mt-0.5">
-                                                            {item.dealer?.phone || 'No phone'}
-                                                        </div>
-                                                        <div className="text-[10px] text-slate-400 mt-1">
-                                                            Taken: {dayjs(item.issued_at).format('DD MMM YYYY')}
-                                                        </div>
-                                                    </td>
-
-                                                    {/* Item & Identity */}
-                                                    <td className="px-6 py-4">
-                                                        <div className="flex items-center gap-2.5">
-                                                            <div className={`p-2 rounded-xl shrink-0 ${
-                                                                isSerial 
-                                                                    ? 'bg-purple-100 text-purple-700 dark:bg-purple-950/60 dark:text-purple-300' 
-                                                                    : 'bg-blue-100 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300'
-                                                            }`}>
-                                                                {isSerial ? <Smartphone size={16} /> : <Layers size={16} />}
-                                                            </div>
-                                                            <div>
-                                                                <div className="font-bold text-slate-900 dark:text-white">
-                                                                    {brand} {model}
-                                                                </div>
-                                                                <div className="text-xs font-mono text-slate-500 dark:text-slate-400 mt-0.5">
-                                                                    {isSerial ? `IMEI: ${imei || 'N/A'}` : `SKU: ${sku || 'N/A'}`}
-                                                                </div>
-                                                                {item.device_imei?.condition && (
-                                                                    <span className="text-[10px] px-1.5 py-0.2 rounded font-semibold bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300 mt-1 inline-block">
-                                                                        {item.device_imei.condition}
-                                                                    </span>
-                                                                )}
-                                                            </div>
-                                                        </div>
-                                                    </td>
-
-                                                    {/* Store Inventory Status */}
-                                                    <td className="px-6 py-4 whitespace-nowrap">
-                                                        <div className="space-y-1.5">
-                                                            <div className="flex items-center gap-1.5">
-                                                                {item.availableQty > 0 ? (
-                                                                    <span className="inline-flex items-center whitespace-nowrap px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/60">
-                                                                        {item.availableQty} in store
-                                                                    </span>
-                                                                ) : (
-                                                                    <span className="inline-flex items-center whitespace-nowrap px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400 border border-slate-200/60 dark:border-slate-700/60">
-                                                                        0 in store
-                                                                    </span>
-                                                                )}
-                                                                {item.qtySold > 0 && (
-                                                                    <span className="inline-flex items-center whitespace-nowrap px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-indigo-50 text-indigo-700 dark:bg-indigo-950/60 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800/60">
-                                                                        {item.qtySold} sold
-                                                                    </span>
-                                                                )}
-                                                                {item.qtyReturned > 0 && (
-                                                                    <span className="inline-flex items-center whitespace-nowrap px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-blue-50 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300 border border-blue-200 dark:border-blue-800/60">
-                                                                        {item.qtyReturned} returned
-                                                                    </span>
-                                                                )}
-                                                            </div>
-                                                            <div className="text-[11px] text-slate-400 whitespace-nowrap">
-                                                                Total Batch: {item.qtyTotal} {item.qtyTotal === 1 ? 'unit' : 'units'}
-                                                            </div>
-                                                        </div>
-                                                    </td>
-
-                                                    {/* Cost & Balance Owed */}
-                                                    <td className="px-6 py-4">
-                                                        <div>
-                                                            <div className="text-xs text-slate-500">
-                                                                Unit Cost: <strong className="text-slate-900 dark:text-white">{formatCurrency(item.unitCost)}</strong>
-                                                            </div>
-                                                            {item.retail_price && (
-                                                                <div className="text-[10px] text-slate-400 mt-0.5">
-                                                                    Store Retail: {formatCurrency(item.retail_price)}
-                                                                </div>
-                                                            )}
-
-                                                            {/* Settlement Status Indicator */}
-                                                            <div className="mt-2 pt-1.5 border-t border-slate-100 dark:border-slate-800">
-                                                                {isAwaitingPay ? (
-                                                                    <div className="bg-rose-50 dark:bg-rose-950/50 border border-rose-200 dark:border-rose-900/60 rounded-lg p-1.5">
-                                                                        <div className="text-xs font-black text-rose-600 dark:text-rose-400">
-                                                                            Owe Dealer: {formatCurrency(item.remainingOwed)}
-                                                                        </div>
-                                                                        <div className="text-[10px] text-slate-500 mt-0.5">
-                                                                            for {item.qtySold} unit(s) sold {item.alreadyPaid > 0 ? `(${formatCurrency(item.alreadyPaid)} paid)` : ''}
-                                                                        </div>
-                                                                    </div>
-                                                                ) : item.isSettled ? (
-                                                                    <div className="text-xs font-bold text-emerald-600 flex items-center gap-1">
-                                                                        <CheckCircle size={14} /> Fully Settled ({formatCurrency(item.alreadyPaid)})
-                                                                    </div>
-                                                                ) : (
-                                                                    <div className="text-[11px] text-slate-400 italic">
-                                                                        Unsold (Owed when sold)
-                                                                    </div>
-                                                                )}
-                                                            </div>
-                                                        </div>
-                                                    </td>
-
-                                                    {/* Actions */}
-                                                    <td className="px-6 py-4 text-right whitespace-nowrap">
-                                                        <div className="flex items-center justify-end gap-1.5">
-                                                            {/* Primary Settle / Pay Button */}
-                                                            {isAwaitingPay && (
-                                                                <button
-                                                                    type="button"
-                                                                    onClick={() => openSettleModal(item)}
-                                                                    className="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold transition-all shadow-sm shadow-rose-500/20 inline-flex items-center gap-1 whitespace-nowrap"
-                                                                    title={`Pay ${item.dealer?.name} ${formatCurrency(item.remainingOwed)} for sold units`}
-                                                                >
-                                                                    <DollarSign size={14} /> Pay Dealer
-                                                                </button>
-                                                            )}
-
-                                                            {/* Voucher Button */}
-                                                            {item.alreadyPaid > 0 && (
-                                                                <a
-                                                                    href={`/dealers/items/${item.id}/voucher?mode=stream`}
-                                                                    target="_blank"
-                                                                    rel="noreferrer"
-                                                                    className="px-2.5 py-1.5 bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 rounded-lg text-xs font-bold inline-flex items-center gap-1 whitespace-nowrap transition-colors"
-                                                                    title="View / Print Consignment Payout Voucher PDF"
-                                                                >
-                                                                    <FileText size={13} /> Voucher
-                                                                </a>
-                                                            )}
-
-                                                            {/* Return Unsold Stock Back to Dealer */}
-                                                            {item.availableQty > 0 && (
-                                                                <button
-                                                                    type="button"
-                                                                    onClick={() => openReturnModal(item)}
-                                                                    className="px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 rounded-lg text-xs font-bold inline-flex items-center gap-1 whitespace-nowrap transition-colors"
-                                                                    title="Return unsold items back to dealer (removes from active shop stock)"
-                                                                >
-                                                                    <RotateCcw size={13} /> Return
-                                                                </button>
-                                                            )}
-
-                                                            {/* Void accidental record */}
-                                                            {item.qtySold === 0 && item.status === 'Pending' && (
-                                                                <button
-                                                                    type="button"
-                                                                    onClick={() => setVoidItem(item)}
-                                                                    className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"
-                                                                    title="Void Intake (Rollback Inventory)"
-                                                                >
-                                                                    <Trash2 size={15} />
-                                                                </button>
-                                                            )}
-
-                                                            {/* Manage Dealer link */}
-                                                            <Link
-                                                                href={route('dealers.show', item.dealer_id)}
-                                                                className="px-2.5 py-1.5 text-xs font-bold text-indigo-600 hover:text-indigo-800 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg hover:border-indigo-300 whitespace-nowrap transition-colors"
-                                                            >
-                                                                Manage
-                                                            </Link>
-                                                        </div>
-                                                    </td>
-                                                </tr>
-                                            );
-                                        })}
-                                    </tbody>
-                                </table>
-                            </div>
-
-                            {/* Mobile Card List for Inward Consignments */}
-                            <div className="md:hidden divide-y divide-slate-100 dark:divide-slate-800">
-                                {filteredInwardItems.map((item) => {
+                                            Receive Stock from Dealer
+                                        </Button>
+                                    </div>
+                                }
+                            >
+                                {paginatedInwardItems.map((item) => {
                                     const isSerial = item.type === 'serialized';
                                     const brand = isSerial ? item.device_imei?.product?.brand?.name : item.product?.brand?.name;
                                     const model = isSerial ? item.device_imei?.product?.model_name : item.product?.model_name;
                                     const imei = isSerial ? item.device_imei?.imei : null;
                                     const sku = !isSerial ? item.product?.sku : null;
+
                                     const isAwaitingPay = item.qtySold > 0 && item.remainingOwed > 0;
 
                                     return (
-                                        <div key={item.id} className="py-4 space-y-3">
-                                            <div className="flex items-start justify-between gap-2">
-                                                <div>
-                                                    <div className="font-bold text-slate-900 dark:text-white text-sm">{brand} {model}</div>
-                                                    <div className="text-xs text-slate-500 dark:text-slate-400">{item.dealer?.name || 'Partner Dealer'} • {isSerial ? `IMEI: ${imei || 'N/A'}` : `SKU: ${sku || 'N/A'}`}</div>
+                                        <tr key={item.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/40 transition-colors">
+                                            {/* Dealer */}
+                                            <td>
+                                                <div className="flex items-center gap-3">
+                                                    <div className="w-9 h-9 rounded-xl bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 font-bold text-xs flex items-center justify-center shrink-0">
+                                                        {(item.dealer?.name || 'D').substring(0, 2).toUpperCase()}
+                                                    </div>
+                                                    <div>
+                                                        <Link 
+                                                            href={route('dealers.show', item.dealer_id)}
+                                                            className="font-bold text-slate-900 dark:text-white hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors block"
+                                                        >
+                                                            {item.dealer?.name || 'Partner Dealer'}
+                                                        </Link>
+                                                        <div className="text-xs text-slate-500 dark:text-slate-400">
+                                                            {item.dealer?.phone || 'No phone'} • {dayjs(item.issued_at).format('DD MMM YYYY')}
+                                                        </div>
+                                                    </div>
                                                 </div>
-                                                {isAwaitingPay ? (
-                                                    <span className="px-2 py-0.5 rounded-md text-[11px] font-black bg-rose-50 dark:bg-rose-950/60 text-rose-600 dark:text-rose-400 border border-rose-200 dark:border-rose-800">
-                                                        Owe {formatCurrency(item.remainingOwed)}
-                                                    </span>
-                                                ) : item.isSettled ? (
-                                                    <span className="px-2 py-0.5 rounded-md text-[11px] font-bold bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
-                                                        Settled ✓
-                                                    </span>
-                                                ) : (
-                                                    <span className="px-2 py-0.5 rounded-md text-[11px] font-bold bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400">
-                                                        {item.availableQty} in store
-                                                    </span>
-                                                )}
-                                            </div>
-                                            <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400">
-                                                <span>Cost: <strong className="text-slate-800 dark:text-slate-200">{formatCurrency(item.unitCost)}</strong></span>
-                                                <span>{item.qtySold} sold / {item.qtyTotal} total</span>
-                                            </div>
-                                            <div className="flex items-center justify-end gap-2 pt-1">
-                                                {isAwaitingPay && (
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => openSettleModal(item)}
-                                                        className="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold inline-flex items-center gap-1"
+                                            </td>
+
+                                            {/* Item & Identity */}
+                                            <td>
+                                                <div className="flex items-center gap-2.5">
+                                                    <div className={`p-2 rounded-xl shrink-0 ${
+                                                        isSerial 
+                                                            ? 'bg-purple-100 text-purple-700 dark:bg-purple-950/60 dark:text-purple-300' 
+                                                            : 'bg-blue-100 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300'
+                                                    }`}>
+                                                        {isSerial ? <Smartphone size={15} /> : <Layers size={15} />}
+                                                    </div>
+                                                    <div>
+                                                        <div className="font-bold text-slate-900 dark:text-white">
+                                                            {brand} {model}
+                                                        </div>
+                                                        <div className="text-xs font-mono text-slate-500 dark:text-slate-400 mt-0.5">
+                                                            {isSerial ? `IMEI: ${imei || 'N/A'}` : `SKU: ${sku || 'N/A'}`}
+                                                            {item.device_imei?.condition && (
+                                                                <span className="ml-2 text-[10px] px-1.5 py-0.5 rounded font-sans font-semibold bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+                                                                    {item.device_imei.condition}
+                                                                </span>
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </td>
+
+                                            {/* Store Inventory Status */}
+                                            <td>
+                                                <div className="space-y-1">
+                                                    <div className="flex items-center gap-1.5">
+                                                        <Badge variant={item.availableQty > 0 ? 'success' : 'neutral'}>
+                                                            {item.availableQty} in store
+                                                        </Badge>
+                                                        {item.qtySold > 0 && (
+                                                            <Badge variant="primary">{item.qtySold} sold</Badge>
+                                                        )}
+                                                        {item.qtyReturned > 0 && (
+                                                            <Badge variant="info">{item.qtyReturned} returned</Badge>
+                                                        )}
+                                                    </div>
+                                                    <div className="text-[11px] text-slate-400">
+                                                        Total Batch: {item.qtyTotal} {item.qtyTotal === 1 ? 'unit' : 'units'}
+                                                    </div>
+                                                </div>
+                                            </td>
+
+                                            {/* Cost & Balance Owed */}
+                                            <td>
+                                                <div className="space-y-1">
+                                                    <div className="text-xs text-slate-500 dark:text-slate-400">
+                                                        Unit Cost: <strong className="text-slate-900 dark:text-white">{formatCurrency(item.unitCost)}</strong>
+                                                        {item.retail_price && (
+                                                            <span className="ml-2 text-[11px] text-slate-400">Retail: {formatCurrency(item.retail_price)}</span>
+                                                        )}
+                                                    </div>
+                                                    {isAwaitingPay ? (
+                                                        <Badge variant="danger">
+                                                            Owe: {formatCurrency(item.remainingOwed)}
+                                                        </Badge>
+                                                    ) : item.isSettled ? (
+                                                        <div className="text-xs font-bold text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
+                                                            <CheckCircle size={13} /> Fully Settled ({formatCurrency(item.alreadyPaid)})
+                                                        </div>
+                                                    ) : (
+                                                        <div className="text-[11px] text-slate-400 italic">
+                                                            Unsold (Owed when sold)
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            </td>
+
+                                            {/* Actions */}
+                                            <td className="text-right">
+                                                <div className="flex items-center justify-end gap-1.5">
+                                                    {isAwaitingPay && (
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => openSettleModal(item)}
+                                                            className="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-xs font-bold transition-all shadow-sm shadow-rose-500/20 inline-flex items-center gap-1 whitespace-nowrap"
+                                                            title={`Pay ${item.dealer?.name} ${formatCurrency(item.remainingOwed)} for sold units`}
+                                                        >
+                                                            <DollarSign size={14} /> Pay Dealer
+                                                        </button>
+                                                    )}
+
+                                                    {item.alreadyPaid > 0 && (
+                                                        <a
+                                                            href={`/dealers/items/${item.id}/voucher?mode=stream`}
+                                                            target="_blank"
+                                                            rel="noreferrer"
+                                                            className="px-2.5 py-1.5 bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 rounded-lg text-xs font-bold inline-flex items-center gap-1 whitespace-nowrap transition-colors"
+                                                            title="View / Print Consignment Payout Voucher PDF"
+                                                        >
+                                                            <FileText size={13} /> Voucher
+                                                        </a>
+                                                    )}
+
+                                                    {item.availableQty > 0 && (
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => openReturnModal(item)}
+                                                            className="px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 rounded-lg text-xs font-bold inline-flex items-center gap-1 whitespace-nowrap transition-colors"
+                                                            title="Return unsold items back to dealer (removes from active shop stock)"
+                                                        >
+                                                            <RotateCcw size={13} /> Return
+                                                        </button>
+                                                    )}
+
+                                                    {item.qtySold === 0 && item.status === 'Pending' && (
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => setVoidItem(item)}
+                                                            className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-900/30 rounded-lg transition-colors"
+                                                            title="Void Intake (Rollback Inventory)"
+                                                        >
+                                                            <Trash2 size={15} />
+                                                        </button>
+                                                    )}
+
+                                                    <Link
+                                                        href={route('dealers.show', item.dealer_id)}
+                                                        className="px-3 py-1.5 text-xs font-bold text-slate-700 dark:text-slate-200 hover:text-indigo-600 dark:hover:text-indigo-400 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg whitespace-nowrap transition-colors"
                                                     >
-                                                        <DollarSign size={13} /> Pay Dealer
-                                                    </button>
-                                                )}
-                                                {item.availableQty > 0 && (
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => openReturnModal(item)}
-                                                        className="px-2.5 py-1.5 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 rounded-lg text-xs font-bold"
-                                                    >
-                                                        Return
-                                                    </button>
-                                                )}
-                                                <Link
-                                                    href={route('dealers.show', item.dealer_id)}
-                                                    className="px-2.5 py-1.5 text-xs font-bold text-indigo-600 dark:text-indigo-400 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg"
-                                                >
-                                                    Manage
-                                                </Link>
-                                            </div>
-                                        </div>
+                                                        Manage
+                                                    </Link>
+                                                </div>
+                                            </td>
+                                        </tr>
                                     );
                                 })}
-                            </div>
-                            </>
-                        )}
+                            </DataTable>
+                        </div>
+
+                        {/* Mobile Card List for Inward Consignments */}
+                        <Card noPadding className="md:hidden overflow-hidden">
+                            {filteredInwardItems.length === 0 ? (
+                                <div className="p-10 text-center text-sm text-slate-400">No inward dealer items found.</div>
+                            ) : (
+                                <div className="divide-y divide-slate-100 dark:divide-slate-800">
+                                    {paginatedInwardItems.map((item) => {
+                                        const isSerial = item.type === 'serialized';
+                                        const brand = isSerial ? item.device_imei?.product?.brand?.name : item.product?.brand?.name;
+                                        const model = isSerial ? item.device_imei?.product?.model_name : item.product?.model_name;
+                                        const imei = isSerial ? item.device_imei?.imei : null;
+                                        const sku = !isSerial ? item.product?.sku : null;
+                                        const isAwaitingPay = item.qtySold > 0 && item.remainingOwed > 0;
+
+                                        return (
+                                            <div key={item.id} className="p-4 space-y-3 bg-white dark:bg-slate-900">
+                                                <div className="flex items-start justify-between gap-2">
+                                                    <div>
+                                                        <div className="font-bold text-slate-900 dark:text-white text-sm">{brand} {model}</div>
+                                                        <div className="text-xs text-slate-500 dark:text-slate-400">{item.dealer?.name || 'Partner Dealer'} • {isSerial ? `IMEI: ${imei || 'N/A'}` : `SKU: ${sku || 'N/A'}`}</div>
+                                                    </div>
+                                                    {isAwaitingPay ? (
+                                                        <Badge variant="danger">Owe {formatCurrency(item.remainingOwed)}</Badge>
+                                                    ) : item.isSettled ? (
+                                                        <Badge variant="success">Settled ✓</Badge>
+                                                    ) : (
+                                                        <Badge variant="neutral">{item.availableQty} in store</Badge>
+                                                    )}
+                                                </div>
+                                                <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400">
+                                                    <span>Cost: <strong className="text-slate-800 dark:text-slate-200">{formatCurrency(item.unitCost)}</strong></span>
+                                                    <span>{item.qtySold} sold / {item.qtyTotal} total</span>
+                                                </div>
+                                                <div className="flex items-center justify-end gap-2 pt-1">
+                                                    {isAwaitingPay && (
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => openSettleModal(item)}
+                                                            className="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold inline-flex items-center gap-1"
+                                                        >
+                                                            <DollarSign size={13} /> Pay Dealer
+                                                        </button>
+                                                    )}
+                                                    {item.availableQty > 0 && (
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => openReturnModal(item)}
+                                                            className="px-2.5 py-1.5 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 rounded-lg text-xs font-bold"
+                                                        >
+                                                            Return
+                                                        </button>
+                                                    )}
+                                                    <Link
+                                                        href={route('dealers.show', item.dealer_id)}
+                                                        className="px-2.5 py-1.5 text-xs font-bold text-indigo-600 dark:text-indigo-400 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg"
+                                                    >
+                                                        Manage
+                                                    </Link>
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            )}
+                        </Card>
+
+                        {/* Inward Pagination */}
+                        <Pagination
+                            total={filteredInwardItems.length}
+                            currentPage={inwardPage}
+                            perPage={inwardPerPage}
+                            onPageChange={setInwardPage}
+                            onPerPageChange={setInwardPerPage}
+                            className="mt-2"
+                        />
                     </div>
                 )}
 
                 {/* TAB 2: OUTWARD ISSUED ITEMS (Given to Dealer) */}
                 {activeDirectionTab === 'outward' && (
-                    <div>
-                        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 mb-6">
-                            <div>
-                                <h3 className="text-lg font-bold text-slate-900 dark:text-white">Items Given to Dealers (Outward Consignments)</h3>
-                                <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                                    Active consignments held across {groupedByDealer.length} partner shops ({filteredPendingItems.length} of {pendingItems.length} items shown)
-                                </p>
-                            </div>
-
-                            {pendingItems.length > 0 && (
-                                <div className="flex flex-wrap items-center gap-2">
-                                    <button
-                                        type="button"
-                                        onClick={() => setOutwardOverdueOnly(!outwardOverdueOnly)}
-                                        className={`px-3 py-1.5 rounded-xl text-xs font-bold border transition-all flex items-center gap-1.5 ${
-                                            outwardOverdueOnly
-                                                ? 'bg-rose-600 text-white border-rose-600 shadow-sm'
-                                                : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-200 dark:hover:bg-slate-700'
-                                        }`}
-                                    >
-                                        <AlertCircle size={13} /> Overdue Only ({metrics.overdue_items || 0})
-                                    </button>
-
-                                    <div className="relative min-w-[190px]">
-                                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={14} />
+                    <div className="space-y-6">
+                        {pendingItems.length > 0 && (
+                            <Card>
+                                <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+                                    <div className="relative flex-1">
+                                        <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" size={18} />
                                         <input
                                             type="text"
-                                            placeholder="Search Dealer, IMEI, Model..."
-                                            className="w-full pl-8 pr-3 py-1.5 text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white focus:border-amber-500 focus:ring-1 focus:ring-amber-500"
+                                            placeholder="Search Dealer, IMEI, SKU, or Model..."
+                                            className="saas-input !pl-10 w-full"
                                             value={outwardSearch}
                                             onChange={(e) => setOutwardSearch(e.target.value)}
                                         />
@@ -1028,43 +1014,57 @@ export default function Dashboard({
                                             <button
                                                 type="button"
                                                 onClick={() => setOutwardSearch('')}
-                                                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 text-xs"
+                                                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
                                             >
-                                                ×
+                                                <X size={15} />
                                             </button>
                                         )}
                                     </div>
 
-                                    <div className="flex items-center bg-slate-100 dark:bg-slate-800 p-1 rounded-xl border border-slate-200/80 dark:border-slate-700">
+                                    <div className="flex flex-wrap items-center gap-2">
                                         <button
                                             type="button"
-                                            onClick={() => setViewMode('grouped')}
-                                            className={`px-3 py-1 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all ${
-                                                viewMode === 'grouped'
-                                                    ? 'bg-white dark:bg-slate-900 text-indigo-600 dark:text-indigo-400 shadow-sm'
-                                                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                                            onClick={() => setOutwardOverdueOnly(!outwardOverdueOnly)}
+                                            className={`px-3 py-2 rounded-xl text-xs font-bold border transition-all flex items-center gap-1.5 whitespace-nowrap ${
+                                                outwardOverdueOnly
+                                                    ? 'bg-rose-600 text-white border-rose-600 shadow-sm'
+                                                    : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-200 dark:hover:bg-slate-700'
                                             }`}
                                         >
-                                            <Users size={14} /> Grouped
+                                            <AlertCircle size={13} /> Overdue Only ({metrics.overdue_items || 0})
                                         </button>
-                                        <button
-                                            type="button"
-                                            onClick={() => setViewMode('flat')}
-                                            className={`px-3 py-1 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all ${
-                                                viewMode === 'flat'
-                                                    ? 'bg-white dark:bg-slate-900 text-indigo-600 dark:text-indigo-400 shadow-sm'
-                                                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
-                                            }`}
-                                        >
-                                            <ListFilter size={14} /> Flat List
-                                        </button>
+
+                                        <div className="flex items-center bg-slate-100 dark:bg-slate-800 p-1 rounded-xl border border-slate-200/80 dark:border-slate-700">
+                                            <button
+                                                type="button"
+                                                onClick={() => setViewMode('grouped')}
+                                                className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all whitespace-nowrap ${
+                                                    viewMode === 'grouped'
+                                                        ? 'bg-white dark:bg-slate-900 text-indigo-600 dark:text-indigo-400 shadow-sm'
+                                                        : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                                                }`}
+                                            >
+                                                <Users size={14} /> Grouped
+                                            </button>
+                                            <button
+                                                type="button"
+                                                onClick={() => setViewMode('flat')}
+                                                className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all whitespace-nowrap ${
+                                                    viewMode === 'flat'
+                                                        ? 'bg-white dark:bg-slate-900 text-indigo-600 dark:text-indigo-400 shadow-sm'
+                                                        : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                                                }`}
+                                            >
+                                                <ListFilter size={14} /> Flat List
+                                            </button>
+                                        </div>
                                     </div>
                                 </div>
-                            )}
-                        </div>
+                            </Card>
+                        )}
                         
                         {filteredPendingItems.length === 0 ? (
-                            <div className="p-12 text-center border border-dashed border-slate-200 dark:border-slate-800 rounded-2xl bg-slate-50/50 dark:bg-slate-900/30">
+                            <Card className="text-center py-12">
                                 <PackageOpen className="mx-auto text-slate-300 dark:text-slate-600 mb-3" size={48} />
                                 <p className="text-slate-700 dark:text-slate-300 font-bold mb-1">No items currently out with dealers</p>
                                 <p className="text-xs text-slate-500 dark:text-slate-400 max-w-md mx-auto mb-4">
@@ -1073,22 +1073,22 @@ export default function Dashboard({
                                 <Button variant="primary" size="sm" icon={Plus} onClick={() => setShowIssueModal(true)}>
                                     Issue Stock to Dealer
                                 </Button>
-                            </div>
+                            </Card>
                         ) : viewMode === 'grouped' ? (
                             /* Grouped by Dealer Accordion View */
                             <div className="space-y-4">
-                                {groupedByDealer.map((group) => {
+                                {paginatedGroupedDealers.map((group) => {
                                     const isCollapsed = !!collapsedDealers[group.dealer?.id];
                                     return (
                                         <div
                                             key={group.dealer?.id || Math.random()}
-                                            className="border border-slate-200/80 dark:border-slate-800 rounded-2xl overflow-hidden bg-white dark:bg-slate-900/60 shadow-sm transition-all"
+                                            className="saas-table-container transition-all"
                                         >
                                             {/* Dealer Group Summary Header */}
                                             <div className="p-4 bg-slate-50/70 dark:bg-slate-800/50 flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 dark:border-slate-800/80">
                                                 <div className="flex items-center gap-3">
                                                     <div className="w-10 h-10 rounded-xl bg-amber-100 dark:bg-amber-950/80 text-amber-700 dark:text-amber-400 flex items-center justify-center font-black text-sm shrink-0">
-                                                        {group.dealer?.name ? group.dealer.name.charAt(0).toUpperCase() : 'D'}
+                                                        {group.dealer?.name ? group.dealer.name.substring(0, 2).toUpperCase() : 'D'}
                                                     </div>
                                                     <div>
                                                         <div className="flex items-center gap-2">
@@ -1098,9 +1098,9 @@ export default function Dashboard({
                                                             >
                                                                 {group.dealer?.name}
                                                             </Link>
-                                                            <span className="text-xs px-2 py-0.5 rounded-full font-bold bg-amber-50 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 border border-amber-200/60 dark:border-amber-800/60">
+                                                            <Badge variant="warning">
                                                                 {group.items.length} {group.items.length === 1 ? 'item' : 'items'} ({group.totalUnits} {group.totalUnits === 1 ? 'unit' : 'units'})
-                                                            </span>
+                                                            </Badge>
                                                         </div>
                                                         <div className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
                                                             {group.dealer?.phone || 'No phone'} {group.dealer?.address ? `• ${group.dealer.address}` : ''}
@@ -1119,7 +1119,7 @@ export default function Dashboard({
                                                     <div className="flex items-center gap-1.5 pl-2 border-l border-slate-200 dark:border-slate-700">
                                                         <Link
                                                             href={route('dealers.show', group.dealer?.id)}
-                                                            className="text-xs font-bold text-indigo-600 dark:text-indigo-400 hover:text-indigo-800 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:border-indigo-300 px-3 py-1.5 rounded-xl transition-all shadow-sm"
+                                                            className="text-xs font-bold text-indigo-600 dark:text-indigo-400 hover:text-indigo-800 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:border-indigo-300 px-3 py-1.5 rounded-xl transition-all shadow-sm whitespace-nowrap"
                                                         >
                                                             Manage Dealer
                                                         </Link>
@@ -1138,20 +1138,20 @@ export default function Dashboard({
                                             {/* Items List Inside Accordion */}
                                             {!isCollapsed && (
                                                 <div className="overflow-x-auto">
-                                                    <table className="w-full text-sm text-left">
-                                                        <thead className="text-[11px] text-slate-400 uppercase bg-slate-50/40 dark:bg-slate-800/30 border-b border-slate-100 dark:border-slate-800">
+                                                    <table className="saas-table w-full whitespace-nowrap">
+                                                        <thead>
                                                             <tr>
-                                                                <th className="px-6 py-3 font-semibold">Item & Identity</th>
-                                                                <th className="px-6 py-3 font-semibold">Taken Date</th>
-                                                                <th className="px-6 py-3 font-semibold">Due Status</th>
-                                                                <th className="px-6 py-3 font-semibold">Agreed Price</th>
-                                                                <th className="px-6 py-3 font-semibold text-right">Actions</th>
+                                                                <th>Item & Identity</th>
+                                                                <th>Taken Date</th>
+                                                                <th>Due Status</th>
+                                                                <th>Agreed Price</th>
+                                                                <th className="text-right">Actions</th>
                                                             </tr>
                                                         </thead>
-                                                        <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                                                        <tbody>
                                                             {group.items.map((item) => (
-                                                                <tr key={item.id} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/40 transition-colors">
-                                                                    <td className="px-6 py-3.5">
+                                                                <tr key={item.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/40 transition-colors">
+                                                                    <td>
                                                                         <div className="flex items-center gap-2.5">
                                                                             <div className={`p-1.5 rounded-lg ${item.type === 'serialized' ? 'bg-amber-100 text-amber-700 dark:bg-amber-950/60 dark:text-amber-400' : 'bg-blue-100 text-blue-700 dark:bg-blue-950/60 dark:text-blue-400'}`}>
                                                                                 {item.type === 'serialized' ? <Smartphone size={14} /> : <Layers size={14} />}
@@ -1160,26 +1160,26 @@ export default function Dashboard({
                                                                                 <div className="font-bold text-slate-900 dark:text-white">
                                                                                     {item.type === 'serialized' ? `${item.device_imei?.product?.brand?.name || ''} ${item.device_imei?.product?.model_name}` : `${item.product?.brand?.name || ''} ${item.product?.model_name}`}
                                                                                 </div>
-                                                                                <div className="text-xs text-slate-500 dark:text-slate-400 font-medium">
+                                                                                <div className="text-xs text-slate-500 dark:text-slate-400 font-mono">
                                                                                     {item.type === 'serialized' ? `IMEI: ${item.device_imei?.imei}` : `SKU: ${item.product?.sku || 'N/A'} • Qty Out: ${item.quantity - item.quantity_sold - item.quantity_returned}`}
                                                                                 </div>
                                                                             </div>
                                                                         </div>
                                                                     </td>
-                                                                    <td className="px-6 py-3.5 text-slate-600 dark:text-slate-300 whitespace-nowrap text-xs">
+                                                                    <td className="text-slate-600 dark:text-slate-300 text-xs">
                                                                         {dayjs(item.issued_at).format('DD MMM YYYY')}
                                                                     </td>
-                                                                    <td className="px-6 py-3.5 text-slate-600 whitespace-nowrap text-xs">
+                                                                    <td className="text-xs">
                                                                         <DueDateBadge date={item.expected_return_date} />
                                                                     </td>
-                                                                    <td className="px-6 py-3.5 font-bold text-slate-900 dark:text-white whitespace-nowrap">
+                                                                    <td className="font-bold text-slate-900 dark:text-white">
                                                                         {formatCurrency(item.dealer_price)}
                                                                     </td>
-                                                                    <td className="px-6 py-3.5 text-right">
+                                                                    <td className="text-right">
                                                                         <button
                                                                             type="button"
                                                                             onClick={() => setVoidItem(item)}
-                                                                            className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/60 rounded-lg transition-colors inline-flex items-center gap-1 text-xs font-semibold"
+                                                                            className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/60 rounded-lg transition-colors inline-flex items-center gap-1 text-xs font-semibold"
                                                                             title="Void / Delete Transaction (Rollback Stock)"
                                                                         >
                                                                             <Trash2 size={15} />
@@ -1198,70 +1198,77 @@ export default function Dashboard({
                             </div>
                         ) : (
                             /* Flat Itemized Table */
-                            <div className="overflow-x-auto">
-                                <table className="w-full text-sm text-left">
-                                    <thead className="text-xs text-slate-500 dark:text-slate-400 uppercase bg-slate-50/50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-800">
-                                        <tr>
-                                            <th className="px-6 py-4 font-semibold">Item & IMEI</th>
-                                            <th className="px-6 py-4 font-semibold">Dealer</th>
-                                            <th className="px-6 py-4 font-semibold">Taken</th>
-                                            <th className="px-6 py-4 font-semibold">Due</th>
-                                            <th className="px-6 py-4 font-semibold">Partner Price</th>
-                                            <th className="px-6 py-4 font-semibold text-right">Action</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                                        {filteredPendingItems.map((item) => (
-                                            <tr key={item.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors">
-                                                <td className="px-6 py-4">
-                                                    <div className="font-semibold text-slate-900 dark:text-white">
-                                                        {item.type === 'serialized' ? `${item.device_imei?.product?.brand?.name || ''} ${item.device_imei?.product?.model_name}` : `${item.product?.brand?.name || ''} ${item.product?.model_name}`}
-                                                    </div>
-                                                    <div className="text-xs text-slate-500 dark:text-slate-400">
-                                                        {item.type === 'serialized' ? `IMEI: ${item.device_imei?.imei}` : `SKU: ${item.product?.sku || 'N/A'} • Qty: ${item.quantity - item.quantity_sold - item.quantity_returned}`}
-                                                    </div>
-                                                </td>
-                                                <td className="px-6 py-4">
-                                                    <Link href={route('dealers.show', item.dealer.id)} className="font-medium text-indigo-600 dark:text-indigo-400 hover:underline">
-                                                        {item.dealer.name}
-                                                    </Link>
-                                                </td>
-                                                <td className="px-6 py-4 text-slate-600 dark:text-slate-300 whitespace-nowrap">
-                                                    {dayjs(item.issued_at).format('DD MMM YYYY')}
-                                                </td>
-                                                <td className="px-6 py-4 text-slate-600 dark:text-slate-300 whitespace-nowrap">
-                                                    <DueDateBadge date={item.expected_return_date} />
-                                                </td>
-                                                <td className="px-6 py-4 font-bold text-slate-900 dark:text-white whitespace-nowrap">
-                                                    {formatCurrency(item.dealer_price)}
-                                                </td>
-                                                <td className="px-6 py-4 text-right">
-                                                    <div className="flex items-center justify-end gap-2">
-                                                        <Link
-                                                            href={route('dealers.show', item.dealer.id)}
-                                                            className="text-indigo-600 hover:text-indigo-800 font-medium text-sm bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950/60 dark:hover:bg-indigo-900/80 px-3 py-1.5 rounded-lg transition-colors"
-                                                        >
-                                                            Manage
-                                                        </Link>
-                                                        <button
-                                                            type="button"
-                                                            onClick={() => setVoidItem(item)}
-                                                            className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/60 rounded-lg transition-colors"
-                                                            title="Void / Delete Transaction (Rollback Stock)"
-                                                        >
-                                                            <Trash2 size={16} />
-                                                        </button>
-                                                    </div>
-                                                </td>
-                                            </tr>
-                                        ))}
-                                    </tbody>
-                                </table>
-                            </div>
+                            <DataTable
+                                headers={[
+                                    'Item & IMEI',
+                                    'Dealer',
+                                    'Taken',
+                                    'Due',
+                                    'Partner Price',
+                                    { label: 'Action', className: 'text-right' },
+                                ]}
+                            >
+                                {paginatedOutwardItems.map((item) => (
+                                    <tr key={item.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/40 transition-colors">
+                                        <td>
+                                            <div className="font-bold text-slate-900 dark:text-white">
+                                                {item.type === 'serialized' ? `${item.device_imei?.product?.brand?.name || ''} ${item.device_imei?.product?.model_name}` : `${item.product?.brand?.name || ''} ${item.product?.model_name}`}
+                                            </div>
+                                            <div className="text-xs font-mono text-slate-500 dark:text-slate-400">
+                                                {item.type === 'serialized' ? `IMEI: ${item.device_imei?.imei}` : `SKU: ${item.product?.sku || 'N/A'} • Qty: ${item.quantity - item.quantity_sold - item.quantity_returned}`}
+                                            </div>
+                                        </td>
+                                        <td>
+                                            <Link href={route('dealers.show', item.dealer.id)} className="font-bold text-indigo-600 dark:text-indigo-400 hover:underline">
+                                                {item.dealer.name}
+                                            </Link>
+                                        </td>
+                                        <td className="text-slate-600 dark:text-slate-300 text-xs">
+                                            {dayjs(item.issued_at).format('DD MMM YYYY')}
+                                        </td>
+                                        <td>
+                                            <DueDateBadge date={item.expected_return_date} />
+                                        </td>
+                                        <td className="font-bold text-slate-900 dark:text-white">
+                                            {formatCurrency(item.dealer_price)}
+                                        </td>
+                                        <td className="text-right">
+                                            <div className="flex items-center justify-end gap-1.5">
+                                                <Link
+                                                    href={route('dealers.show', item.dealer.id)}
+                                                    className="px-3 py-1.5 text-xs font-bold text-slate-700 dark:text-slate-200 hover:text-indigo-600 dark:hover:text-indigo-400 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg whitespace-nowrap transition-colors"
+                                                >
+                                                    Manage
+                                                </Link>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setVoidItem(item)}
+                                                    className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/60 rounded-lg transition-colors"
+                                                    title="Void / Delete Transaction (Rollback Stock)"
+                                                >
+                                                    <Trash2 size={16} />
+                                                </button>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                ))}
+                            </DataTable>
+                        )}
+
+                        {/* Outward Pagination */}
+                        {filteredPendingItems.length > 0 && (
+                            <Pagination
+                                total={viewMode === 'grouped' ? groupedByDealer.length : filteredPendingItems.length}
+                                currentPage={outwardPage}
+                                perPage={outwardPerPage}
+                                onPageChange={setOutwardPage}
+                                onPerPageChange={setOutwardPerPage}
+                                className="mt-2"
+                            />
                         )}
                     </div>
                 )}
-            </Card>
+            </div>
 
             {/* Settle / Payout Modal (Direct settlement on Page 1) */}
             <Modal show={settleItem !== null} onClose={closeSettleModal} maxWidth="md">

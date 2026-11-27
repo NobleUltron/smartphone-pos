@@ -154,9 +154,10 @@ class AccountController extends Controller
             ->orderBy('category')
             ->pluck('category');
 
+        $perPage = max(10, min(100, (int) $request->input('per_page', 15)));
         $transactions = $query->orderBy('transaction_date', 'desc')
             ->orderBy('id', 'desc')
-            ->paginate(15)
+            ->paginate($perPage)
             ->withQueryString();
 
         return Inertia::render('Accounts/Index', [
@@ -229,9 +230,10 @@ class AccountController extends Controller
             $query->whereDate('transaction_date', '<=', $request->date_to);
         }
 
+        $perPage = max(10, min(100, (int) $request->input('per_page', 20)));
         $transactions = $query->orderBy('transaction_date', 'desc')
             ->orderBy('id', 'desc')
-            ->paginate(20)
+            ->paginate($perPage)
             ->withQueryString();
 
         $allAccounts = PaymentAccount::where('id', '!=', $account->id)->where('is_active', true)->get();

@@ -46,6 +46,7 @@
    DARK MODE TOKEN OVERRIDES
    ============================================================ */
 .dark {
+    color-scheme: dark;
     --surface-light: #1E293B;
     --surface-white: #0F172A;
     --text-primary: #F1F5F9;
@@ -195,12 +196,14 @@ h1, h2, h3, h4, h5, h6 {
     font-weight: 600;
     text-transform: uppercase;
     letter-spacing: 0.5px;
-    padding: 16px 24px;
+    padding: 14px 18px;
     text-align: left;
     border-bottom: 1px solid var(--border-color);
 }
+.saas-table th.text-right { text-align: right; }
+.saas-table th.text-center { text-align: center; }
 .saas-table td {
-    padding: 16px 24px;
+    padding: 14px 18px;
     border-bottom: 1px solid var(--border-subtle);
     color: var(--text-primary);
     font-size: 14px;
@@ -302,6 +305,95 @@ h1, h2, h3, h4, h5, h6 {
 
 /* Legacy Overrides */
 a { text-decoration: none; }
+
+/* ============================================================
+   SLEEK CUSTOM SCROLLBARS (Light & Dark Mode)
+   ============================================================ */
+::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+
+::-webkit-scrollbar-button {
+    display: none;
+    width: 0;
+    height: 0;
+}
+
+::-webkit-scrollbar-track {
+    background: #F1F5F9;
+}
+
+::-webkit-scrollbar-thumb {
+    background-color: #CBD5E1;
+    border-radius: 9999px;
+    border: 2px solid #F1F5F9;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background-color: #94A3B8;
+}
+
+::-webkit-scrollbar-corner {
+    background: transparent;
+}
+
+/* Dark mode scrollbars */
+.dark ::-webkit-scrollbar-track,
+.dark::-webkit-scrollbar-track {
+    background: #0F172A;
+}
+
+.dark ::-webkit-scrollbar-thumb,
+.dark::-webkit-scrollbar-thumb {
+    background-color: #334155;
+    border: 2px solid #0F172A;
+}
+
+.dark ::-webkit-scrollbar-thumb:hover,
+.dark::-webkit-scrollbar-thumb:hover {
+    background-color: #475569;
+}
+
+/* Extra-slim horizontal sliders inside tables & overflow containers */
+.saas-table-container ::-webkit-scrollbar,
+.overflow-x-auto::-webkit-scrollbar {
+    height: 6px;
+    width: 6px;
+}
+
+.saas-table-container ::-webkit-scrollbar-track,
+.overflow-x-auto::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.saas-table-container ::-webkit-scrollbar-thumb,
+.overflow-x-auto::-webkit-scrollbar-thumb {
+    border: none;
+    background-color: #CBD5E1;
+}
+
+.dark .saas-table-container ::-webkit-scrollbar-thumb,
+.dark .overflow-x-auto::-webkit-scrollbar-thumb {
+    background-color: #334155;
+}
+
+.dark .saas-table-container ::-webkit-scrollbar-thumb:hover,
+.dark .overflow-x-auto::-webkit-scrollbar-thumb:hover {
+    background-color: #475569;
+}
+
+/* Firefox fallback (applied only where WebKit pseudo-elements aren't supported) */
+@supports not selector(::-webkit-scrollbar) {
+    * {
+        scrollbar-width: thin;
+        scrollbar-color: #CBD5E1 #F1F5F9;
+    }
+    .dark,
+    .dark * {
+        scrollbar-color: #334155 #0F172A;
+    }
+}
 
 /* Utilities */
 @layer utilities {

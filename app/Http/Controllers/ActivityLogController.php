@@ -49,7 +49,8 @@ class ActivityLogController extends Controller
             $query->whereDate('created_at', '<=', $request->date_to);
         }
 
-        $logs = $query->paginate(25)->withQueryString();
+        $perPage = max(10, min(100, (int) $request->input('per_page', 25)));
+        $logs = $query->paginate($perPage)->withQueryString();
         $users = User::select('id', 'name', 'role')->orderBy('name')->get();
         $modules = ActivityLog::distinct()->pluck('module')->filter()->sort()->values();
 

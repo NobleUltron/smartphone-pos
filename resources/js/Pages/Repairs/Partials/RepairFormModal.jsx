@@ -105,23 +105,23 @@ export default function RepairFormModal({ isOpen, onClose, products, customers =
             <div className="flex flex-col max-h-[90vh] bg-white dark:bg-slate-900 rounded-2xl overflow-hidden shadow-2xl border border-slate-200 dark:border-slate-800">
                 
                 {/* Fixed Header */}
-                <div className="px-6 py-4 bg-slate-900 text-white flex items-center justify-between border-b border-slate-800 shrink-0">
+                <div className="px-6 py-4 bg-white dark:bg-slate-900 flex items-center justify-between border-b border-slate-200 dark:border-slate-800 shrink-0">
                     <div className="flex items-center gap-3">
-                        <div className="w-11 h-11 rounded-xl bg-gradient-to-tr from-rose-500 to-indigo-500 flex items-center justify-center text-white shadow-md shadow-rose-500/20">
+                        <div className="w-11 h-11 rounded-xl bg-gradient-to-tr from-rose-500 to-indigo-500 flex items-center justify-center text-white shadow-md shadow-rose-500/20 shrink-0">
                             <Wrench size={22} />
                         </div>
                         <div>
                             <div className="flex items-center gap-2">
-                                <h2 className="text-xl font-bold text-white tracking-tight">New Repair Ticket</h2>
-                                <span className="text-xs font-bold px-2.5 py-0.5 rounded-full bg-rose-500/20 text-rose-300 border border-rose-500/30">INTAKE</span>
+                                <h2 className="text-lg font-bold text-slate-900 dark:text-white tracking-tight">New Repair Ticket</h2>
+                                <span className="text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-rose-50 dark:bg-rose-500/15 text-rose-600 dark:text-rose-300 border border-rose-200 dark:border-rose-500/30">INTAKE</span>
                             </div>
-                            <p className="text-xs text-slate-400 mt-0.5">Register customer device intake, assign repair parts, and set cost estimate.</p>
+                            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Register customer device intake, assign repair parts, and set cost estimate.</p>
                         </div>
                     </div>
                     <button 
                         type="button" 
                         onClick={onClose}
-                        className="w-9 h-9 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white flex items-center justify-center transition-colors"
+                        className="w-9 h-9 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-white flex items-center justify-center transition-colors"
                     >
                         <X size={20} />
                     </button>
@@ -140,7 +140,7 @@ export default function RepairFormModal({ isOpen, onClose, products, customers =
                                 <div className="space-y-1.5">
                                     <label className="text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider">Select Customer (Optional)</label>
                                     <select 
-                                        className="w-full text-sm py-2.5 font-medium bg-white dark:bg-slate-800 text-slate-900 dark:text-white border-slate-300 dark:border-slate-700 focus:border-rose-500 focus:ring-rose-500 rounded-lg shadow-sm"
+                                        className="w-full text-sm py-2.5 px-3.5 font-medium bg-white dark:bg-slate-800 text-slate-900 dark:text-white border border-slate-200 dark:border-slate-700 focus:border-indigo-500 focus:ring-indigo-500 rounded-xl shadow-sm transition-all"
                                         value={data.customer_id}
                                         onChange={(e) => {
                                             const id = e.target.value;
@@ -165,12 +165,12 @@ export default function RepairFormModal({ isOpen, onClose, products, customers =
                                 <div className="space-y-1.5">
                                     <label className="text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider">Customer Name *</label>
                                     <div className="relative">
-                                        <User className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500" size={17} />
+                                        <User className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500 pointer-events-none" size={16} />
                                         <TextInput
                                             type="text"
                                             value={data.customer_name}
                                             onChange={(e) => setData('customer_name', e.target.value)}
-                                            className={`w-full pl-10 text-sm py-2.5 font-medium ${data.customer_id ? 'bg-slate-50 dark:bg-slate-800/50 text-slate-500 dark:text-slate-400' : 'bg-white dark:bg-slate-800 text-slate-900 dark:text-white border-slate-300 dark:border-slate-700'}`}
+                                            className={`w-full pl-10 pr-3.5 py-2.5 text-sm font-medium ${data.customer_id ? '!bg-slate-50 dark:!bg-slate-800/50 text-slate-500 dark:text-slate-400 cursor-not-allowed' : ''}`}
                                             placeholder="e.g. John Doe"
                                             required
                                             disabled={!!data.customer_id}
@@ -182,12 +182,12 @@ export default function RepairFormModal({ isOpen, onClose, products, customers =
                                 <div className="space-y-1.5">
                                     <label className="text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider">Phone Number *</label>
                                     <div className="relative">
-                                        <Phone className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500" size={17} />
+                                        <Phone className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500 pointer-events-none" size={16} />
                                         <TextInput
                                             type="text"
                                             value={data.customer_phone}
                                             onChange={(e) => setData('customer_phone', e.target.value)}
-                                            className={`w-full pl-10 text-sm py-2.5 font-medium ${data.customer_id ? 'bg-slate-50 dark:bg-slate-800/50 text-slate-500 dark:text-slate-400' : 'bg-white dark:bg-slate-800 text-slate-900 dark:text-white border-slate-300 dark:border-slate-700'}`}
+                                            className={`w-full pl-10 pr-3.5 py-2.5 text-sm font-medium ${data.customer_id ? '!bg-slate-50 dark:!bg-slate-800/50 text-slate-500 dark:text-slate-400 cursor-not-allowed' : ''}`}
                                             placeholder="e.g. 0770000000"
                                             required
                                             disabled={!!data.customer_id}
@@ -205,12 +205,12 @@ export default function RepairFormModal({ isOpen, onClose, products, customers =
                                 <div className="space-y-1.5">
                                     <label className="text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider">Device Model *</label>
                                     <div className="relative">
-                                        <Smartphone className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500" size={17} />
+                                        <Smartphone className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500 pointer-events-none" size={16} />
                                         <TextInput
                                             type="text"
                                             value={data.device_model}
                                             onChange={(e) => setData('device_model', e.target.value)}
-                                            className="w-full pl-10 text-sm py-2.5 font-medium bg-white dark:bg-slate-800 text-slate-900 dark:text-white border-slate-300 dark:border-slate-700"
+                                            className="w-full pl-10 pr-3.5 py-2.5 text-sm font-medium"
                                             placeholder="e.g. iPhone 13 Pro"
                                             required
                                         />
@@ -222,12 +222,12 @@ export default function RepairFormModal({ isOpen, onClose, products, customers =
                                     <div className="space-y-1.5">
                                         <label className="text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider">IMEI / Serial</label>
                                         <div className="relative">
-                                            <Hash className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500" size={15} />
+                                            <Hash className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500 pointer-events-none" size={15} />
                                             <TextInput
                                                 type="text"
                                                 value={data.imei_serial}
                                                 onChange={(e) => setData('imei_serial', e.target.value)}
-                                                className="w-full pl-9 text-xs py-2 font-mono bg-white dark:bg-slate-800 text-slate-900 dark:text-white border-slate-300 dark:border-slate-700"
+                                                className="w-full pl-9 pr-3 py-2 text-xs font-mono"
                                                 placeholder="358..."
                                             />
                                         </div>
@@ -237,12 +237,12 @@ export default function RepairFormModal({ isOpen, onClose, products, customers =
                                     <div className="space-y-1.5">
                                         <label className="text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider">Passcode</label>
                                         <div className="relative">
-                                            <Lock className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500" size={15} />
+                                            <Lock className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500 pointer-events-none" size={15} />
                                             <TextInput
                                                 type="text"
                                                 value={data.device_passcode}
                                                 onChange={(e) => setData('device_passcode', e.target.value)}
-                                                className="w-full pl-9 text-xs py-2 font-mono bg-white dark:bg-slate-800 text-slate-900 dark:text-white border-slate-300 dark:border-slate-700"
+                                                className="w-full pl-9 pr-3 py-2 text-xs font-mono"
                                                 placeholder="123456"
                                             />
                                         </div>
@@ -257,11 +257,11 @@ export default function RepairFormModal({ isOpen, onClose, products, customers =
                             <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider">Issue Description</h3>
                             <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200/80 dark:border-slate-800 shadow-sm space-y-4">
                                 <div className="relative">
-                                    <AlignLeft className="absolute left-3 top-3 text-slate-400 dark:text-slate-500" size={16} />
+                                    <AlignLeft className="absolute left-3 top-3 text-slate-400 dark:text-slate-500 pointer-events-none" size={16} />
                                     <textarea
                                         value={data.issue_description}
                                         onChange={(e) => setData('issue_description', e.target.value)}
-                                        className="w-full pl-9 text-sm font-medium text-slate-800 dark:text-white bg-white dark:bg-slate-800 border-slate-300 dark:border-slate-700 focus:border-rose-500 focus:ring-rose-500 rounded-xl shadow-sm min-h-[95px] resize-y placeholder-slate-400 dark:placeholder-slate-500"
+                                        className="w-full pl-9 pr-3.5 py-2.5 text-sm font-medium text-slate-900 dark:text-white bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 focus:border-indigo-500 focus:ring-indigo-500 rounded-xl shadow-sm min-h-[95px] resize-y placeholder-slate-400 dark:placeholder-slate-500"
                                         placeholder="Screen cracked, needs replacement. Battery draining fast..."
                                         required
                                     />
@@ -401,7 +401,7 @@ export default function RepairFormModal({ isOpen, onClose, products, customers =
                                     <select
                                         value={data.technician_id}
                                         onChange={e => setData('technician_id', e.target.value)}
-                                        className="saas-input w-full bg-white dark:bg-slate-800 text-slate-900 dark:text-white border-slate-300 dark:border-slate-700"
+                                        className="w-full text-sm py-2.5 px-3.5 font-medium bg-white dark:bg-slate-800 text-slate-900 dark:text-white border border-slate-200 dark:border-slate-700 focus:border-indigo-500 focus:ring-indigo-500 rounded-xl shadow-sm transition-all"
                                     >
                                         <option value="">-- Unassigned --</option>
                                         {technicians.map(t => (
@@ -417,19 +417,19 @@ export default function RepairFormModal({ isOpen, onClose, products, customers =
                                             <button
                                                 type="button"
                                                 onClick={() => setShowAiEstimator(true)}
-                                                className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/60 hover:bg-indigo-100 border border-indigo-200 dark:border-indigo-800 px-2 py-0.5 rounded-lg flex items-center gap-1 transition-all"
+                                                className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/60 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 border border-indigo-200 dark:border-indigo-800 px-2 py-0.5 rounded-lg flex items-center gap-1 transition-all"
                                             >
                                                 <Sparkles size={11} className="text-indigo-500" /> AI Estimate
                                             </button>
                                         </div>
                                         <div className="relative">
-                                            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400 dark:text-slate-500">UGX</span>
+                                            <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400 dark:text-slate-500 pointer-events-none">UGX</span>
                                             <input
                                                 type="number"
                                                 min="0"
                                                 value={data.estimated_cost}
                                                 onChange={(e) => setData('estimated_cost', e.target.value)}
-                                                className="w-full pl-12 pr-3 py-2.5 text-sm font-bold text-slate-900 dark:text-white bg-white dark:bg-slate-800 border-slate-300 dark:border-slate-700 focus:border-rose-500 focus:ring-rose-500 rounded-xl shadow-sm"
+                                                className="w-full pl-12 pr-3.5 py-2.5 text-sm font-bold text-slate-900 dark:text-white bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 focus:border-indigo-500 focus:ring-indigo-500 rounded-xl shadow-sm transition-all"
                                                 placeholder="0"
                                                 required
                                             />
@@ -440,13 +440,13 @@ export default function RepairFormModal({ isOpen, onClose, products, customers =
                                     <div className="space-y-1.5">
                                         <label className="text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider">Deposit Paid (UGX) *</label>
                                         <div className="relative">
-                                            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400 dark:text-slate-500">UGX</span>
+                                            <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400 dark:text-slate-500 pointer-events-none">UGX</span>
                                             <input
                                                 type="number"
                                                 min="0"
                                                 value={data.deposit}
                                                 onChange={(e) => setData('deposit', e.target.value)}
-                                                className={`w-full pl-12 pr-3 py-2.5 text-sm font-bold border-slate-300 dark:border-slate-700 focus:border-rose-500 focus:ring-rose-500 rounded-xl shadow-sm ${auth.user.role === 'technician' ? 'bg-slate-100 dark:bg-slate-800/40 text-slate-400 dark:text-slate-500 cursor-not-allowed' : 'bg-white dark:bg-slate-800 text-slate-900 dark:text-white'}`}
+                                                className={`w-full pl-12 pr-3.5 py-2.5 text-sm font-bold border border-slate-200 dark:border-slate-700 focus:border-indigo-500 focus:ring-indigo-500 rounded-xl shadow-sm transition-all ${auth.user.role === 'technician' ? 'bg-slate-100 dark:bg-slate-800/40 text-slate-400 dark:text-slate-500 cursor-not-allowed' : 'bg-white dark:bg-slate-800 text-slate-900 dark:text-white'}`}
                                                 placeholder="0"
                                                 required
                                                 disabled={auth.user.role === 'technician'}

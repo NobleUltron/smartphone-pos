@@ -38,7 +38,8 @@ class QuotationController extends Controller
             $query->where('status', $request->status);
         }
 
-        $quotations = $query->paginate(15)->withQueryString();
+        $perPage = max(10, min(100, (int) $request->input('per_page', 15)));
+        $quotations = $query->paginate($perPage)->withQueryString();
 
         $metrics = [
             'total_quotations' => Quotation::count(),

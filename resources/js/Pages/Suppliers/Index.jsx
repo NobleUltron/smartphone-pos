@@ -5,6 +5,9 @@ import PageHeader from '@/Components/SaaS/PageHeader';
 import Card from '@/Components/SaaS/Card';
 import Button from '@/Components/SaaS/Button';
 import Badge from '@/Components/SaaS/Badge';
+import DataTable from '@/Components/SaaS/DataTable';
+import Pagination from '@/Components/SaaS/Pagination';
+import Modal from '@/Components/Modal';
 import {
     Plus,
     Building2,
@@ -233,168 +236,200 @@ export default function SuppliersIndex({ auth, suppliers, filters = {}, summary 
                     </div>
                 )}
 
-                <Card noPadding className="overflow-hidden">
-                    <div className="p-4 border-b border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/80 flex flex-col md:flex-row justify-between items-stretch md:items-center gap-4">
-                        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 flex-1">
-                            <div className="saas-input-icon-wrapper max-w-sm w-full">
-                                <Search className="saas-input-icon" size={16} />
-                                <input
-                                    type="text"
-                                    className="saas-input !py-2 text-sm"
-                                    placeholder="Search name, contact, phone, email, address..."
-                                    value={searchQuery}
-                                    onChange={(e) => setSearchQuery(e.target.value)}
-                                />
-                            </div>
-                            <div className="flex items-center gap-1.5 bg-slate-100 dark:bg-slate-900/70 p-1 rounded-xl border border-slate-200/80 dark:border-slate-700/70 w-fit">
-                                {[
-                                    { key: 'all', label: 'All' },
-                                    { key: 'owing', label: 'Owing Balance' },
-                                    { key: 'has_credit', label: 'Has Credit' },
-                                    { key: 'settled', label: 'Settled' },
-                                ].map((tab) => (
-                                    <button
-                                        key={tab.key}
-                                        type="button"
-                                        onClick={() => setBalanceFilter(tab.key)}
-                                        className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors ${
-                                            balanceFilter === tab.key
-                                                ? 'bg-indigo-600 text-white shadow-sm'
-                                                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
-                                        }`}
-                                    >
-                                        {tab.label}
-                                    </button>
-                                ))}
-                            </div>
-                        </div>
-                        <div className="text-xs font-semibold text-slate-500 dark:text-slate-400">
-                            Showing {suppliers.data.length} of {suppliers.total || suppliers.data.length} vendors
-                        </div>
+                {/* Segmented Filter Tabs */}
+                <div className="flex items-center justify-between flex-wrap gap-3 mb-4 animate-slide-up" style={{ animationDelay: '0.05s' }}>
+                    <div className="flex items-center gap-1.5 p-1 bg-slate-100 dark:bg-slate-800/80 rounded-2xl border border-slate-200/70 dark:border-slate-700/60 shadow-inner">
+                        {[
+                            { key: 'all', label: 'All Vendors' },
+                            { key: 'owing', label: 'Owing Balance' },
+                            { key: 'has_credit', label: 'Has Credit' },
+                            { key: 'settled', label: 'Settled' },
+                        ].map((tab) => (
+                            <button
+                                key={tab.key}
+                                type="button"
+                                onClick={() => setBalanceFilter(tab.key)}
+                                className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                                    balanceFilter === tab.key
+                                        ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-sm ring-1 ring-slate-900/5'
+                                        : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-white/50'
+                                }`}
+                            >
+                                {tab.label}
+                            </button>
+                        ))}
                     </div>
+                    <div className="text-xs font-semibold text-slate-500 dark:text-slate-400">
+                        Showing {suppliers.data.length} of {suppliers.total || suppliers.data.length} vendors
+                    </div>
+                </div>
 
-                    {suppliers.data.length > 0 ? (
-                        <>
-                            {/* Desktop Table */}
-                            <div className="hidden md:block overflow-x-auto">
-                                <table className="w-full text-left text-sm">
-                                    <thead className="bg-slate-50 dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400 uppercase text-xs tracking-wider">
-                                        <tr>
-                                            <th className="px-6 py-4 font-semibold">Company</th>
-                                            <th className="px-6 py-4 font-semibold">Contact Person</th>
-                                            <th className="px-6 py-4 font-semibold">Contact Details</th>
-                                            <th className="px-6 py-4 font-semibold">Purchase Activity</th>
-                                            <th className="px-6 py-4 font-semibold text-right">Outstanding Balance</th>
-                                            <th className="px-6 py-4 font-semibold text-right">Actions</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                                        {suppliers.data.map(supplier => (
-                                            <tr key={supplier.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
-                                                <td className="px-6 py-4">
-                                                    <div className="flex items-center gap-3">
-                                                        <div className="w-10 h-10 rounded-full bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 flex items-center justify-center font-bold shrink-0">
-                                                            {supplier.name.substring(0, 2).toUpperCase()}
-                                                        </div>
-                                                        <div>
-                                                            <Link
-                                                                href={route('suppliers.show', supplier.id)}
-                                                                className="font-bold text-slate-900 dark:text-white hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors"
-                                                            >
-                                                                {supplier.name}
-                                                            </Link>
-                                                        </div>
-                                                    </div>
-                                                </td>
-                                                <td className="px-6 py-4">
-                                                    <span className="text-slate-600 dark:text-slate-300 font-medium">{supplier.contact_name || '-'}</span>
-                                                </td>
-                                                <td className="px-6 py-4">
-                                                    <div className="space-y-1 text-xs text-slate-500 dark:text-slate-400">
-                                                        {supplier.phone && <div className="flex items-center gap-2"><Phone size={13} className="shrink-0" /> {supplier.phone}</div>}
-                                                        {supplier.email && <div className="flex items-center gap-2"><Mail size={13} className="shrink-0" /> {supplier.email}</div>}
-                                                        {supplier.address && <div className="flex items-center gap-2"><MapPin size={13} className="shrink-0" /> {supplier.address}</div>}
-                                                        {!supplier.phone && !supplier.email && !supplier.address && <span>-</span>}
-                                                    </div>
-                                                </td>
-                                                <td className="px-6 py-4">
-                                                    <div className="space-y-1 text-xs">
-                                                        <div className="font-bold text-slate-800 dark:text-slate-200">
-                                                            {supplier.purchases_count || 0} Order{Number(supplier.purchases_count) === 1 ? '' : 's'}
-                                                            {Number(supplier.purchases_sum_total_amount || 0) > 0 && (
-                                                                <span className="text-slate-500 dark:text-slate-400 font-semibold">
-                                                                    {' '}• {Number(supplier.purchases_sum_total_amount).toLocaleString()} UGX
-                                                                </span>
-                                                            )}
-                                                        </div>
-                                                        {supplier.purchases_max_purchase_date ? (
-                                                            <div className="flex items-center gap-1.5 text-slate-500 dark:text-slate-400">
-                                                                <Calendar size={12} /> Last: {formatDate(supplier.purchases_max_purchase_date)}
-                                                            </div>
-                                                        ) : (
-                                                            <div className="text-slate-400 dark:text-slate-500 italic">No purchases yet</div>
-                                                        )}
-                                                    </div>
-                                                </td>
-                                                <td className="px-6 py-4 text-right font-bold">
-                                                    <div className="flex flex-col items-end gap-1.5">
-                                                        {Number(supplier.balance) > 0 ? (
-                                                            <span className="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-bold bg-rose-50 dark:bg-rose-950/60 text-rose-600 dark:text-rose-300 border border-rose-200 dark:border-rose-800/60">
-                                                                {Number(supplier.balance).toLocaleString()} UGX
-                                                            </span>
-                                                        ) : (
-                                                            <span className="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-semibold bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/60">
-                                                                Settled ✓
-                                                            </span>
-                                                        )}
-                                                        {Number(supplier.credit_balance || 0) > 0 && (
-                                                            <span className="inline-flex items-center px-2.5 py-0.5 rounded-md text-[11px] font-bold bg-teal-50 dark:bg-teal-950/60 text-teal-700 dark:text-teal-300 border border-teal-200 dark:border-teal-800/60">
-                                                                Credit: {Number(supplier.credit_balance).toLocaleString()} UGX
-                                                            </span>
-                                                        )}
-                                                    </div>
-                                                </td>
-                                                <td className="px-6 py-4 text-right">
-                                                    <div className="flex items-center justify-end gap-1.5">
-                                                        <Link
-                                                            href={route('purchases.create', { supplier_id: supplier.id })}
-                                                            className="p-1.5 text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950/50 rounded-lg transition-colors"
-                                                            title="Log Purchase for Supplier"
-                                                        >
-                                                            <ShoppingBag size={16} />
-                                                        </Link>
-                                                        <button
-                                                            type="button"
-                                                            onClick={() => openEditModal(supplier)}
-                                                            className="p-1.5 text-slate-400 hover:text-amber-600 dark:hover:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-950/50 rounded-lg transition-colors"
-                                                            title="Edit Supplier"
-                                                        >
-                                                            <Pencil size={16} />
-                                                        </button>
-                                                        <Link
-                                                            href={route('suppliers.show', supplier.id)}
-                                                            className="px-3 py-1.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-bold rounded-lg transition-colors"
-                                                        >
-                                                            View Details
-                                                        </Link>
-                                                        <button
-                                                            type="button"
-                                                            onClick={() => handleDelete(supplier)}
-                                                            className="p-1.5 text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/50 rounded-lg transition-colors"
-                                                            title="Delete Supplier"
-                                                        >
-                                                            <Trash2 size={16} />
-                                                        </button>
-                                                    </div>
-                                                </td>
-                                            </tr>
-                                        ))}
-                                    </tbody>
-                                </table>
+                {/* Standalone Search Bar Card (Inventory Benchmark) */}
+                <Card className="mb-6 animate-slide-up" style={{ animationDelay: '0.1s' }}>
+                    <div className="flex flex-col md:flex-row gap-4 items-center">
+                        <div className="flex-1 w-full saas-input-icon-wrapper relative">
+                            <Search size={18} className="saas-input-icon" />
+                            <input
+                                type="text"
+                                className="saas-input pr-10"
+                                placeholder="Search by company name, contact person, phone, email, or address..."
+                                value={searchQuery}
+                                onChange={(e) => setSearchQuery(e.target.value)}
+                            />
+                            {searchQuery && (
+                                <button
+                                    type="button"
+                                    onClick={() => setSearchQuery('')}
+                                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors p-1"
+                                    title="Clear search"
+                                >
+                                    <X size={16} />
+                                </button>
+                            )}
+                        </div>
+                        {(searchQuery || balanceFilter !== 'all') && (
+                            <Button
+                                variant="secondary"
+                                className="!py-2 !px-4 !text-xs whitespace-nowrap"
+                                onClick={() => { setSearchQuery(''); setBalanceFilter('all'); }}
+                            >
+                                Reset Filters
+                            </Button>
+                        )}
+                    </div>
+                </Card>
+
+                {/* Desktop DataTable (Inventory Benchmark) */}
+                <div className="hidden md:block animate-slide-up" style={{ animationDelay: '0.15s' }}>
+                    <DataTable
+                        headers={[
+                            'Company',
+                            'Contact Person',
+                            'Contact Details',
+                            'Purchase Activity',
+                            { label: 'Balance & Credit', className: '!text-right' },
+                            { label: 'Actions', className: '!text-center' }
+                        ]}
+                        isEmpty={suppliers.data.length === 0}
+                        emptyState={
+                            <div className="text-center py-16">
+                                <Building2 size={44} className="mx-auto text-slate-300 dark:text-slate-600 mb-3" />
+                                <h3 className="text-base font-bold text-slate-900 dark:text-white mb-1">No Suppliers Found</h3>
+                                <p className="text-slate-500 dark:text-slate-400 text-sm mb-5">
+                                    {searchQuery || balanceFilter !== 'all' ? 'Try adjusting your search or filter.' : 'Add your first wholesale vendor to start tracking purchases.'}
+                                </p>
+                                {!searchQuery && balanceFilter === 'all' && (
+                                    <Button variant="primary" onClick={openAddModal} icon={Plus}>Add Supplier</Button>
+                                )}
                             </div>
+                        }
+                    >
+                        {suppliers.data.map(supplier => (
+                            <tr key={supplier.id}>
+                                <td>
+                                    <div className="flex items-center gap-3">
+                                        <div className="w-10 h-10 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200/60 dark:border-slate-700/60 text-indigo-600 dark:text-indigo-400 flex items-center justify-center font-bold text-sm shrink-0">
+                                            {supplier.name.substring(0, 2).toUpperCase()}
+                                        </div>
+                                        <div>
+                                            <Link
+                                                href={route('suppliers.show', supplier.id)}
+                                                className="font-bold text-slate-900 dark:text-white hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors"
+                                            >
+                                                {supplier.name}
+                                            </Link>
+                                            {supplier.address && (
+                                                <div className="text-xs text-slate-400 truncate max-w-[220px] mt-0.5" title={supplier.address}>
+                                                    {supplier.address}
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+                                </td>
+                                <td>
+                                    <span className="text-slate-700 dark:text-slate-300 font-medium">{supplier.contact_name || '—'}</span>
+                                </td>
+                                <td>
+                                    <div className="space-y-0.5 text-xs text-slate-500 dark:text-slate-400">
+                                        {supplier.phone && <div className="flex items-center gap-1.5 text-slate-700 dark:text-slate-300 font-medium"><Phone size={12} className="text-slate-400 shrink-0" /> {supplier.phone}</div>}
+                                        {supplier.email && <div className="flex items-center gap-1.5"><Mail size={12} className="text-slate-400 shrink-0" /> {supplier.email}</div>}
+                                        {!supplier.phone && !supplier.email && <span>—</span>}
+                                    </div>
+                                </td>
+                                <td>
+                                    <div className="space-y-0.5 text-xs">
+                                        <div className="font-bold text-slate-900 dark:text-white">
+                                            {supplier.purchases_count || 0} Order{Number(supplier.purchases_count) === 1 ? '' : 's'}
+                                            {Number(supplier.purchases_sum_total_amount || 0) > 0 && (
+                                                <span className="text-slate-500 dark:text-slate-400 font-semibold">
+                                                    {' '}• {Number(supplier.purchases_sum_total_amount).toLocaleString()} UGX
+                                                </span>
+                                            )}
+                                        </div>
+                                        {supplier.purchases_max_purchase_date ? (
+                                            <div className="flex items-center gap-1 text-slate-500 dark:text-slate-400">
+                                                <Calendar size={11} /> Last: {formatDate(supplier.purchases_max_purchase_date)}
+                                            </div>
+                                        ) : (
+                                            <div className="text-slate-400 italic">No purchases yet</div>
+                                        )}
+                                    </div>
+                                </td>
+                                <td className="text-right">
+                                    <div className="flex flex-col items-end gap-1">
+                                        {Number(supplier.balance) > 0 ? (
+                                            <Badge variant="danger">{Number(supplier.balance).toLocaleString()} UGX</Badge>
+                                        ) : (
+                                            <Badge variant="success">Settled ✓</Badge>
+                                        )}
+                                        {Number(supplier.credit_balance || 0) > 0 && (
+                                            <Badge variant="info">Credit: {Number(supplier.credit_balance).toLocaleString()} UGX</Badge>
+                                        )}
+                                    </div>
+                                </td>
+                                <td className="text-center">
+                                    <div className="flex items-center justify-center gap-2">
+                                        <Link
+                                            href={route('purchases.create', { supplier_id: supplier.id })}
+                                            className="p-2 text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950/50 rounded-lg transition-colors"
+                                            title="Log Purchase for Supplier"
+                                        >
+                                            <ShoppingBag size={16} />
+                                        </Link>
+                                        <button
+                                            type="button"
+                                            onClick={() => openEditModal(supplier)}
+                                            className="p-2 text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950/50 rounded-lg transition-colors"
+                                            title="Edit Supplier"
+                                        >
+                                            <Pencil size={16} />
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => handleDelete(supplier)}
+                                            className="p-2 text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/50 rounded-lg transition-colors"
+                                            title="Delete Supplier"
+                                        >
+                                            <Trash2 size={16} />
+                                        </button>
+                                        <Button
+                                            variant="secondary"
+                                            className="!py-1.5 !px-3 !text-xs whitespace-nowrap"
+                                            onClick={() => router.visit(route('suppliers.show', supplier.id))}
+                                        >
+                                            View Details
+                                        </Button>
+                                    </div>
+                                </td>
+                            </tr>
+                        ))}
+                    </DataTable>
+                </div>
 
-                            {/* Mobile Card View */}
-                            <div className="md:hidden divide-y divide-slate-100 dark:divide-slate-800">
+                {/* Mobile Card View */}
+                <Card noPadding className="md:hidden overflow-hidden">
+                    {suppliers.data.length > 0 ? (
+                        <div className="divide-y divide-slate-100 dark:divide-slate-800">
                                 {suppliers.data.map(supplier => (
                                     <div key={supplier.id} className="p-4 space-y-3">
                                         <div className="flex items-start justify-between gap-3">
@@ -456,29 +491,9 @@ export default function SuppliersIndex({ auth, suppliers, filters = {}, summary 
                                                 View Details
                                             </Link>
                                         </div>
-                                    </div>
-                                ))}
-                            </div>
-
-                            {suppliers.links && suppliers.links.length > 3 && (
-                                <div className="px-6 py-4 border-t border-slate-100 dark:border-slate-800 flex flex-wrap items-center justify-between gap-2">
-                                    <span className="text-xs text-slate-500 dark:text-slate-400">
-                                        Showing {suppliers.from || 0} to {suppliers.to || 0} of {suppliers.total || 0}
-                                    </span>
-                                    <div className="flex flex-wrap gap-1">
-                                        {suppliers.links.map((link, idx) => (
-                                            <Link
-                                                key={idx}
-                                                href={link.url || '#'}
-                                                preserveScroll
-                                                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors ${link.active ? 'bg-indigo-600 text-white' : link.url ? 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700' : 'opacity-40 pointer-events-none text-slate-400'}`}
-                                                dangerouslySetInnerHTML={{ __html: link.label }}
-                                            />
-                                        ))}
-                                    </div>
                                 </div>
-                            )}
-                        </>
+                            ))}
+                        </div>
                     ) : (
                         <div className="p-12 text-center text-slate-500 dark:text-slate-400">
                             <Building2 size={48} className="mx-auto text-slate-300 dark:text-slate-600 mb-4" />
@@ -490,94 +505,99 @@ export default function SuppliersIndex({ auth, suppliers, filters = {}, summary 
                         </div>
                     )}
                 </Card>
+
+                {/* Pagination */}
+                <Pagination data={suppliers} />
             </div>
 
             {/* Add / Edit Modal */}
-            {isModalOpen && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fade-in">
-                    <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-xl w-full max-w-md overflow-hidden">
-                        <div className="px-6 py-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
+            <Modal show={isModalOpen} onClose={() => setIsModalOpen(false)} maxWidth="md">
+                <div className="bg-white dark:bg-slate-900 rounded-2xl overflow-hidden">
+                    <div className="px-6 py-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                            <div className="p-2.5 bg-indigo-50 dark:bg-indigo-950/60 rounded-xl text-indigo-600 dark:text-indigo-400">
+                                <Building2 size={20} />
+                            </div>
                             <div>
-                                <h3 className="font-bold text-lg text-slate-900 dark:text-white flex items-center gap-2">
-                                    <Building2 size={20} className="text-indigo-500" />
+                                <h3 className="font-bold text-lg text-slate-900 dark:text-white">
                                     {editingSupplier ? 'Edit Supplier' : 'Add New Supplier'}
                                 </h3>
                                 <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
                                     {editingSupplier ? 'Update wholesale vendor details.' : 'Register a wholesale vendor or equipment supplier.'}
                                 </p>
                             </div>
-                            <button
-                                type="button"
-                                onClick={() => setIsModalOpen(false)}
-                                className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors"
-                            >
-                                <X size={20} />
-                            </button>
                         </div>
-                        <form onSubmit={submitForm} className="p-6 space-y-4">
-                            <div>
-                                <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">Company Name *</label>
-                                <input
-                                    type="text"
-                                    required
-                                    className="saas-input w-full"
-                                    value={form.data.name}
-                                    onChange={e => form.setData('name', e.target.value)}
-                                />
-                                {form.errors.name && <p className="text-xs text-rose-500 mt-1">{form.errors.name}</p>}
-                            </div>
-                            <div>
-                                <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">Contact Person</label>
-                                <input
-                                    type="text"
-                                    className="saas-input w-full"
-                                    value={form.data.contact_name}
-                                    onChange={e => form.setData('contact_name', e.target.value)}
-                                />
-                                {form.errors.contact_name && <p className="text-xs text-rose-500 mt-1">{form.errors.contact_name}</p>}
-                            </div>
-                            <div className="grid grid-cols-2 gap-4">
-                                <div>
-                                    <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">Phone</label>
-                                    <input
-                                        type="text"
-                                        className="saas-input w-full"
-                                        value={form.data.phone}
-                                        onChange={e => form.setData('phone', e.target.value)}
-                                    />
-                                    {form.errors.phone && <p className="text-xs text-rose-500 mt-1">{form.errors.phone}</p>}
-                                </div>
-                                <div>
-                                    <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">Email</label>
-                                    <input
-                                        type="email"
-                                        className="saas-input w-full"
-                                        value={form.data.email}
-                                        onChange={e => form.setData('email', e.target.value)}
-                                    />
-                                    {form.errors.email && <p className="text-xs text-rose-500 mt-1">{form.errors.email}</p>}
-                                </div>
-                            </div>
-                            <div>
-                                <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">Address</label>
-                                <textarea
-                                    className="saas-input w-full"
-                                    rows="2"
-                                    value={form.data.address}
-                                    onChange={e => form.setData('address', e.target.value)}
-                                ></textarea>
-                                {form.errors.address && <p className="text-xs text-rose-500 mt-1">{form.errors.address}</p>}
-                            </div>
-                            <div className="pt-4 flex justify-end gap-3 border-t border-slate-100 dark:border-slate-800">
-                                <Button variant="secondary" type="button" onClick={() => setIsModalOpen(false)}>Cancel</Button>
-                                <Button variant="primary" type="submit" disabled={form.processing} icon={editingSupplier ? Pencil : Plus}>
-                                    {editingSupplier ? 'Save Changes' : 'Save Supplier'}
-                                </Button>
-                            </div>
-                        </form>
+                        <button
+                            type="button"
+                            onClick={() => setIsModalOpen(false)}
+                            className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                        >
+                            <X size={20} />
+                        </button>
                     </div>
+                    <form onSubmit={submitForm} className="p-6 space-y-4">
+                        <div>
+                            <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">Company Name *</label>
+                            <input
+                                type="text"
+                                required
+                                className="saas-input w-full"
+                                value={form.data.name}
+                                onChange={e => form.setData('name', e.target.value)}
+                            />
+                            {form.errors.name && <p className="text-xs text-rose-500 mt-1">{form.errors.name}</p>}
+                        </div>
+                        <div>
+                            <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">Contact Person</label>
+                            <input
+                                type="text"
+                                className="saas-input w-full"
+                                value={form.data.contact_name}
+                                onChange={e => form.setData('contact_name', e.target.value)}
+                            />
+                            {form.errors.contact_name && <p className="text-xs text-rose-500 mt-1">{form.errors.contact_name}</p>}
+                        </div>
+                        <div className="grid grid-cols-2 gap-4">
+                            <div>
+                                <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">Phone</label>
+                                <input
+                                    type="text"
+                                    className="saas-input w-full"
+                                    value={form.data.phone}
+                                    onChange={e => form.setData('phone', e.target.value)}
+                                />
+                                {form.errors.phone && <p className="text-xs text-rose-500 mt-1">{form.errors.phone}</p>}
+                            </div>
+                            <div>
+                                <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">Email</label>
+                                <input
+                                    type="email"
+                                    className="saas-input w-full"
+                                    value={form.data.email}
+                                    onChange={e => form.setData('email', e.target.value)}
+                                />
+                                {form.errors.email && <p className="text-xs text-rose-500 mt-1">{form.errors.email}</p>}
+                            </div>
+                        </div>
+                        <div>
+                            <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">Address</label>
+                            <textarea
+                                className="saas-input w-full"
+                                rows="2"
+                                value={form.data.address}
+                                onChange={e => form.setData('address', e.target.value)}
+                            ></textarea>
+                            {form.errors.address && <p className="text-xs text-rose-500 mt-1">{form.errors.address}</p>}
+                        </div>
+                        <div className="pt-4 flex justify-end gap-3 border-t border-slate-100 dark:border-slate-800">
+                            <Button variant="secondary" type="button" onClick={() => setIsModalOpen(false)}>Cancel</Button>
+                            <Button variant="primary" type="submit" disabled={form.processing} icon={editingSupplier ? Pencil : Plus}>
+                                {editingSupplier ? 'Save Changes' : 'Save Supplier'}
+                            </Button>
+                        </div>
+                    </form>
                 </div>
-            )}
+            </Modal>
         </AuthenticatedLayout>
     );
 }

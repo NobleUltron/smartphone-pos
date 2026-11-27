@@ -8,6 +8,8 @@ import PageHeader from '@/Components/SaaS/PageHeader';
 import Card from '@/Components/SaaS/Card';
 import Button from '@/Components/SaaS/Button';
 import Badge from '@/Components/SaaS/Badge';
+import DataTable from '@/Components/SaaS/DataTable';
+import Pagination from '@/Components/SaaS/Pagination';
 import Modal from '@/Components/Modal';
 
 export default function UsersIndex({ auth, users = {}, filters = {}, summary, permissionDefinitions = [], roleDefaults = {} }) {
@@ -235,159 +237,145 @@ export default function UsersIndex({ auth, users = {}, filters = {}, summary, pe
                 </div>
             )}
 
-            <Card noPadding className="animate-slide-up overflow-hidden">
-                <div className="p-4 border-b border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/80 flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
-                    <div className="flex flex-col md:flex-row items-center gap-3 flex-1">
-                        <div className="w-full md:w-72 relative">
-                            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                                <Search size={16} className="text-slate-400" />
-                            </div>
-                            <input
-                                type="text"
-                                placeholder="Search staff name, email, phone..."
-                                className="saas-input !pl-9 py-2 text-xs w-full"
-                                value={searchQuery}
-                                onChange={(e) => setSearchQuery(e.target.value)}
-                            />
+            {/* Standalone Search & Filter Bar */}
+            <Card className="mb-6 animate-slide-up">
+                <div className="flex flex-col md:flex-row items-stretch md:items-center gap-3">
+                    <div className="flex-1 relative">
+                        <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
+                            <Search size={18} className="text-slate-400" />
                         </div>
+                        <input
+                            type="text"
+                            placeholder="Search staff name, email, phone..."
+                            className="saas-input !pl-10 w-full"
+                            value={searchQuery}
+                            onChange={(e) => setSearchQuery(e.target.value)}
+                        />
+                    </div>
 
-                        {/* Role Filter Dropdown */}
-                        <div className="w-full md:w-44">
-                            <select
-                                className="saas-input py-2 text-xs w-full cursor-pointer"
-                                value={roleFilter}
-                                onChange={(e) => setRoleFilter(e.target.value)}
-                            >
-                                <option value="all">All Roles</option>
-                                <option value="admin">Admin</option>
-                                <option value="manager">Manager</option>
-                                <option value="cashier">Cashier</option>
-                                <option value="technician">Technician</option>
-                            </select>
-                        </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 md:flex items-center gap-3">
+                        <select
+                            className="saas-input md:w-44 cursor-pointer"
+                            value={roleFilter}
+                            onChange={(e) => setRoleFilter(e.target.value)}
+                        >
+                            <option value="all">All Roles</option>
+                            <option value="admin">Admin</option>
+                            <option value="manager">Manager</option>
+                            <option value="cashier">Cashier</option>
+                            <option value="technician">Technician</option>
+                        </select>
 
-                        {/* Status Filter Dropdown */}
-                        <div className="w-full md:w-44">
-                            <select
-                                className="saas-input py-2 text-xs w-full cursor-pointer"
-                                value={statusFilter}
-                                onChange={(e) => setStatusFilter(e.target.value)}
-                            >
-                                <option value="all">All Statuses</option>
-                                <option value="active">Active</option>
-                                <option value="inactive">Inactive</option>
-                            </select>
-                        </div>
+                        <select
+                            className="saas-input md:w-40 cursor-pointer"
+                            value={statusFilter}
+                            onChange={(e) => setStatusFilter(e.target.value)}
+                        >
+                            <option value="all">All Statuses</option>
+                            <option value="active">Active</option>
+                            <option value="inactive">Inactive</option>
+                        </select>
 
                         {(searchQuery || roleFilter !== 'all' || statusFilter !== 'all') && (
-                            <Button 
-                                variant="secondary" 
-                                className="!py-2 !px-3 text-xs" 
-                                onClick={handleResetFilters}
-                                icon={RotateCcw}
-                            >
+                            <Button variant="secondary" onClick={handleResetFilters} icon={RotateCcw}>
                                 Reset
                             </Button>
                         )}
                     </div>
-
-                    <div className="text-xs font-semibold text-slate-500 dark:text-slate-400">
-                        Showing {users.data?.length || 0} of {users.total || users.data?.length || 0} staff members
-                    </div>
                 </div>
+            </Card>
 
-                {/* Desktop Table */}
-                <div className="hidden md:block overflow-x-auto">
-                    <table className="saas-table w-full whitespace-nowrap">
-                        <thead>
-                            <tr>
-                                <th>Staff Member</th>
-                                <th>Email & Contact</th>
-                                <th>System Role</th>
-                                <th>Status</th>
-                                <th className="!text-center">Actions</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {users.data && users.data.map((user, i) => (
-                                <tr key={user.id} className="animate-fade-in" style={{ animationDelay: `${i * 0.05}s` }}>
-                                    <td>
-                                        <div className="flex items-center gap-3">
-                                            <div className="w-10 h-10 rounded-full border border-slate-200 dark:border-slate-700 overflow-hidden bg-slate-100 dark:bg-slate-800 flex-shrink-0">
-                                                <img 
-                                                    src={user.profile_photo_url} 
-                                                    alt={user.name} 
-                                                    className="w-full h-full object-cover"
-                                                />
-                                            </div>
-                                            <div>
-                                                <div className="font-bold text-slate-900 dark:text-white">{user.name}</div>
-                                                <div className="text-xs text-slate-500 dark:text-slate-400">ID: #{user.id}</div>
-                                            </div>
+            {/* Desktop Table */}
+            <div className="hidden md:block animate-slide-up">
+                <DataTable
+                    headers={[
+                        'Staff Member',
+                        'Email & Contact',
+                        'System Role',
+                        'Status',
+                        { label: 'Actions', className: 'text-center' },
+                    ]}
+                    isEmpty={!users.data || users.data.length === 0}
+                    emptyState={
+                        <div className="py-12 flex flex-col items-center justify-center text-slate-400">
+                            <Users size={48} className="mb-3 opacity-30" />
+                            <p className="font-semibold text-slate-600 dark:text-slate-300">No users found matching your search.</p>
+                        </div>
+                    }
+                >
+                    {users.data?.map((user) => (
+                        <tr key={user.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/40 transition-colors">
+                            <td>
+                                <div className="flex items-center gap-3">
+                                    <div className="w-10 h-10 rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden bg-slate-100 dark:bg-slate-800 flex-shrink-0">
+                                        <img 
+                                            src={user.profile_photo_url} 
+                                            alt={user.name} 
+                                            className="w-full h-full object-cover"
+                                        />
+                                    </div>
+                                    <div>
+                                        <div className="font-bold text-slate-900 dark:text-white">{user.name}</div>
+                                        <div className="text-xs text-slate-500 dark:text-slate-400 font-mono">ID: #{user.id}</div>
+                                    </div>
+                                </div>
+                            </td>
+                            <td>
+                                <div className="flex flex-col gap-0.5 text-sm text-slate-600 dark:text-slate-300">
+                                    <div className="flex items-center gap-2">
+                                        <Mail size={14} className="text-slate-400" />
+                                        {user.email}
+                                    </div>
+                                    {user.phone && (
+                                        <div className="text-xs text-slate-500 dark:text-slate-400 font-mono">
+                                            {user.phone}
                                         </div>
-                                    </td>
-                                    <td>
-                                        <div className="flex flex-col gap-1 text-sm text-slate-600 dark:text-slate-300">
-                                            <div className="flex items-center gap-2">
-                                                <Mail size={14} className="text-slate-400" />
-                                                {user.email}
-                                            </div>
-                                            {user.phone && (
-                                                <div className="flex items-center gap-2">
-                                                    <span className="text-slate-400 text-[10px]">📞</span>
-                                                    {user.phone}
-                                                </div>
-                                            )}
-                                        </div>
-                                    </td>
-                                    <td>
-                                        <div className="flex items-center gap-2">
-                                            <ShieldCheck size={16} className="text-slate-400" />
-                                            {getRoleBadge(user.role)}
-                                        </div>
-                                    </td>
-                                    <td>
-                                        {user.status === 'active' ? (
-                                            <Badge variant="success">Active</Badge>
-                                        ) : (
-                                            <Badge variant="danger">Inactive</Badge>
-                                        )}
-                                    </td>
-                                    <td className="text-center">
-                                        <div className="flex items-center justify-center gap-2">
-                                            <Button variant="secondary" onClick={() => handleEdit(user)} className="!px-3 !py-1.5 text-sm">
-                                                <Pencil size={14} /> Edit
-                                            </Button>
-                                            {auth?.user?.id !== user.id && (
-                                                <Button variant="danger" onClick={() => setDeletingUser(user)} className="!px-3 !py-1.5 text-sm">
-                                                    <Trash2 size={14} />
-                                                </Button>
-                                            )}
-                                        </div>
-                                    </td>
-                                </tr>
-                            ))}
-                            {users.data && users.data.length === 0 && (
-                                <tr>
-                                    <td colSpan="5" className="text-center py-12">
-                                        <div className="flex flex-col items-center justify-center text-slate-400">
-                                            <Users size={48} className="mb-4 opacity-20" />
-                                            <p>No users found matching your search.</p>
-                                        </div>
-                                    </td>
-                                </tr>
-                            )}
-                        </tbody>
-                    </table>
-                </div>
+                                    )}
+                                </div>
+                            </td>
+                            <td>
+                                <div className="flex items-center gap-2">
+                                    <ShieldCheck size={15} className="text-slate-400" />
+                                    {getRoleBadge(user.role)}
+                                </div>
+                            </td>
+                            <td>
+                                {user.status === 'active' ? (
+                                    <Badge variant="success">Active</Badge>
+                                ) : (
+                                    <Badge variant="danger">Inactive</Badge>
+                                )}
+                            </td>
+                            <td className="text-center">
+                                <div className="flex items-center justify-center gap-2">
+                                    <Button variant="secondary" size="sm" onClick={() => handleEdit(user)} className="whitespace-nowrap">
+                                        <Pencil size={14} className="mr-1.5" /> Edit
+                                    </Button>
+                                    {auth?.user?.id !== user.id && (
+                                        <button
+                                            type="button"
+                                            onClick={() => setDeletingUser(user)}
+                                            className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-900/30 rounded-lg transition-colors"
+                                            title="Delete Staff"
+                                        >
+                                            <Trash2 size={16} />
+                                        </button>
+                                    )}
+                                </div>
+                            </td>
+                        </tr>
+                    ))}
+                </DataTable>
+            </div>
 
-                {/* Mobile Staff Cards */}
-                <div className="md:hidden divide-y divide-slate-100 dark:divide-slate-800">
+            {/* Mobile Staff Cards */}
+            <Card noPadding className="md:hidden overflow-hidden">
+                <div className="divide-y divide-slate-100 dark:divide-slate-800">
                     {users.data && users.data.map(user => (
                         <div key={user.id} className="p-4 space-y-3 bg-white dark:bg-slate-900">
                             <div className="flex items-start justify-between gap-2">
                                 <div className="flex items-center gap-3 min-w-0">
-                                    <div className="w-10 h-10 rounded-full border border-slate-200 dark:border-slate-700 overflow-hidden bg-slate-100 dark:bg-slate-800 shrink-0">
+                                    <div className="w-10 h-10 rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden bg-slate-100 dark:bg-slate-800 shrink-0">
                                         <img src={user.profile_photo_url} alt={user.name} className="w-full h-full object-cover" />
                                     </div>
                                     <div className="min-w-0">
@@ -427,26 +415,10 @@ export default function UsersIndex({ auth, users = {}, filters = {}, summary, pe
                         <div className="py-10 text-center text-sm text-slate-400">No users found matching your search.</div>
                     )}
                 </div>
-
-                {users.links && users.links.length > 3 && (
-                    <div className="flex justify-center p-5 border-t border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900">
-                        <nav className="inline-flex flex-wrap bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden">
-                            {users.links.map((link, k) => (
-                                <Link 
-                                    key={k}
-                                    href={link.url || '#'}
-                                    preserveScroll
-                                    preserveState
-                                    className={`px-4 py-2 text-sm font-medium border-r border-slate-200 dark:border-slate-700 last:border-0 ${
-                                        link.active ? 'bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 font-bold' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700'
-                                    } ${link.url === null ? 'opacity-50 cursor-not-allowed pointer-events-none' : ''}`}
-                                    dangerouslySetInnerHTML={{ __html: link.label }}
-                                />
-                            ))}
-                        </nav>
-                    </div>
-                )}
             </Card>
+
+            {/* Pagination */}
+            <Pagination data={users} />
 
             {/* Add/Edit Modal */}
             <Modal show={showModal} onClose={() => setShowModal(false)} maxWidth="4xl">

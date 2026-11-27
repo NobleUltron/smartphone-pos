@@ -9,7 +9,9 @@ import Badge from '@/Components/SaaS/Badge';
 import Button from '@/Components/SaaS/Button';
 import PageHeader from '@/Components/SaaS/PageHeader';
 import DataTable from '@/Components/SaaS/DataTable';
+import Pagination from '@/Components/SaaS/Pagination';
 import LabelCard from '@/Components/SaaS/LabelCard';
+import Modal from '@/Components/Modal';
 
 export default function Inventory({ auth, products, allProducts = [], categories = [], brands = [], filters = {}, summary, partners = [], paymentAccounts = [], suppliers = [] }) {
     // Add Category Modal State
@@ -103,6 +105,12 @@ export default function Inventory({ auth, products, allProducts = [], categories
     const [imeisList, setImeisList] = useState([]);
     const [imeiSearch, setImeiSearch] = useState('');
     const [imeiStatusFilter, setImeiStatusFilter] = useState('all');
+    const [imeiPage, setImeiPage] = useState(1);
+    const [imeiPerPage, setImeiPerPage] = useState(10);
+
+    useEffect(() => {
+        setImeiPage(1);
+    }, [imeiSearch, imeiStatusFilter, viewProduct?.id]);
 
     // Label Preview State
     const [showLabelPreview, setShowLabelPreview] = useState(false);
@@ -1132,74 +1140,88 @@ export default function Inventory({ auth, products, allProducts = [], categories
             </div>
 
             {/* Pagination Component */}
-            {products.links && products.links.length > 3 && (
-                <div className="flex justify-center mt-6 animate-slide-up" style={{ animationDelay: '0.3s' }}>
-                    <nav className="inline-flex flex-wrap bg-white dark:bg-slate-900 rounded-xl shadow-sm border border-slate-200 dark:border-slate-800 overflow-hidden">
-                        {products.links.map((link, k) => (
-                            link.url ? (
-                                <Link 
-                                    key={k}
-                                    href={link.url}
-                                    preserveScroll
-                                    preserveState
-                                    className={`px-4 py-2 text-sm font-medium border-r border-slate-100 dark:border-slate-800 last:border-0 transition-colors ${
-                                        link.active ? 'bg-indigo-600 text-white font-bold' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800'
-                                    }`}
-                                    dangerouslySetInnerHTML={{ __html: link.label }}
-                                />
-                            ) : (
-                                <span
-                                    key={k}
-                                    className="px-4 py-2 text-sm font-medium border-r border-slate-100 dark:border-slate-800 last:border-0 text-slate-400 opacity-50 cursor-not-allowed"
-                                    dangerouslySetInnerHTML={{ __html: link.label }}
-                                />
-                            )
-                        ))}
-                    </nav>
-                </div>
-            )}
+            <Pagination data={products} className="mt-6 animate-slide-up" />
 
             {/* --- Modals (Applying SaaS Forms) --- */}
             
             {/* Add Category Modal */}
-            {showAddCategoryModal && (
-                <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-                    <Card className="w-full max-w-md animate-slide-up">
-                        <h3 className="text-lg font-bold text-slate-900 mb-6">Add New Category</h3>
-                        <div className="saas-form-group">
+            <Modal show={showAddCategoryModal} onClose={() => setShowAddCategoryModal(false)} maxWidth="md">
+                <div className="bg-white dark:bg-slate-900 rounded-2xl overflow-hidden">
+                    <div className="px-6 py-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                            <div className="p-2.5 bg-indigo-50 dark:bg-indigo-950/60 rounded-xl text-indigo-600 dark:text-indigo-400">
+                                <Layers size={20} />
+                            </div>
+                            <div>
+                                <h3 className="text-lg font-bold text-slate-900 dark:text-white">Add New Category</h3>
+                                <p className="text-xs text-slate-500 dark:text-slate-400">Group products by device or accessory category</p>
+                            </div>
+                        </div>
+                        <button type="button" onClick={() => setShowAddCategoryModal(false)} className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
+                            <X size={18} />
+                        </button>
+                    </div>
+                    <div className="p-6">
+                        <div className="saas-form-group !mb-0">
                             <label className="saas-label">Category Name</label>
                             <input type="text" className="saas-input" placeholder="e.g. Smartphones" value={newCategory} onChange={e => setNewCategory(e.target.value)} />
                         </div>
-                        <div className="flex justify-end gap-3 mt-8">
-                            <Button variant="secondary" onClick={() => setShowAddCategoryModal(false)}>Cancel</Button>
-                            <Button variant="primary" onClick={handleAddCategorySubmit} isLoading={loading}>Save Category</Button>
-                        </div>
-                    </Card>
+                    </div>
+                    <div className="px-6 py-4 border-t border-slate-100 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-800/40 flex justify-end gap-3">
+                        <Button variant="secondary" onClick={() => setShowAddCategoryModal(false)}>Cancel</Button>
+                        <Button variant="primary" onClick={handleAddCategorySubmit} isLoading={loading}>Save Category</Button>
+                    </div>
                 </div>
-            )}
+            </Modal>
 
             {/* Add Brand Modal */}
-            {showAddBrandModal && (
-                <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-                    <Card className="w-full max-w-md animate-slide-up">
-                        <h3 className="text-lg font-bold text-slate-900 mb-6">Add New Brand</h3>
-                        <div className="saas-form-group">
+            <Modal show={showAddBrandModal} onClose={() => setShowAddBrandModal(false)} maxWidth="md">
+                <div className="bg-white dark:bg-slate-900 rounded-2xl overflow-hidden">
+                    <div className="px-6 py-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                            <div className="p-2.5 bg-indigo-50 dark:bg-indigo-950/60 rounded-xl text-indigo-600 dark:text-indigo-400">
+                                <Smartphone size={20} />
+                            </div>
+                            <div>
+                                <h3 className="text-lg font-bold text-slate-900 dark:text-white">Add New Brand</h3>
+                                <p className="text-xs text-slate-500 dark:text-slate-400">Register a manufacturer or accessory brand</p>
+                            </div>
+                        </div>
+                        <button type="button" onClick={() => setShowAddBrandModal(false)} className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
+                            <X size={18} />
+                        </button>
+                    </div>
+                    <div className="p-6">
+                        <div className="saas-form-group !mb-0">
                             <label className="saas-label">Brand Name</label>
                             <input type="text" className="saas-input" placeholder="e.g. Apple" value={newBrand} onChange={e => setNewBrand(e.target.value)} />
                         </div>
-                        <div className="flex justify-end gap-3 mt-8">
-                            <Button variant="secondary" onClick={() => setShowAddBrandModal(false)}>Cancel</Button>
-                            <Button variant="primary" onClick={handleAddBrandSubmit} isLoading={loading}>Save Brand</Button>
-                        </div>
-                    </Card>
+                    </div>
+                    <div className="px-6 py-4 border-t border-slate-100 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-800/40 flex justify-end gap-3">
+                        <Button variant="secondary" onClick={() => setShowAddBrandModal(false)}>Cancel</Button>
+                        <Button variant="primary" onClick={handleAddBrandSubmit} isLoading={loading}>Save Brand</Button>
+                    </div>
                 </div>
-            )}
+            </Modal>
 
             {/* Add/Edit Product Modal */}
-            {showAddProductModal && (
-                <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-                    <Card className="w-full max-w-md animate-slide-up">
-                        <h3 className="text-lg font-bold text-slate-900 mb-6">{isEditingProduct ? 'Edit Product Model' : 'Add New Product Model'}</h3>
+            <Modal show={showAddProductModal} onClose={() => setShowAddProductModal(false)} maxWidth="md">
+                <div className="bg-white dark:bg-slate-900 rounded-2xl overflow-hidden flex flex-col max-h-[90vh]">
+                    <div className="px-6 py-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between shrink-0">
+                        <div className="flex items-center gap-3">
+                            <div className="p-2.5 bg-indigo-50 dark:bg-indigo-950/60 rounded-xl text-indigo-600 dark:text-indigo-400">
+                                <Package size={20} />
+                            </div>
+                            <div>
+                                <h3 className="text-lg font-bold text-slate-900 dark:text-white">{isEditingProduct ? 'Edit Product Model' : 'Add New Product Model'}</h3>
+                                <p className="text-xs text-slate-500 dark:text-slate-400">{isEditingProduct ? 'Update catalog model details' : 'Add a smartphone model or bulk accessory to catalog'}</p>
+                            </div>
+                        </div>
+                        <button type="button" onClick={() => setShowAddProductModal(false)} className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
+                            <X size={18} />
+                        </button>
+                    </div>
+                    <div className="p-6 overflow-y-auto">
                         
                         <div className="saas-form-group">
                             <label className="saas-label">Category</label>
@@ -1278,23 +1300,34 @@ export default function Inventory({ auth, products, allProducts = [], categories
                                 </div>
                             </>
                         )}
-                        <div className="flex justify-end gap-3 mt-8">
+                        </div>
+                        <div className="px-6 py-4 border-t border-slate-100 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-800/40 flex justify-end gap-3 shrink-0">
                             <Button variant="secondary" onClick={() => setShowAddProductModal(false)}>Cancel</Button>
                             <Button variant="primary" onClick={handleAddProductSubmit} isLoading={loading}>
                                 {isEditingProduct ? 'Update Product' : 'Save Product'}
                             </Button>
                         </div>
-                    </Card>
-                </div>
-            )}
+                    </div>
+            </Modal>
 
             {/* Add Stock Modal */}
-            {showAddModal && (
-                <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4 overflow-y-auto py-10">
-                    <Card className="w-full max-w-lg animate-slide-up">
-                        <h3 className="text-lg font-bold text-slate-900 mb-6">Add New Stock</h3>
-                        
-                        <div className="space-y-4">
+            <Modal show={showAddModal} onClose={() => setShowAddModal(false)} maxWidth="lg">
+                <div className="bg-white dark:bg-slate-900 rounded-2xl overflow-hidden flex flex-col max-h-[90vh]">
+                    <div className="px-6 py-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between shrink-0">
+                        <div className="flex items-center gap-3">
+                            <div className="p-2.5 bg-emerald-50 dark:bg-emerald-950/60 rounded-xl text-emerald-600 dark:text-emerald-400">
+                                <Plus size={20} />
+                            </div>
+                            <div>
+                                <h3 className="text-lg font-bold text-slate-900 dark:text-white">Add New Stock</h3>
+                                <p className="text-xs text-slate-500 dark:text-slate-400">Scan IMEI unit or add bulk accessory inventory</p>
+                            </div>
+                        </div>
+                        <button type="button" onClick={() => setShowAddModal(false)} className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
+                            <X size={18} />
+                        </button>
+                    </div>
+                    <div className="p-6 overflow-y-auto space-y-4">
                             <div>
                                 <label className="saas-label">Select Product Model</label>
                                 <select className="saas-input pl-4" value={productId} onChange={e => setProductId(e.target.value)}>
@@ -1424,57 +1457,58 @@ export default function Inventory({ auth, products, allProducts = [], categories
                                     </div>
                                 </>
                             )}
-                        </div>
-
-                        <div className="flex justify-end gap-3 mt-8 pt-6 border-t border-slate-100">
-                            <Button variant="secondary" onClick={() => setShowAddModal(false)}>Cancel</Button>
-                            <Button variant="primary" onClick={handleAddSubmit} isLoading={loading}>Save Stock</Button>
-                        </div>
-                    </Card>
+                    </div>
+                    <div className="px-6 py-4 border-t border-slate-100 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-800/40 flex justify-end gap-3 shrink-0">
+                        <Button variant="secondary" onClick={() => setShowAddModal(false)}>Cancel</Button>
+                        <Button variant="primary" onClick={handleAddSubmit} isLoading={loading}>Save Stock</Button>
+                    </div>
                 </div>
-            )}
+            </Modal>
 
             {/* View Stock Modal */}
             {showViewModal && (
                 <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-                    <Card className="w-full max-w-6xl animate-slide-up flex flex-col max-h-[90vh]" noPadding>
-                        <div className="p-6 border-b border-slate-100 dark:border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white dark:bg-slate-900 rounded-t-2xl shrink-0">
-                            <h3 className="text-lg font-bold text-slate-900 dark:text-white">
-                                Stock for {viewProduct?.brand?.name} {viewProduct?.model_name}
-                            </h3>
-                            <div className="flex items-center gap-3">
+                    <Card className="w-full max-w-6xl animate-slide-up flex flex-col max-h-[90vh] overflow-hidden" noPadding>
+                        {/* Modal Header */}
+                        <div className="px-6 py-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between gap-4 bg-white dark:bg-slate-900 shrink-0">
+                            <div className="flex items-center gap-3 min-w-0">
+                                <div className="w-10 h-10 rounded-xl bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 font-bold text-sm flex items-center justify-center border border-indigo-100 dark:border-indigo-900/60 shrink-0">
+                                    {(viewProduct?.brand?.name || viewProduct?.model_name || 'P').substring(0, 1).toUpperCase()}
+                                </div>
+                                <div className="min-w-0">
+                                    <h3 className="text-base sm:text-lg font-bold text-slate-900 dark:text-white truncate">
+                                        Stock for {viewProduct?.brand?.name} {viewProduct?.model_name}
+                                    </h3>
+                                    <p className="text-xs text-slate-500 dark:text-slate-400">
+                                        {viewProduct?.type === 'bulk'
+                                            ? `Bulk Accessory • SKU: ${viewProduct?.sku || 'N/A'}`
+                                            : `${viewProduct?.category?.name || 'Serialized Device'} • ${imeisList.length} total unit${imeisList.length === 1 ? '' : 's'} logged`}
+                                    </p>
+                                </div>
+                            </div>
+                            <div className="flex items-center gap-2 shrink-0">
                                 {viewProduct?.type !== 'bulk' && (
-                                    <div className="flex items-center gap-2 flex-wrap">
-                                        <div className="relative">
-                                            <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
-                                            <input
-                                                type="text"
-                                                placeholder="Search IMEI, color..."
-                                                value={imeiSearch}
-                                                onChange={(e) => setImeiSearch(e.target.value)}
-                                                className="pl-8 pr-3 py-1.5 text-xs rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white"
-                                            />
-                                        </div>
-                                        <select
-                                            value={imeiStatusFilter}
-                                            onChange={(e) => setImeiStatusFilter(e.target.value)}
-                                            className="py-1.5 px-2.5 text-xs font-bold rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white"
-                                        >
-                                            <option value="all">All Statuses ({imeisList.length})</option>
-                                            <option value="In Stock">In Stock ({imeisList.filter(i => i.status === 'In Stock').length})</option>
-                                            <option value="aging_30">Aging 30d+ ({imeisList.filter(i => i.status === 'In Stock' && Number(i.days_in_stock || 0) >= 30).length})</option>
-                                            <option value="aging_60">Critical 60d+ ({imeisList.filter(i => i.status === 'In Stock' && Number(i.days_in_stock || 0) >= 60).length})</option>
-                                            <option value="Sold">Sold ({imeisList.filter(i => i.status === 'Sold').length})</option>
-                                            <option value="Defective">Defective ({imeisList.filter(i => i.status === 'Defective').length})</option>
-                                            <option value="At Supplier (Repair)">At Supplier (Repair) ({imeisList.filter(i => i.status === 'At Supplier (Repair)').length})</option>
-                                            <option value="Returned to Supplier">Returned to Supplier ({imeisList.filter(i => i.status === 'Returned to Supplier').length})</option>
-                                            <option value="Reserved">Reserved ({imeisList.filter(i => i.status === 'Reserved').length})</option>
-                                            <option value="Cancelled">Cancelled ({imeisList.filter(i => i.status === 'Cancelled').length})</option>
-                                        </select>
-                                    </div>
+                                    <Button
+                                        variant="primary"
+                                        size="sm"
+                                        icon={Plus}
+                                        onClick={() => {
+                                            setShowViewModal(false);
+                                            setProductId(String(viewProduct.id));
+                                            setShowAddModal(true);
+                                        }}
+                                        className="whitespace-nowrap"
+                                    >
+                                        Add Unit
+                                    </Button>
                                 )}
-                                <button className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors" onClick={() => setShowViewModal(false)}>
-                                    <span className="text-2xl leading-none">&times;</span>
+                                <button
+                                    type="button"
+                                    className="p-2 rounded-xl text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                                    onClick={() => setShowViewModal(false)}
+                                    aria-label="Close modal"
+                                >
+                                    <X size={18} />
                                 </button>
                             </div>
                         </div>
@@ -1541,156 +1575,342 @@ export default function Inventory({ auth, products, allProducts = [], categories
                                     </button>
                                 </div>
                             </div>
-                        ) : (
-                            <div className="overflow-y-auto p-0 flex-auto min-h-0">
-                                {(() => {
-                                    const filteredImeis = imeisList.filter(item => {
-                                        if (imeiStatusFilter === 'aging_30') {
-                                            if (!(item.status === 'In Stock' && Number(item.days_in_stock || 0) >= 30)) return false;
-                                        } else if (imeiStatusFilter === 'aging_60') {
-                                            if (!(item.status === 'In Stock' && Number(item.days_in_stock || 0) >= 60)) return false;
-                                        } else if (imeiStatusFilter !== 'all' && item.status !== imeiStatusFilter) {
-                                            return false;
-                                        }
-                                        if (imeiSearch.trim()) {
-                                            const q = imeiSearch.toLowerCase();
-                                            return (item.imei || '').toLowerCase().includes(q)
-                                                || (item.color || '').toLowerCase().includes(q)
-                                                || (item.storage_capacity || '').toLowerCase().includes(q);
-                                        }
-                                        return true;
-                                    });
-                                    return (
-                                <DataTable 
-                                    headers={['IMEI', 'Storage', 'Color', 'Condition', 'Status', 'Age', 'Funded By', 'Cost Basis', 'Selling Price', { label: 'Actions', className: '!text-center' }]}
-                                    isEmpty={filteredImeis.length === 0}
-                                    emptyState={<div className="p-8 text-center text-slate-500 dark:text-slate-400">No matching stock items found.</div>}
-                                >
-                                    {filteredImeis.map(item => (
-                                        <tr key={item.id}>
-                                            <td className="font-medium text-slate-700 dark:text-slate-200 font-mono text-xs">{item.imei}</td>
-                                            <td>{item.storage_capacity}</td>
-                                            <td>{item.color}</td>
-                                            <td>{item.condition}</td>
-                                            <td>
-                                                <Badge variant={
-                                                    item.status === 'In Stock' ? 'success' :
-                                                    item.status === 'Defective' ? 'danger' :
-                                                    item.status === 'At Supplier (Repair)' ? 'warning' :
-                                                    (item.status === 'In Transit' || item.status === 'Returned to Supplier') ? 'info' : 'neutral'
-                                                }>
-                                                    {item.status === 'Defective' ? '🛠️ Defective' : item.status}
-                                                </Badge>
-                                            </td>
-                                            <td>
-                                                {item.status === 'In Stock' ? (() => {
-                                                    const days = Number(item.days_in_stock || 0);
-                                                    const badgeCls = days >= 60
-                                                        ? 'bg-rose-50 dark:bg-rose-950/60 text-rose-700 dark:text-rose-300 border-rose-200 dark:border-rose-800'
-                                                        : days >= 30
-                                                            ? 'bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-800'
-                                                            : 'bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-700';
-                                                    return (
-                                                        <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold border ${badgeCls}`} title={`In stock for ${days} day(s)`}>
-                                                            <Clock size={10} /> {days}d
-                                                        </span>
-                                                    );
-                                                })() : (
-                                                    <span className="text-slate-400 text-xs">—</span>
-                                                )}
-                                            </td>
-                                            <td>
-                                                {item.partner_investor ? (
-                                                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-purple-50 dark:bg-purple-950/60 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800">
-                                                        {item.partner_investor.name}
-                                                    </span>
-                                                ) : (
-                                                    <span className="text-slate-400 text-xs font-medium">Shop</span>
-                                                )}
-                                            </td>
-                                            <td>
-                                                <div className="font-semibold text-slate-800 dark:text-slate-200">{Number(item.cost_price).toLocaleString()} UGX</div>
-                                                {Number(item.refurbishment_cost || 0) > 0 && (
-                                                    <div className="text-[11px] text-amber-700 dark:text-amber-400 font-medium mt-0.5" title={item.refurbishment_notes || ''}>
-                                                        Buy {Number(item.initial_cost_price ?? item.cost_price).toLocaleString()} + 🛠️ {Number(item.refurbishment_cost).toLocaleString()}
-                                                    </div>
-                                                )}
-                                            </td>
-                                            <td className="font-semibold text-slate-900 dark:text-white">{Number(item.selling_price).toLocaleString()} UGX</td>
-                                            <td className="text-center">
-                                                <div className="flex justify-center gap-1 items-center">
-                                                    {(item.status === 'In Stock' || item.status === 'Defective') && (
+                        ) : (() => {
+                            const inStockItems = imeisList.filter(i => i.status === 'In Stock');
+                            const soldCount = imeisList.filter(i => i.status === 'Sold').length;
+                            const aging30Count = inStockItems.filter(i => Number(i.days_in_stock || 0) >= 30).length;
+                            const activeStockCost = inStockItems.reduce((sum, i) => sum + Number(i.cost_price || 0), 0);
+                            const activePotentialMargin = inStockItems.reduce((sum, i) => sum + Math.max(0, Number(i.selling_price || 0) - Number(i.cost_price || 0)), 0);
+
+                            const filteredImeis = imeisList.filter(item => {
+                                if (imeiStatusFilter === 'aging_30') {
+                                    if (!(item.status === 'In Stock' && Number(item.days_in_stock || 0) >= 30)) return false;
+                                } else if (imeiStatusFilter === 'aging_60') {
+                                    if (!(item.status === 'In Stock' && Number(item.days_in_stock || 0) >= 60)) return false;
+                                } else if (imeiStatusFilter !== 'all' && item.status !== imeiStatusFilter) {
+                                    return false;
+                                }
+                                if (imeiSearch.trim()) {
+                                    const q = imeiSearch.toLowerCase();
+                                    return (item.imei || '').toLowerCase().includes(q)
+                                        || (item.color || '').toLowerCase().includes(q)
+                                        || (item.storage_capacity || '').toLowerCase().includes(q)
+                                        || (item.condition || '').toLowerCase().includes(q)
+                                        || (item.partner_investor?.name || '').toLowerCase().includes(q);
+                                }
+                                return true;
+                            });
+
+                            const paginatedImeis = filteredImeis.slice(
+                                (imeiPage - 1) * imeiPerPage,
+                                imeiPage * imeiPerPage
+                            );
+
+                            return (
+                                <div className="flex flex-col flex-auto min-h-0 bg-slate-50/40 dark:bg-slate-950/30">
+                                    {/* Mini KPI Strip + Filter Bar */}
+                                    <div className="px-6 py-4 space-y-4 border-b border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900 shrink-0">
+                                        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                                            <div className="px-3.5 py-2.5 rounded-xl bg-emerald-50/60 dark:bg-emerald-950/30 border border-emerald-200/70 dark:border-emerald-900/50">
+                                                <div className="text-[10px] font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">In Stock</div>
+                                                <div className="text-lg font-black text-slate-900 dark:text-white mt-0.5">{inStockItems.length} <span className="text-xs font-medium text-slate-400">units</span></div>
+                                            </div>
+                                            <div className="px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/70 dark:border-slate-700/70">
+                                                <div className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Sold</div>
+                                                <div className="text-lg font-black text-slate-900 dark:text-white mt-0.5">{soldCount} <span className="text-xs font-medium text-slate-400">units</span></div>
+                                            </div>
+                                            <div className="px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/70 dark:border-slate-700/70">
+                                                <div className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Active Stock Cost</div>
+                                                <div className="text-base font-black text-slate-900 dark:text-white mt-0.5 font-mono">UGX {activeStockCost.toLocaleString()}</div>
+                                            </div>
+                                            <div className="px-3.5 py-2.5 rounded-xl bg-indigo-50/60 dark:bg-indigo-950/30 border border-indigo-200/70 dark:border-indigo-900/50">
+                                                <div className="text-[10px] font-bold uppercase tracking-wider text-indigo-600 dark:text-indigo-400">Est. Margin (In Stock)</div>
+                                                <div className="text-base font-black text-emerald-600 dark:text-emerald-400 mt-0.5 font-mono">+UGX {activePotentialMargin.toLocaleString()}</div>
+                                            </div>
+                                        </div>
+
+                                        {/* Segmented Status Tabs + Search + Full Status Dropdown */}
+                                        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+                                            <div className="inline-flex flex-wrap items-center p-1 bg-slate-100 dark:bg-slate-800/80 rounded-xl border border-slate-200/70 dark:border-slate-700/70 w-fit">
+                                                {[
+                                                    { key: 'all', label: `All (${imeisList.length})` },
+                                                    { key: 'In Stock', label: `In Stock (${inStockItems.length})` },
+                                                    { key: 'Sold', label: `Sold (${soldCount})` },
+                                                    ...(aging30Count > 0 ? [{ key: 'aging_30', label: `Aging 30d+ (${aging30Count})` }] : []),
+                                                ].map(tab => (
+                                                    <button
+                                                        key={tab.key}
+                                                        type="button"
+                                                        onClick={() => setImeiStatusFilter(tab.key)}
+                                                        className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap ${
+                                                            imeiStatusFilter === tab.key
+                                                                ? 'bg-white dark:bg-slate-900 text-indigo-600 dark:text-indigo-400 shadow-sm'
+                                                                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                                                        }`}
+                                                    >
+                                                        {tab.label}
+                                                    </button>
+                                                ))}
+                                            </div>
+
+                                            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 flex-1 lg:max-w-lg">
+                                                <div className="relative flex-1">
+                                                    <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                                                    <input
+                                                        type="text"
+                                                        placeholder="Search IMEI, storage, color, partner..."
+                                                        value={imeiSearch}
+                                                        onChange={(e) => setImeiSearch(e.target.value)}
+                                                        className="saas-input !pl-9 !py-2 !text-xs w-full"
+                                                    />
+                                                    {imeiSearch && (
                                                         <button
-                                                            className="p-2 text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/50 rounded-lg transition-colors"
-                                                            title="Return to Supplier (RMA / Refund / Swap)"
-                                                            onClick={() => openReturnModal(item)}
+                                                            type="button"
+                                                            onClick={() => setImeiSearch('')}
+                                                            className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
                                                         >
-                                                            <Undo2 size={16} />
+                                                            <X size={14} />
                                                         </button>
                                                     )}
-                                                    {item.status === 'At Supplier (Repair)' && (
-                                                        <button
-                                                            className="px-2 py-1 text-[11px] font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-lg transition-colors flex items-center gap-1 disabled:opacity-50"
-                                                            title="Receive Repaired Device Back into Stock"
-                                                            disabled={receivingId === item.id}
-                                                            onClick={() => handleReceiveFromSupplier(item)}
-                                                        >
-                                                            <RotateCcw size={13} /> {receivingId === item.id ? '...' : 'Receive Back'}
-                                                        </button>
-                                                    )}
-                                                    {item.status !== 'Sold' && item.status !== 'Returned to Supplier' && item.status !== 'Cancelled' && (
-                                                        <button
-                                                            className="p-2 text-slate-400 hover:text-amber-600 dark:hover:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-950/50 rounded-lg transition-colors"
-                                                            title="Add Repair / Refurbishment Cost"
-                                                            onClick={() => openRefurbModal(item)}
-                                                        >
-                                                            <Wrench size={16} />
-                                                        </button>
-                                                    )}
-                                                    <button className="p-2 text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950/50 rounded-lg transition-colors" title="Print Label" onClick={() => {
-                                                        const brandName = viewProduct.brand ? viewProduct.brand.name + ' ' : '';
-                                                        setPreviewLabelData({
-                                                            type: 'imei',
-                                                            id: item.id,
-                                                            qty: 1,
-                                                            labelData: {
-                                                                barcode: item.imei,
-                                                                title: brandName + viewProduct.model_name,
-                                                                subtitle: item.storage_capacity + ' • ' + item.color,
-                                                                condition: item.condition,
-                                                                price: item.selling_price
-                                                            }
-                                                        });
-                                                        setShowLabelPreview(true);
-                                                    }}>
-                                                        <Printer size={16} />
-                                                    </button>
-                                                    <button className="p-2 text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950/50 rounded-lg transition-colors" title="Edit" onClick={() => handleEditStockItem(item)}>
-                                                        <Pencil size={16} />
-                                                    </button>
-                                                    <button className="p-2 text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/50 rounded-lg transition-colors" title="Delete" onClick={() => handleDeleteStockItem(item.id)}>
-                                                        <Trash2 size={16} />
-                                                    </button>
                                                 </div>
-                                            </td>
-                                        </tr>
-                                    ))}
-                                </DataTable>
-                                    );
-                                })()}
-                            </div>
-                        )}
+
+                                                <select
+                                                    value={imeiStatusFilter}
+                                                    onChange={(e) => setImeiStatusFilter(e.target.value)}
+                                                    className="saas-input !py-2 !text-xs sm:w-44"
+                                                >
+                                                    <option value="all">All Statuses ({imeisList.length})</option>
+                                                    <option value="In Stock">In Stock ({inStockItems.length})</option>
+                                                    <option value="aging_30">Aging 30d+ ({aging30Count})</option>
+                                                    <option value="aging_60">Critical 60d+ ({inStockItems.filter(i => Number(i.days_in_stock || 0) >= 60).length})</option>
+                                                    <option value="Sold">Sold ({soldCount})</option>
+                                                    <option value="Defective">Defective ({imeisList.filter(i => i.status === 'Defective').length})</option>
+                                                    <option value="At Supplier (Repair)">At Supplier (Repair) ({imeisList.filter(i => i.status === 'At Supplier (Repair)').length})</option>
+                                                    <option value="Returned to Supplier">Returned to Supplier ({imeisList.filter(i => i.status === 'Returned to Supplier').length})</option>
+                                                    <option value="Reserved">Reserved ({imeisList.filter(i => i.status === 'Reserved').length})</option>
+                                                    <option value="Cancelled">Cancelled ({imeisList.filter(i => i.status === 'Cancelled').length})</option>
+                                                </select>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {/* Consolidated 5-Column Zero-Scroll Table */}
+                                    <div className="overflow-y-auto p-4 sm:p-5 flex-auto min-h-0 space-y-4">
+                                        <DataTable
+                                            headers={[
+                                                'IMEI & Specs',
+                                                'Status & Age',
+                                                'Funded By',
+                                                { label: 'Pricing & Margin', className: '!text-right' },
+                                                { label: 'Actions', className: '!text-center' },
+                                            ]}
+                                            isEmpty={filteredImeis.length === 0}
+                                            emptyState={
+                                                <div className="py-12 text-center text-slate-500 dark:text-slate-400">
+                                                    <Smartphone size={36} className="mx-auto text-slate-300 dark:text-slate-600 mb-2" />
+                                                    <p className="font-semibold text-slate-700 dark:text-slate-300">No matching stock units found.</p>
+                                                </div>
+                                            }
+                                        >
+                                            {paginatedImeis.map(item => {
+                                                const cost = Number(item.cost_price || 0);
+                                                const sell = Number(item.selling_price || 0);
+                                                const margin = sell - cost;
+                                                const days = Number(item.days_in_stock || 0);
+                                                const ageBadgeCls = days >= 60
+                                                    ? 'bg-rose-50 dark:bg-rose-950/60 text-rose-700 dark:text-rose-300 border-rose-200 dark:border-rose-800'
+                                                    : days >= 30
+                                                        ? 'bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-800'
+                                                        : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-700';
+
+                                                return (
+                                                    <tr key={item.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/40 transition-colors">
+                                                        {/* IMEI & Specs */}
+                                                        <td>
+                                                            <div className="font-bold text-slate-900 dark:text-white font-mono text-xs tracking-wide">
+                                                                {item.imei}
+                                                            </div>
+                                                            <div className="flex flex-wrap items-center gap-1.5 mt-1 text-xs text-slate-500 dark:text-slate-400">
+                                                                {item.storage_capacity && (
+                                                                    <span className="px-1.5 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-semibold text-[11px]">
+                                                                        {item.storage_capacity}
+                                                                    </span>
+                                                                )}
+                                                                {item.color && <span>{item.color}</span>}
+                                                                {item.condition && (
+                                                                    <>
+                                                                        <span className="text-slate-300 dark:text-slate-600">•</span>
+                                                                        <span>{item.condition}</span>
+                                                                    </>
+                                                                )}
+                                                            </div>
+                                                        </td>
+
+                                                        {/* Status & Age */}
+                                                        <td>
+                                                            <div className="flex items-center gap-1.5 flex-wrap">
+                                                                <Badge variant={
+                                                                    item.status === 'In Stock' ? 'success' :
+                                                                    item.status === 'Defective' ? 'danger' :
+                                                                    item.status === 'At Supplier (Repair)' ? 'warning' :
+                                                                    (item.status === 'In Transit' || item.status === 'Returned to Supplier') ? 'info' : 'neutral'
+                                                                }>
+                                                                    {item.status === 'Defective' ? '🛠️ Defective' : item.status}
+                                                                </Badge>
+                                                                {item.status === 'In Stock' && (
+                                                                    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold border ${ageBadgeCls}`} title={`In stock for ${days} day(s)`}>
+                                                                        <Clock size={10} /> {days}d
+                                                                    </span>
+                                                                )}
+                                                            </div>
+                                                        </td>
+
+                                                        {/* Funded By */}
+                                                        <td>
+                                                            {item.partner_investor ? (
+                                                                <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-purple-50 dark:bg-purple-950/60 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800">
+                                                                    {item.partner_investor.name}
+                                                                </span>
+                                                            ) : (
+                                                                <span className="text-slate-500 dark:text-slate-400 text-xs font-medium">Shop</span>
+                                                            )}
+                                                        </td>
+
+                                                        {/* Pricing & Margin */}
+                                                        <td className="text-right">
+                                                            <div className="font-bold text-slate-900 dark:text-white font-mono text-sm">
+                                                                UGX {sell.toLocaleString()}
+                                                            </div>
+                                                            <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5 font-mono">
+                                                                Cost: {cost.toLocaleString()}
+                                                                <span className={`ml-1.5 font-bold ${margin >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-500'}`}>
+                                                                    ({margin >= 0 ? '+' : ''}{margin.toLocaleString()})
+                                                                </span>
+                                                            </div>
+                                                            {Number(item.refurbishment_cost || 0) > 0 && (
+                                                                <div className="text-[10px] text-amber-600 dark:text-amber-400 font-medium mt-0.5" title={item.refurbishment_notes || ''}>
+                                                                    Buy {Number(item.initial_cost_price ?? item.cost_price).toLocaleString()} + 🛠️ {Number(item.refurbishment_cost).toLocaleString()}
+                                                                </div>
+                                                            )}
+                                                        </td>
+
+                                                        {/* Actions */}
+                                                        <td className="text-center">
+                                                            <div className="flex justify-center gap-1 items-center">
+                                                                {(item.status === 'In Stock' || item.status === 'Defective') && (
+                                                                    <button
+                                                                        type="button"
+                                                                        className="p-2 text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/50 rounded-lg transition-colors"
+                                                                        title="Return to Supplier (RMA / Refund / Swap)"
+                                                                        onClick={() => openReturnModal(item)}
+                                                                    >
+                                                                        <Undo2 size={15} />
+                                                                    </button>
+                                                                )}
+                                                                {item.status === 'At Supplier (Repair)' && (
+                                                                    <button
+                                                                        type="button"
+                                                                        className="px-2.5 py-1 text-[11px] font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-lg transition-colors flex items-center gap-1 disabled:opacity-50"
+                                                                        title="Receive Repaired Device Back into Stock"
+                                                                        disabled={receivingId === item.id}
+                                                                        onClick={() => handleReceiveFromSupplier(item)}
+                                                                    >
+                                                                        <RotateCcw size={13} /> {receivingId === item.id ? '...' : 'Receive Back'}
+                                                                    </button>
+                                                                )}
+                                                                {item.status !== 'Sold' && item.status !== 'Returned to Supplier' && item.status !== 'Cancelled' && (
+                                                                    <button
+                                                                        type="button"
+                                                                        className="p-2 text-slate-400 hover:text-amber-600 dark:hover:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-950/50 rounded-lg transition-colors"
+                                                                        title="Add Repair / Refurbishment Cost"
+                                                                        onClick={() => openRefurbModal(item)}
+                                                                    >
+                                                                        <Wrench size={15} />
+                                                                    </button>
+                                                                )}
+                                                                <button
+                                                                    type="button"
+                                                                    className="p-2 text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950/50 rounded-lg transition-colors"
+                                                                    title="Print Label"
+                                                                    onClick={() => {
+                                                                        const brandName = viewProduct.brand ? viewProduct.brand.name + ' ' : '';
+                                                                        setPreviewLabelData({
+                                                                            type: 'imei',
+                                                                            id: item.id,
+                                                                            qty: 1,
+                                                                            labelData: {
+                                                                                barcode: item.imei,
+                                                                                title: brandName + viewProduct.model_name,
+                                                                                subtitle: item.storage_capacity + ' • ' + item.color,
+                                                                                condition: item.condition,
+                                                                                price: item.selling_price
+                                                                            }
+                                                                        });
+                                                                        setShowLabelPreview(true);
+                                                                    }}
+                                                                >
+                                                                    <Printer size={15} />
+                                                                </button>
+                                                                <button
+                                                                    type="button"
+                                                                    className="p-2 text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950/50 rounded-lg transition-colors"
+                                                                    title="Edit Unit"
+                                                                    onClick={() => handleEditStockItem(item)}
+                                                                >
+                                                                    <Pencil size={15} />
+                                                                </button>
+                                                                <span className="h-4 w-px bg-slate-200 dark:bg-slate-700 mx-0.5" />
+                                                                <button
+                                                                    type="button"
+                                                                    className="p-2 text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/50 rounded-lg transition-colors"
+                                                                    title="Delete Unit"
+                                                                    onClick={() => handleDeleteStockItem(item.id)}
+                                                                >
+                                                                    <Trash2 size={15} />
+                                                                </button>
+                                                            </div>
+                                                        </td>
+                                                    </tr>
+                                                );
+                                            })}
+                                        </DataTable>
+
+                                        {/* Modal Pagination */}
+                                        <Pagination
+                                            total={filteredImeis.length}
+                                            currentPage={imeiPage}
+                                            perPage={imeiPerPage}
+                                            onPageChange={setImeiPage}
+                                            onPerPageChange={setImeiPerPage}
+                                            className="mt-2"
+                                        />
+                                    </div>
+                                </div>
+                            );
+                        })()}
                     </Card>
                 </div>
             )}
 
             {/* Edit Stock Modal */}
-            {showEditStockModal && editingStock && (
-                <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-                    <Card className="w-full max-w-lg animate-slide-up">
-                        <h3 className="text-lg font-bold text-slate-900 mb-6">Edit Stock Item</h3>
-                        
-                        <div className="space-y-4">
+            <Modal show={showEditStockModal && !!editingStock} onClose={() => setShowEditStockModal(false)} maxWidth="lg">
+                {editingStock && (
+                    <div className="bg-white dark:bg-slate-900 rounded-2xl overflow-hidden flex flex-col max-h-[90vh]">
+                        <div className="px-6 py-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between shrink-0">
+                            <div className="flex items-center gap-3">
+                                <div className="p-2.5 bg-indigo-50 dark:bg-indigo-950/60 rounded-xl text-indigo-600 dark:text-indigo-400">
+                                    <Pencil size={18} />
+                                </div>
+                                <div>
+                                    <h3 className="text-lg font-bold text-slate-900 dark:text-white">Edit Stock Item</h3>
+                                    <p className="text-xs text-slate-500 dark:text-slate-400 font-mono">IMEI: {editingStock.imei}</p>
+                                </div>
+                            </div>
+                            <button type="button" onClick={() => setShowEditStockModal(false)} className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
+                                <X size={18} />
+                            </button>
+                        </div>
+                        <div className="p-6 overflow-y-auto space-y-4">
                             <div>
                                 <label className="saas-label">IMEI</label>
                                 <input type="text" className="saas-input" value={editingStock.imei} onChange={e => setEditingStock({...editingStock, imei: e.target.value})} />
@@ -1748,14 +1968,13 @@ export default function Inventory({ auth, products, allProducts = [], categories
                                 </select>
                             </div>
                         </div>
-
-                        <div className="flex justify-end gap-3 mt-8 pt-6 border-t border-slate-100">
+                        <div className="px-6 py-4 border-t border-slate-100 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-800/40 flex justify-end gap-3 shrink-0">
                             <Button variant="secondary" onClick={() => setShowEditStockModal(false)}>Cancel</Button>
                             <Button variant="primary" onClick={handleUpdateStockSubmit} isLoading={loading}>Update Stock</Button>
                         </div>
-                    </Card>
-                </div>
-            )}
+                    </div>
+                )}
+            </Modal>
 
             {/* Label Preview Modal */}
             {showLabelPreview && previewLabelData && (
@@ -2337,52 +2556,53 @@ export default function Inventory({ auth, products, allProducts = [], categories
             )}
 
             {/* Add Refurbishment / Repair Cost Modal */}
-            {refurbDevice && (
-                <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-[60] flex items-center justify-center p-4 overflow-y-auto">
-                    <Card className="w-full max-w-lg animate-slide-up">
-                        <div className="flex items-center justify-between mb-4">
-                            <div className="flex items-center gap-2.5">
-                                <div className="p-2 rounded-xl bg-amber-100 text-amber-700">
+            <Modal show={!!refurbDevice} onClose={() => setRefurbDevice(null)} maxWidth="lg">
+                {refurbDevice && (
+                    <div className="bg-white dark:bg-slate-900 rounded-2xl overflow-hidden flex flex-col max-h-[90vh]">
+                        <div className="px-6 py-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between shrink-0">
+                            <div className="flex items-center gap-3">
+                                <div className="p-2.5 rounded-xl bg-amber-50 dark:bg-amber-950/60 text-amber-600 dark:text-amber-400">
                                     <Wrench size={18} />
                                 </div>
                                 <div>
-                                    <h3 className="text-lg font-bold text-slate-900">Add Repair / Refurbishment Cost</h3>
-                                    <p className="text-xs text-slate-500 font-mono">
+                                    <h3 className="text-lg font-bold text-slate-900 dark:text-white">Add Repair / Refurbishment Cost</h3>
+                                    <p className="text-xs text-slate-500 dark:text-slate-400 font-mono">
                                         {viewProduct?.brand?.name} {viewProduct?.model_name} • IMEI: {refurbDevice.imei}
                                     </p>
                                 </div>
                             </div>
                             <button
-                                className="text-slate-400 hover:text-slate-600 p-1 rounded-lg"
+                                type="button"
+                                className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
                                 onClick={() => setRefurbDevice(null)}
                             >
                                 <X size={18} />
                             </button>
                         </div>
-
-                        <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200 grid grid-cols-3 gap-3 text-center mb-4">
+                        <div className="p-6 overflow-y-auto">
+                        <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 grid grid-cols-3 gap-3 text-center mb-4">
                             <div>
                                 <div className="text-[10px] font-bold text-slate-400 uppercase">Initial Buy</div>
-                                <div className="text-xs font-bold text-slate-800 mt-0.5">
+                                <div className="text-xs font-bold text-slate-800 dark:text-white mt-0.5">
                                     {Number(refurbDevice.initial_cost_price ?? refurbDevice.cost_price).toLocaleString()} UGX
                                 </div>
                             </div>
                             <div>
-                                <div className="text-[10px] font-bold text-amber-600 uppercase">Prior Repairs</div>
-                                <div className="text-xs font-bold text-amber-700 mt-0.5">
+                                <div className="text-[10px] font-bold text-amber-600 dark:text-amber-400 uppercase">Prior Repairs</div>
+                                <div className="text-xs font-bold text-amber-700 dark:text-amber-300 mt-0.5">
                                     +{Number(refurbDevice.refurbishment_cost || 0).toLocaleString()} UGX
                                 </div>
                             </div>
                             <div>
-                                <div className="text-[10px] font-bold text-indigo-600 uppercase">Current Basis</div>
-                                <div className="text-xs font-extrabold text-indigo-700 mt-0.5">
+                                <div className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 uppercase">Current Basis</div>
+                                <div className="text-xs font-extrabold text-indigo-700 dark:text-indigo-300 mt-0.5">
                                     {Number(refurbDevice.cost_price).toLocaleString()} UGX
                                 </div>
                             </div>
                         </div>
 
                         {Number(refurbForm.amount || 0) > 0 && (
-                            <div className="mb-4 px-3.5 py-2 rounded-xl bg-emerald-50 border border-emerald-200 flex items-center justify-between text-xs font-bold text-emerald-800">
+                            <div className="mb-4 px-3.5 py-2 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 flex items-center justify-between text-xs font-bold text-emerald-800 dark:text-emerald-300">
                                 <span>New Capitalized Cost Basis:</span>
                                 <span className="text-sm font-black">
                                     UGX {(Number(refurbDevice.cost_price || 0) + Number(refurbForm.amount || 0)).toLocaleString()}
@@ -2483,40 +2703,39 @@ export default function Inventory({ auth, products, allProducts = [], categories
                             </div>
                         </div>
 
-                        <div className="flex justify-end gap-3 mt-6 pt-5 border-t border-slate-100">
+                        </div>
+                        <div className="px-6 py-4 border-t border-slate-100 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-800/40 flex justify-end gap-3 shrink-0">
                             <Button variant="secondary" onClick={() => setRefurbDevice(null)}>Cancel</Button>
                             <Button variant="primary" onClick={handleRefurbSubmit} isLoading={loading}>
                                 Capitalize Repair Cost
                             </Button>
                         </div>
-                    </Card>
-                </div>
-            )}
+                    </div>
+                )}
+            </Modal>
 
             {/* Custom Delete Confirmation Modal */}
-            {deleteConfirm.isOpen && (
-                <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[200] flex items-center justify-center p-4 animate-fade-in">
-                    <Card className="w-full max-w-md animate-slide-up !p-0 overflow-hidden">
-                        <div className="p-6 border-b border-slate-100 flex items-start gap-4">
-                            <div className="w-12 h-12 rounded-full bg-rose-100 text-rose-600 flex justify-center items-center shrink-0">
-                                <Trash2 size={24} />
-                            </div>
-                            <div>
-                                <h3 className="text-lg font-bold text-slate-900 mb-1">{deleteConfirm.title}</h3>
-                                <p className="text-slate-500 text-sm leading-relaxed">{deleteConfirm.message}</p>
-                            </div>
+            <Modal show={deleteConfirm.isOpen} onClose={() => setDeleteConfirm({ ...deleteConfirm, isOpen: false })} maxWidth="md">
+                <div className="bg-white dark:bg-slate-900 rounded-2xl overflow-hidden">
+                    <div className="p-6 border-b border-slate-100 dark:border-slate-800 flex items-start gap-4">
+                        <div className="w-12 h-12 rounded-2xl bg-rose-50 dark:bg-rose-950/60 border border-rose-200 dark:border-rose-900 text-rose-600 dark:text-rose-400 flex justify-center items-center shrink-0">
+                            <Trash2 size={22} />
                         </div>
-                        <div className="bg-slate-50 p-4 flex justify-end gap-3 rounded-b-2xl">
-                            <Button variant="secondary" onClick={() => setDeleteConfirm({ ...deleteConfirm, isOpen: false })}>
-                                Cancel
-                            </Button>
-                            <Button variant="danger" className="!bg-rose-600 hover:!bg-rose-700 !text-white !border-rose-600" onClick={deleteConfirm.onConfirm}>
-                                Yes, Delete
-                            </Button>
+                        <div>
+                            <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-1">{deleteConfirm.title}</h3>
+                            <p className="text-slate-500 dark:text-slate-400 text-sm leading-relaxed">{deleteConfirm.message}</p>
                         </div>
-                    </Card>
+                    </div>
+                    <div className="bg-slate-50/70 dark:bg-slate-800/50 px-6 py-4 flex justify-end gap-3">
+                        <Button variant="secondary" onClick={() => setDeleteConfirm({ ...deleteConfirm, isOpen: false })}>
+                            Cancel
+                        </Button>
+                        <Button variant="danger" className="!bg-rose-600 hover:!bg-rose-700 !text-white !border-rose-600" onClick={deleteConfirm.onConfirm}>
+                            Yes, Delete
+                        </Button>
+                    </div>
                 </div>
-            )}
+            </Modal>
         </AuthenticatedLayout>
     );
 }

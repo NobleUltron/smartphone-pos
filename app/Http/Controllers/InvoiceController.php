@@ -47,7 +47,8 @@ class InvoiceController extends Controller
             $query->where('payment_status', $request->payment_status);
         }
 
-        $invoices = $query->paginate(15)->withQueryString();
+        $perPage = max(10, min(100, (int) $request->input('per_page', 15)));
+        $invoices = $query->paginate($perPage)->withQueryString();
 
         $totalInvoiced = (float) Invoice::where('status', '!=', 'Cancelled')->sum('total_amount');
         $totalCollected = (float) InvoicePayment::sum('amount');

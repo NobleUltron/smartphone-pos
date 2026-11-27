@@ -12,6 +12,8 @@ import Button from '@/Components/SaaS/Button';
 import Card from '@/Components/SaaS/Card';
 import TextInput from '@/Components/TextInput';
 import Badge from '@/Components/SaaS/Badge';
+import DataTable from '@/Components/SaaS/DataTable';
+import Pagination from '@/Components/SaaS/Pagination';
 import Modal from '@/Components/Modal';
 import RepairFormModal from './Partials/RepairFormModal';
 import ViewRepairModal from './Partials/ViewRepairModal';
@@ -283,26 +285,24 @@ Thank you.`;
                     </Card>
                 </div>
 
-                {/* Main Table Card */}
-                <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-slate-200/60 dark:border-slate-800 overflow-hidden">
-                    {/* Filters Header */}
-                    <div className="p-4 border-b border-slate-200/60 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/60 flex flex-col lg:flex-row gap-3 justify-between items-stretch lg:items-center">
-                        <div className="relative w-full lg:w-96">
-                            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" size={17} />
-                            <TextInput
+                {/* Standalone Search & Filter Card */}
+                <Card>
+                    <div className="flex flex-col lg:flex-row gap-3 items-stretch lg:items-center">
+                        <div className="relative flex-1">
+                            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" size={18} />
+                            <input
                                 type="text"
                                 placeholder="Search by ticket code, customer name, phone, or model..."
                                 value={searchTerm}
                                 onChange={(e) => setSearchTerm(e.target.value)}
-                                className="pl-10 w-full bg-white dark:bg-slate-900 text-sm"
+                                className="saas-input !pl-10 w-full"
                             />
                         </div>
-                        <div className="flex flex-wrap items-center gap-2">
-                            <Filter size={16} className="text-slate-400 hidden sm:block" />
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:flex items-center gap-3">
                             <select
                                 value={technicianFilter}
                                 onChange={(e) => setTechnicianFilter(e.target.value)}
-                                className="border-slate-200 dark:border-slate-700 rounded-xl text-sm focus:border-rose-500 focus:ring-rose-500 bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-sm"
+                                className="saas-input lg:w-44"
                             >
                                 <option value="All">All Technicians</option>
                                 <option value="unassigned">Unassigned</option>
@@ -313,7 +313,7 @@ Thank you.`;
                             <select
                                 value={statusFilter}
                                 onChange={(e) => setStatusFilter(e.target.value)}
-                                className="border-slate-200 dark:border-slate-700 rounded-xl text-sm focus:border-rose-500 focus:ring-rose-500 bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-sm"
+                                className="saas-input lg:w-40"
                             >
                                 <option value="All">All Statuses</option>
                                 <option value="Pending">Pending</option>
@@ -322,151 +322,164 @@ Thank you.`;
                                 <option value="Delivered">Delivered</option>
                                 <option value="Cancelled">Cancelled</option>
                             </select>
+                            {(searchTerm || statusFilter !== 'All' || technicianFilter !== 'All') && (
+                                <Button
+                                    variant="secondary"
+                                    onClick={() => {
+                                        setSearchTerm('');
+                                        setStatusFilter('All');
+                                        setTechnicianFilter('All');
+                                    }}
+                                >
+                                    Clear
+                                </Button>
+                            )}
                         </div>
                     </div>
+                </Card>
 
-                    {/* Table View (Desktop) */}
-                    <div className="hidden sm:block overflow-x-auto">
-                        <table className="w-full text-left border-collapse">
-                            <thead>
-                                <tr className="bg-slate-50/70 dark:bg-slate-800/80 border-b border-slate-200/60 dark:border-slate-800 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
-                                    <th className="px-6 py-3.5">Ticket</th>
-                                    <th className="px-6 py-3.5">Customer</th>
-                                    <th className="px-6 py-3.5">Device & Issue</th>
-                                    <th className="px-6 py-3.5">Financial Balance</th>
-                                    <th className="px-6 py-3.5">Status</th>
-                                    <th className="px-6 py-3.5 text-right">Actions</th>
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y divide-slate-200/60 dark:divide-slate-800 text-sm">
-                                {repairs.data.length === 0 ? (
-                                    <tr>
-                                        <td colSpan="6" className="px-6 py-12 text-center">
-                                            <div className="flex flex-col items-center justify-center text-slate-500 dark:text-slate-400">
-                                                <div className="w-14 h-14 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center mb-3 text-slate-400">
-                                                    <Wrench size={28} />
-                                                </div>
-                                                <p className="text-base font-semibold text-slate-900 dark:text-white">No repair tickets found</p>
-                                                <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 max-w-sm">No tickets match your search criteria. Create a new intake ticket to get started.</p>
+                {/* Table View (Desktop) */}
+                <div className="hidden md:block">
+                    <DataTable
+                        headers={[
+                            'Ticket',
+                            'Customer',
+                            'Device & Issue',
+                            'Financial Balance',
+                            'Status',
+                            { label: 'Actions', className: 'text-right' },
+                        ]}
+                        isEmpty={repairs.data.length === 0}
+                        emptyState={
+                            <div className="py-12 flex flex-col items-center justify-center text-slate-500 dark:text-slate-400">
+                                <div className="w-14 h-14 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center mb-3 text-slate-400">
+                                    <Wrench size={28} />
+                                </div>
+                                <p className="text-base font-semibold text-slate-900 dark:text-white">No repair tickets found</p>
+                                <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 max-w-sm">No tickets match your search criteria. Create a new intake ticket to get started.</p>
+                            </div>
+                        }
+                    >
+                        {repairs.data.map((repair) => {
+                            const estCost = Number(repair.estimated_cost) || 0;
+                            const totalLayawayPaid = repair.sale?.layaway_payments?.reduce((sum, p) => sum + Number(p.amount_paid || 0), 0) || 0;
+                            const deposit = Math.max(Number(repair.deposit) || 0, totalLayawayPaid);
+                            const balanceDue = Math.max(0, estCost - deposit);
+                            const displayCustomerName = repair.customer?.name || repair.customer_name;
+                            const displayCustomerPhone = repair.customer?.phone || repair.customer_phone;
+
+                            return (
+                                <tr key={repair.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/40 transition-colors">
+                                    <td className="font-medium">
+                                        <div className="font-bold text-slate-900 dark:text-white font-mono tracking-tight">{repair.repair_code}</div>
+                                        <div className="text-xs text-slate-500 dark:text-slate-400 flex items-center gap-1 mt-0.5">
+                                            <Clock size={12} className="text-slate-400" />
+                                            {new Date(repair.created_at).toLocaleDateString()}
+                                        </div>
+                                        {repair.technician && (
+                                            <div className="text-[11px] font-semibold text-indigo-600 dark:text-indigo-400 mt-0.5">
+                                                Tech: {repair.technician.name}
                                             </div>
-                                        </td>
-                                    </tr>
-                                ) : (
-                                    repairs.data.map((repair) => {
-                                        const estCost = Number(repair.estimated_cost) || 0;
-                                        const totalLayawayPaid = repair.sale?.layaway_payments?.reduce((sum, p) => sum + Number(p.amount_paid || 0), 0) || 0;
-                                        const deposit = Math.max(Number(repair.deposit) || 0, totalLayawayPaid);
-                                        const balanceDue = Math.max(0, estCost - deposit);
-                                        const displayCustomerName = repair.customer?.name || repair.customer_name;
-                                        const displayCustomerPhone = repair.customer?.phone || repair.customer_phone;
+                                        )}
+                                    </td>
+                                    <td>
+                                        <div className="flex items-center gap-3">
+                                            <div className="w-9 h-9 rounded-xl bg-rose-50 dark:bg-rose-900/30 text-rose-600 dark:text-rose-400 font-bold text-xs flex items-center justify-center shrink-0">
+                                                {(displayCustomerName || 'C').substring(0, 2).toUpperCase()}
+                                            </div>
+                                            <div>
+                                                <div className="font-bold text-slate-900 dark:text-white">{displayCustomerName}</div>
+                                                <div className="text-xs text-slate-500 dark:text-slate-400">{displayCustomerPhone}</div>
+                                            </div>
+                                        </div>
+                                    </td>
+                                    <td>
+                                        <div className="font-semibold text-slate-900 dark:text-white flex items-center gap-1.5">
+                                            <Smartphone size={14} className="text-slate-400 shrink-0" />
+                                            {repair.device_model}
+                                        </div>
+                                        <div className="text-xs text-slate-500 dark:text-slate-400 truncate max-w-[220px] mt-0.5" title={repair.issue_description}>
+                                            {repair.issue_description}
+                                        </div>
+                                        {repair.parts && repair.parts.length > 0 && (
+                                            <div className="mt-1 flex items-center gap-1 text-[11px] font-medium text-emerald-600 dark:text-emerald-400">
+                                                <Package size={12} />
+                                                {repair.parts.length} {repair.parts.length === 1 ? 'part' : 'parts'} attached
+                                            </div>
+                                        )}
+                                    </td>
+                                    <td className="text-xs space-y-1">
+                                        <div className="text-slate-600 dark:text-slate-400">
+                                            Cost: <span className="font-semibold text-slate-900 dark:text-white">UGX {estCost.toLocaleString()}</span>
+                                        </div>
+                                        <div className="text-slate-600 dark:text-slate-400">
+                                            Deposit: <span className="font-semibold text-emerald-600 dark:text-emerald-400">UGX {deposit.toLocaleString()}</span>
+                                        </div>
+                                        <div className="pt-0.5">
+                                            <Badge variant={balanceDue > 0 ? 'warning' : 'success'}>
+                                                {balanceDue > 0 ? `Due: UGX ${balanceDue.toLocaleString()}` : 'Paid in Full'}
+                                            </Badge>
+                                        </div>
+                                    </td>
+                                    <td>
+                                        {getStatusBadge(repair.status)}
+                                    </td>
+                                    <td className="text-right">
+                                        <div className="flex items-center justify-end gap-1.5">
+                                            <a 
+                                                href={`https://wa.me/${formatWhatsAppNumber(displayCustomerPhone)}?text=${encodeURIComponent(getWhatsAppMessageText(repair))}`}
+                                                target="_blank" 
+                                                rel="noreferrer"
+                                                className="p-2 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-900/30 rounded-lg transition-colors"
+                                                title="WhatsApp Customer"
+                                            >
+                                                <MessageSquare size={16} />
+                                            </a>
+                                            <a 
+                                                href={route('repairs.print', repair.id)} 
+                                                target="_blank" 
+                                                rel="noreferrer"
+                                                className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-900/30 rounded-lg transition-colors"
+                                                title="Print Intake Ticket (Claim Stub)"
+                                            >
+                                                <Printer size={16} />
+                                            </a>
+                                            <a 
+                                                href={route('repairs.receipt', repair.id)} 
+                                                target="_blank" 
+                                                rel="noreferrer"
+                                                className="p-2 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-900/30 rounded-lg transition-colors"
+                                                title="Print Official Sales Receipt / Tax Invoice"
+                                            >
+                                                <Receipt size={16} />
+                                            </a>
+                                            <button 
+                                                type="button"
+                                                onClick={() => setViewRepair(repair)}
+                                                className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 rounded-lg transition-colors"
+                                                title="View & Edit Ticket"
+                                            >
+                                                <Eye size={16} />
+                                            </button>
+                                            <button 
+                                                type="button"
+                                                onClick={() => handleDelete(repair)}
+                                                className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-900/30 rounded-lg transition-colors"
+                                                title="Delete Ticket"
+                                            >
+                                                <Trash2 size={16} />
+                                            </button>
+                                        </div>
+                                    </td>
+                                </tr>
+                            );
+                        })}
+                    </DataTable>
+                </div>
 
-                                        return (
-                                            <tr key={repair.id} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/40 transition-colors">
-                                                <td className="px-6 py-4 font-medium">
-                                                    <div className="font-bold text-slate-900 dark:text-white font-mono tracking-tight">{repair.repair_code}</div>
-                                                    <div className="text-xs text-slate-500 dark:text-slate-400 flex items-center gap-1 mt-0.5">
-                                                        <Clock size={12} className="text-slate-400" />
-                                                        {new Date(repair.created_at).toLocaleDateString()}
-                                                    </div>
-                                                    {repair.technician && (
-                                                        <div className="text-[11px] font-semibold text-indigo-600 dark:text-indigo-400 mt-1">
-                                                            Tech: {repair.technician.name}
-                                                        </div>
-                                                    )}
-                                                </td>
-                                                <td className="px-6 py-4">
-                                                    <div className="font-semibold text-slate-900 dark:text-white flex items-center gap-1.5">
-                                                        <User size={14} className="text-slate-400" />
-                                                        {displayCustomerName}
-                                                    </div>
-                                                    <div className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">{displayCustomerPhone}</div>
-                                                </td>
-                                                <td className="px-6 py-4">
-                                                    <div className="font-semibold text-slate-900 dark:text-white flex items-center gap-1.5">
-                                                        <Smartphone size={14} className="text-slate-400" />
-                                                        {repair.device_model}
-                                                    </div>
-                                                    <div className="text-xs text-slate-500 dark:text-slate-400 truncate max-w-[220px] mt-0.5" title={repair.issue_description}>
-                                                        {repair.issue_description}
-                                                    </div>
-                                                    {repair.parts && repair.parts.length > 0 && (
-                                                        <div className="mt-1 flex items-center gap-1 text-[11px] font-medium text-emerald-600 dark:text-emerald-400">
-                                                            <Package size={12} />
-                                                            {repair.parts.length} {repair.parts.length === 1 ? 'part' : 'parts'} attached
-                                                        </div>
-                                                    )}
-                                                </td>
-                                                <td className="px-6 py-4 text-xs space-y-1">
-                                                    <div className="text-slate-600 dark:text-slate-400">
-                                                        Cost: <span className="font-semibold text-slate-900 dark:text-white">UGX {estCost.toLocaleString()}</span>
-                                                    </div>
-                                                    <div className="text-slate-600 dark:text-slate-400">
-                                                        Deposit: <span className="font-semibold text-emerald-600 dark:text-emerald-400">UGX {deposit.toLocaleString()}</span>
-                                                    </div>
-                                                    <div className="pt-1">
-                                                        <span className={`inline-block font-bold px-2 py-0.5 rounded-md text-[11px] ${balanceDue > 0 ? 'bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30' : 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30'}`}>
-                                                            {balanceDue > 0 ? `Due: UGX ${balanceDue.toLocaleString()}` : 'Paid in Full'}
-                                                        </span>
-                                                    </div>
-                                                </td>
-                                                <td className="px-6 py-4">
-                                                    {getStatusBadge(repair.status)}
-                                                </td>
-                                                <td className="px-6 py-4 text-right">
-                                                    <div className="flex items-center justify-end gap-1.5">
-                                                        <a 
-                                                            href={`https://wa.me/${formatWhatsAppNumber(displayCustomerPhone)}?text=${encodeURIComponent(getWhatsAppMessageText(repair))}`}
-                                                            target="_blank" 
-                                                            rel="noreferrer"
-                                                            className="p-2 text-slate-400 hover:text-green-600 hover:bg-green-50 rounded-lg transition-colors"
-                                                            title="WhatsApp Customer"
-                                                        >
-                                                            <MessageSquare size={17} />
-                                                        </a>
-                                                        <a 
-                                                            href={route('repairs.print', repair.id)} 
-                                                            target="_blank" 
-                                                            rel="noreferrer"
-                                                            className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"
-                                                            title="Print Intake Ticket (Claim Stub)"
-                                                        >
-                                                            <Printer size={17} />
-                                                        </a>
-                                                        <a 
-                                                            href={route('repairs.receipt', repair.id)} 
-                                                            target="_blank" 
-                                                            rel="noreferrer"
-                                                            className="p-2 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors"
-                                                            title="Print Official Sales Receipt / Tax Invoice"
-                                                        >
-                                                            <Receipt size={17} />
-                                                        </a>
-                                                        <button 
-                                                            onClick={() => setViewRepair(repair)}
-                                                            className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
-                                                            title="View & Edit Ticket"
-                                                        >
-                                                            <Eye size={17} />
-                                                        </button>
-                                                        <button 
-                                                            onClick={() => handleDelete(repair)}
-                                                            className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                                                            title="Delete Ticket"
-                                                        >
-                                                            <Trash2 size={17} />
-                                                        </button>
-                                                    </div>
-                                                </td>
-                                            </tr>
-                                        );
-                                    })
-                                )}
-                            </tbody>
-                        </table>
-                    </div>
-
-                    {/* Mobile Card List View */}
-                    <div className="sm:hidden divide-y divide-slate-200/60 dark:divide-slate-800">
+                {/* Mobile Card List View */}
+                <Card noPadding className="md:hidden overflow-hidden">
+                    <div className="divide-y divide-slate-100 dark:divide-slate-800">
                         {repairs.data.length === 0 ? (
                             <div className="p-8 text-center text-slate-500 dark:text-slate-400">
                                 <Wrench size={32} className="mx-auto mb-2 text-slate-400" />
@@ -504,6 +517,7 @@ Thank you.`;
                                             </div>
                                             <div className="flex items-center gap-2">
                                                 <button 
+                                                    type="button"
                                                     onClick={() => setViewRepair(repair)}
                                                     className="px-2.5 py-1.5 text-indigo-600 dark:text-indigo-300 bg-indigo-50 dark:bg-indigo-950/60 rounded-lg font-bold text-xs flex items-center gap-1"
                                                 >
@@ -512,6 +526,7 @@ Thank you.`;
                                                 <a 
                                                     href={route('repairs.print', repair.id)} 
                                                     target="_blank" 
+                                                    rel="noreferrer"
                                                     className="p-1.5 text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 rounded-lg hover:text-rose-600 transition-colors"
                                                     title="Print Intake Ticket"
                                                 >
@@ -520,6 +535,7 @@ Thank you.`;
                                                 <a 
                                                     href={route('repairs.receipt', repair.id)} 
                                                     target="_blank" 
+                                                    rel="noreferrer"
                                                     className="p-1.5 text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 rounded-lg hover:text-emerald-600 transition-colors"
                                                     title="Print Sales Receipt / Invoice"
                                                 >
@@ -532,40 +548,10 @@ Thank you.`;
                             })
                         )}
                     </div>
+                </Card>
 
-                    {/* Pagination */}
-                    {repairs.links && repairs.links.length > 3 && (
-                        <div className="px-6 py-4 border-t border-slate-200/60 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/40 flex flex-wrap items-center justify-between gap-2">
-                            <span className="text-xs text-slate-500 dark:text-slate-400">
-                                Showing {repairs.from || 0} to {repairs.to || 0} of {repairs.total || 0}
-                            </span>
-                            <div className="flex flex-wrap items-center gap-1.5">
-                                {repairs.links.map((link, k) => (
-                                    link.url ? (
-                                        <Link
-                                            key={k}
-                                            href={link.url}
-                                            preserveScroll
-                                            preserveState
-                                            className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
-                                                link.active 
-                                                    ? 'bg-rose-500 text-white shadow-sm' 
-                                                    : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700'
-                                            }`}
-                                            dangerouslySetInnerHTML={{ __html: link.label }}
-                                        />
-                                    ) : (
-                                        <span
-                                            key={k}
-                                            className="px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-400 opacity-40 cursor-not-allowed bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700"
-                                            dangerouslySetInnerHTML={{ __html: link.label }}
-                                        />
-                                    )
-                                ))}
-                            </div>
-                        </div>
-                    )}
-                </div>
+                {/* Pagination */}
+                <Pagination data={repairs} className="mt-2" />
             </div>
 
             <RepairFormModal 

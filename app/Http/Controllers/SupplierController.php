@@ -35,7 +35,8 @@ class SupplierController extends Controller
             $query->where('credit_balance', '>', 0);
         }
 
-        $suppliers = $query->orderBy('name')->paginate(10)->through(function($supplier) {
+        $perPage = max(10, min(100, (int) $request->input('per_page', 10)));
+        $suppliers = $query->orderBy('name')->paginate($perPage)->through(function($supplier) {
             $total = (float) ($supplier->purchases_sum_total_amount ?? 0);
             $paid = (float) ($supplier->purchases_sum_paid_amount ?? 0);
             $supplier->balance = max(0, $total - $paid);

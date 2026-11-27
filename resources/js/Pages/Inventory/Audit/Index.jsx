@@ -7,6 +7,8 @@ import PageHeader from '@/Components/SaaS/PageHeader';
 import Card from '@/Components/SaaS/Card';
 import Button from '@/Components/SaaS/Button';
 import Badge from '@/Components/SaaS/Badge';
+import DataTable from '@/Components/SaaS/DataTable';
+import Pagination from '@/Components/SaaS/Pagination';
 import Modal from '@/Components/Modal';
 
 export default function Index({ audits = {}, metrics = {} }) {
@@ -102,96 +104,125 @@ export default function Index({ audits = {}, metrics = {} }) {
                 </Card>
             </div>
 
-            {/* Audit History Table */}
-            <Card>
-                <div className="flex justify-between items-center mb-6">
-                    <h3 className="text-lg font-bold text-slate-900">Stock Audit Sessions</h3>
-                </div>
+            {/* Audit History Desktop Table */}
+            <div className="hidden md:block">
+                <DataTable
+                    headers={[
+                        'Audit Ref & Title',
+                        'Auditor',
+                        { label: 'Expected', className: 'text-center' },
+                        { label: 'Scanned', className: 'text-center' },
+                        { label: 'Missing', className: 'text-center' },
+                        'Status',
+                        { label: 'Action', className: 'text-right' },
+                    ]}
+                    isEmpty={!audits.data || audits.data.length === 0}
+                    emptyState={
+                        <div className="py-12 text-center text-slate-400">
+                            <Scan size={40} className="mx-auto text-slate-300 dark:text-slate-600 mb-3" />
+                            <p>No stock audit sessions recorded yet. Click <strong>Start Audit Session</strong> to begin.</p>
+                        </div>
+                    }
+                >
+                    {audits.data?.map((audit) => (
+                        <tr key={audit.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/40 transition-colors">
+                            <td>
+                                <div className="font-bold text-slate-900 dark:text-white">{audit.title}</div>
+                                <div className="text-xs font-mono text-indigo-600 dark:text-indigo-400 mt-0.5">{audit.audit_number}</div>
+                                <div className="text-[11px] text-slate-400 mt-0.5">Started: {dayjs(audit.started_at).format('DD MMM YYYY, HH:mm')}</div>
+                            </td>
+                            <td className="font-medium text-slate-700 dark:text-slate-300">
+                                {audit.user?.name || 'System'}
+                            </td>
+                            <td className="text-center font-bold text-slate-900 dark:text-white">
+                                {audit.total_expected}
+                            </td>
+                            <td className="text-center font-bold text-emerald-600 dark:text-emerald-400">
+                                {audit.total_scanned}
+                            </td>
+                            <td className="text-center font-bold text-rose-600 dark:text-rose-400">
+                                {audit.total_missing}
+                            </td>
+                            <td>
+                                {audit.status === 'In Progress' ? (
+                                    <Badge variant="warning">In Progress</Badge>
+                                ) : audit.status === 'Completed' ? (
+                                    <Badge variant="success">Completed</Badge>
+                                ) : (
+                                    <Badge variant="danger">Cancelled</Badge>
+                                )}
+                            </td>
+                            <td className="text-right">
+                                <div className="flex items-center justify-end gap-2">
+                                    <Link
+                                        href={route('inventory.audits.show', audit.id)}
+                                        className="px-3 py-1.5 bg-indigo-50 dark:bg-indigo-900/30 hover:bg-indigo-100 dark:hover:bg-indigo-900/50 text-indigo-700 dark:text-indigo-300 text-xs font-bold rounded-lg transition-colors inline-flex items-center gap-1 whitespace-nowrap"
+                                    >
+                                        {audit.status === 'In Progress' ? 'Resume Scan' : 'View Audit'} <ArrowRight size={14} />
+                                    </Link>
+                                    {audit.status === 'Completed' && (
+                                        <a
+                                            href={route('inventory.audits.export', audit.id)}
+                                            target="_blank"
+                                            rel="noreferrer"
+                                            className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 rounded-lg transition-colors"
+                                            title="Export PDF Report"
+                                        >
+                                            <FileText size={16} />
+                                        </a>
+                                    )}
+                                    <button
+                                        type="button"
+                                        onClick={() => { setAuditToDelete(audit); setShowDeleteModal(true); }}
+                                        className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-900/30 rounded-lg transition-colors"
+                                        title="Delete Audit Session"
+                                    >
+                                        <Trash2 size={16} />
+                                    </button>
+                                </div>
+                            </td>
+                        </tr>
+                    ))}
+                </DataTable>
+            </div>
 
-                <div className="overflow-x-auto">
-                    <table className="w-full text-sm text-left">
-                        <thead className="text-xs text-slate-500 uppercase bg-slate-50/50 border-b border-slate-200">
-                            <tr>
-                                <th className="px-6 py-4 font-semibold">Audit Ref & Title</th>
-                                <th className="px-6 py-4 font-semibold">Auditor</th>
-                                <th className="px-6 py-4 font-semibold text-center">Expected</th>
-                                <th className="px-6 py-4 font-semibold text-center">Scanned</th>
-                                <th className="px-6 py-4 font-semibold text-center">Missing</th>
-                                <th className="px-6 py-4 font-semibold">Status</th>
-                                <th className="px-6 py-4 font-semibold text-right">Action</th>
-                            </tr>
-                        </thead>
-                        <tbody className="divide-y divide-slate-100">
-                            {(!audits.data || audits.data.length === 0) ? (
-                                <tr>
-                                    <td colSpan="7" className="px-6 py-12 text-center text-slate-400">
-                                        No stock audit sessions recorded yet. Click <strong>Start Audit Session</strong> to begin.
-                                    </td>
-                                </tr>
-                            ) : (
-                                audits.data.map((audit) => (
-                                    <tr key={audit.id} className="hover:bg-slate-50 transition-colors">
-                                        <td className="px-6 py-4">
-                                            <div className="font-bold text-slate-900">{audit.title}</div>
-                                            <div className="text-xs font-mono text-indigo-600 mt-0.5">{audit.audit_number}</div>
-                                            <div className="text-[11px] text-slate-400 mt-0.5">Started: {dayjs(audit.started_at).format('DD MMM YYYY, HH:mm')}</div>
-                                        </td>
-                                        <td className="px-6 py-4 font-medium text-slate-700">
-                                            {audit.user?.name || 'System'}
-                                        </td>
-                                        <td className="px-6 py-4 text-center font-bold text-slate-900">
-                                            {audit.total_expected}
-                                        </td>
-                                        <td className="px-6 py-4 text-center font-bold text-emerald-600">
-                                            {audit.total_scanned}
-                                        </td>
-                                        <td className="px-6 py-4 text-center font-bold text-rose-600">
-                                            {audit.total_missing}
-                                        </td>
-                                        <td className="px-6 py-4">
-                                            {audit.status === 'In Progress' ? (
-                                                <Badge variant="warning">In Progress</Badge>
-                                            ) : audit.status === 'Completed' ? (
-                                                <Badge variant="success">Completed</Badge>
-                                            ) : (
-                                                <Badge variant="danger">Cancelled</Badge>
-                                            )}
-                                        </td>
-                                        <td className="px-6 py-4 text-right">
-                                            <div className="flex items-center justify-end gap-2">
-                                                <Link
-                                                    href={route('inventory.audits.show', audit.id)}
-                                                    className="px-3 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs font-bold rounded-lg transition-colors flex items-center gap-1"
-                                                >
-                                                    {audit.status === 'In Progress' ? 'Resume Scan' : 'View Audit'} <ArrowRight size={14} />
-                                                </Link>
-                                                {audit.status === 'Completed' && (
-                                                    <a
-                                                        href={route('inventory.audits.export', audit.id)}
-                                                        target="_blank"
-                                                        rel="noreferrer"
-                                                        className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
-                                                        title="Export PDF Report"
-                                                    >
-                                                        <FileText size={16} />
-                                                    </a>
-                                                )}
-                                                <button
-                                                    onClick={() => { setAuditToDelete(audit); setShowDeleteModal(true); }}
-                                                    className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"
-                                                    title="Delete Audit Session"
-                                                >
-                                                    <Trash2 size={16} />
-                                                </button>
-                                            </div>
-                                        </td>
-                                    </tr>
-                                ))
-                            )}
-                        </tbody>
-                    </table>
+            {/* Audit History Mobile Cards */}
+            <Card noPadding className="md:hidden overflow-hidden">
+                <div className="divide-y divide-slate-100 dark:divide-slate-800">
+                    {(!audits.data || audits.data.length === 0) ? (
+                        <div className="py-10 text-center text-sm text-slate-400">No stock audit sessions recorded yet.</div>
+                    ) : audits.data.map((audit) => (
+                        <div key={audit.id} className="p-4 space-y-2.5 bg-white dark:bg-slate-900">
+                            <div className="flex items-start justify-between gap-2">
+                                <div>
+                                    <p className="font-bold text-slate-900 dark:text-white text-sm">{audit.title}</p>
+                                    <p className="text-xs font-mono text-indigo-600 dark:text-indigo-400">{audit.audit_number}</p>
+                                    <p className="text-[11px] text-slate-400">{audit.user?.name || 'System'} • {dayjs(audit.started_at).format('DD MMM YYYY')}</p>
+                                </div>
+                                <Badge variant={audit.status === 'In Progress' ? 'warning' : audit.status === 'Completed' ? 'success' : 'danger'}>
+                                    {audit.status}
+                                </Badge>
+                            </div>
+                            <div className="grid grid-cols-3 gap-2 text-center text-xs bg-slate-50 dark:bg-slate-800/60 p-2 rounded-xl border border-slate-100 dark:border-slate-700">
+                                <div><span className="text-[10px] text-slate-400 block">Expected</span><span className="font-bold text-slate-900 dark:text-white">{audit.total_expected}</span></div>
+                                <div><span className="text-[10px] text-slate-400 block">Scanned</span><span className="font-bold text-emerald-600 dark:text-emerald-400">{audit.total_scanned}</span></div>
+                                <div><span className="text-[10px] text-slate-400 block">Missing</span><span className="font-bold text-rose-600 dark:text-rose-400">{audit.total_missing}</span></div>
+                            </div>
+                            <div className="flex items-center gap-2">
+                                <Link href={route('inventory.audits.show', audit.id)} className="flex-1 py-1.5 rounded-lg bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 text-xs font-bold flex items-center justify-center gap-1">
+                                    {audit.status === 'In Progress' ? 'Resume Scan' : 'View Audit'} <ArrowRight size={13} />
+                                </Link>
+                                <button type="button" onClick={() => { setAuditToDelete(audit); setShowDeleteModal(true); }} className="px-3 py-1.5 rounded-lg bg-rose-50 dark:bg-rose-900/30 text-rose-600 dark:text-rose-400">
+                                    <Trash2 size={14} />
+                                </button>
+                            </div>
+                        </div>
+                    ))}
                 </div>
             </Card>
+
+            {/* Pagination */}
+            <Pagination data={audits} />
 
             {/* Start New Audit Modal */}
             <Modal show={showNewModal} onClose={() => setShowNewModal(false)} maxWidth="md">

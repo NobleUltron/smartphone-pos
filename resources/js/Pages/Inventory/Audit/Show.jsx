@@ -11,11 +11,15 @@ import Card from '@/Components/SaaS/Card';
 import Button from '@/Components/SaaS/Button';
 import Modal from '@/Components/Modal';
 import Badge from '@/Components/SaaS/Badge';
+import DataTable from '@/Components/SaaS/DataTable';
+import Pagination from '@/Components/SaaS/Pagination';
 
 export default function Show({ audit, unscannedDevices = [] }) {
     const [scanCode, setScanCode] = useState('');
     const [scanning, setScanning] = useState(false);
     const [activeTab, setActiveTab] = useState('found'); // 'found', 'unscanned', 'unmatched'
+    const [tabPage, setTabPage] = useState(1);
+    const [tabPerPage, setTabPerPage] = useState(15);
     const [itemsList, setItemsList] = useState(audit.items || []);
     const [unscannedList, setUnscannedList] = useState(unscannedDevices);
     const [scannedCount, setScannedCount] = useState(audit.total_scanned || 0);
@@ -372,170 +376,189 @@ export default function Show({ audit, unscannedDevices = [] }) {
             )}
 
             {/* Live Scan Results & Discrepancies Tabs */}
-            <Card>
-                <div className="flex border-b border-slate-200 mb-6 gap-6">
+            <div className="space-y-4">
+                <div className="inline-flex flex-wrap items-center p-1 bg-slate-100 dark:bg-slate-800/80 rounded-xl border border-slate-200/70 dark:border-slate-700/70">
                     <button
-                        onClick={() => setActiveTab('found')}
-                        className={`pb-3 text-sm font-bold flex items-center gap-2 border-b-2 transition-colors ${activeTab === 'found' ? 'border-emerald-500 text-emerald-600' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
+                        type="button"
+                        onClick={() => { setActiveTab('found'); setTabPage(1); }}
+                        className={`px-4 py-2 rounded-lg text-xs font-bold flex items-center gap-2 transition-all whitespace-nowrap ${
+                            activeTab === 'found'
+                                ? 'bg-white dark:bg-slate-900 text-emerald-600 dark:text-emerald-400 shadow-sm'
+                                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                        }`}
                     >
-                        <CheckCircle size={16} /> Verified Scanned ({foundItems.length})
+                        <CheckCircle size={15} /> Verified Scanned ({foundItems.length})
                     </button>
                     <button
-                        onClick={() => setActiveTab('unscanned')}
-                        className={`pb-3 text-sm font-bold flex items-center gap-2 border-b-2 transition-colors ${activeTab === 'unscanned' ? 'border-rose-500 text-rose-600' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
+                        type="button"
+                        onClick={() => { setActiveTab('unscanned'); setTabPage(1); }}
+                        className={`px-4 py-2 rounded-lg text-xs font-bold flex items-center gap-2 transition-all whitespace-nowrap ${
+                            activeTab === 'unscanned'
+                                ? 'bg-white dark:bg-slate-900 text-rose-600 dark:text-rose-400 shadow-sm'
+                                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                        }`}
                     >
-                        <AlertTriangle size={16} /> {audit.status === 'Completed' ? `Logged Missing (${missingItems.length})` : `Unscanned / Missing (${unscannedList.length})`}
+                        <AlertTriangle size={15} /> {audit.status === 'Completed' ? `Logged Missing (${missingItems.length})` : `Unscanned / Missing (${unscannedList.length})`}
                     </button>
                     <button
-                        onClick={() => setActiveTab('unmatched')}
-                        className={`pb-3 text-sm font-bold flex items-center gap-2 border-b-2 transition-colors ${activeTab === 'unmatched' ? 'border-amber-500 text-amber-600' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
+                        type="button"
+                        onClick={() => { setActiveTab('unmatched'); setTabPage(1); }}
+                        className={`px-4 py-2 rounded-lg text-xs font-bold flex items-center gap-2 transition-all whitespace-nowrap ${
+                            activeTab === 'unmatched'
+                                ? 'bg-white dark:bg-slate-900 text-amber-600 dark:text-amber-400 shadow-sm'
+                                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                        }`}
                     >
-                        <HelpCircle size={16} /> Unmatched Scans ({unmatchedItems.length})
+                        <HelpCircle size={15} /> Unmatched Scans ({unmatchedItems.length})
                     </button>
                 </div>
 
                 {/* Tab Content: Verified Scanned */}
                 {activeTab === 'found' && (
-                    <div className="overflow-x-auto">
-                        <table className="w-full text-sm text-left">
-                            <thead className="text-xs text-slate-500 uppercase bg-slate-50 border-b border-slate-200">
-                                <tr>
-                                    <th className="px-6 py-3 font-semibold">Device / Model</th>
-                                    <th className="px-6 py-3 font-semibold">IMEI Scanned</th>
-                                    <th className="px-6 py-3 font-semibold">Scan Status</th>
-                                    <th className="px-6 py-3 font-semibold text-right">Time Scanned</th>
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y divide-slate-100">
-                                {foundItems.length === 0 ? (
-                                    <tr>
-                                        <td colSpan="4" className="px-6 py-8 text-center text-slate-400">
-                                            No devices scanned yet. Start scanning device barcodes above!
+                    <>
+                        <DataTable
+                            headers={[
+                                'Device / Model',
+                                'IMEI Scanned',
+                                'Scan Status',
+                                { label: 'Time Scanned', className: 'text-right' },
+                            ]}
+                            isEmpty={foundItems.length === 0}
+                            emptyState={
+                                <div className="py-10 text-center text-slate-400">
+                                    No devices scanned yet. Start scanning device barcodes above!
+                                </div>
+                            }
+                        >
+                            {foundItems
+                                .slice((tabPage - 1) * tabPerPage, tabPage * tabPerPage)
+                                .map((item) => (
+                                    <tr key={item.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/40 transition-colors">
+                                        <td className="font-bold text-slate-900 dark:text-white">
+                                            {item.device_imei?.product?.brand?.name || ''} {item.device_imei?.product?.model_name || 'Product'}
+                                        </td>
+                                        <td className="font-mono text-indigo-600 dark:text-indigo-400 text-xs">
+                                            {item.imei_scanned}
+                                        </td>
+                                        <td>
+                                            <Badge variant="success">Verified</Badge>
+                                        </td>
+                                        <td className="text-right text-xs text-slate-500 dark:text-slate-400 font-mono">
+                                            {dayjs(item.scanned_at).format('HH:mm:ss')}
                                         </td>
                                     </tr>
-                                ) : (
-                                    foundItems.map((item) => (
-                                        <tr key={item.id} className="hover:bg-slate-50">
-                                            <td className="px-6 py-3 font-bold text-slate-900">
-                                                {item.device_imei?.product?.brand?.name || ''} {item.device_imei?.product?.model_name || 'Product'}
-                                            </td>
-                                            <td className="px-6 py-3 font-mono text-indigo-600">
-                                                {item.imei_scanned}
-                                            </td>
-                                            <td className="px-6 py-3">
-                                                <Badge variant="success">Verified</Badge>
-                                            </td>
-                                            <td className="px-6 py-3 text-right text-xs text-slate-500">
-                                                {dayjs(item.scanned_at).format('HH:mm:ss')}
-                                            </td>
-                                        </tr>
-                                    ))
-                                )}
-                            </tbody>
-                        </table>
-                    </div>
+                                ))}
+                        </DataTable>
+                        <Pagination
+                            total={foundItems.length}
+                            currentPage={tabPage}
+                            perPage={tabPerPage}
+                            onPageChange={setTabPage}
+                            onPerPageChange={setTabPerPage}
+                        />
+                    </>
                 )}
 
                 {/* Tab Content: Unscanned / Missing */}
-                {activeTab === 'unscanned' && (
-                    <div className="overflow-x-auto">
-                        <table className="w-full text-sm text-left">
-                            <thead className="text-xs text-slate-500 uppercase bg-slate-50 border-b border-slate-200">
-                                <tr>
-                                    <th className="px-6 py-3 font-semibold">Expected Device & Model</th>
-                                    <th className="px-6 py-3 font-semibold">DB IMEI</th>
-                                    <th className="px-6 py-3 font-semibold">Current DB Status</th>
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y divide-slate-100">
-                                {audit.status === 'Completed' ? (
-                                    missingItems.length === 0 ? (
-                                        <tr>
-                                            <td colSpan="3" className="px-6 py-8 text-center text-slate-400">
-                                                🎉 All expected inventory items were successfully scanned and verified!
+                {activeTab === 'unscanned' && (() => {
+                    const activeMissingList = audit.status === 'Completed' ? missingItems : unscannedList;
+                    const sliced = activeMissingList.slice((tabPage - 1) * tabPerPage, tabPage * tabPerPage);
+                    return (
+                        <>
+                            <DataTable
+                                headers={[
+                                    'Expected Device & Model',
+                                    'DB IMEI',
+                                    'Current DB Status',
+                                ]}
+                                isEmpty={activeMissingList.length === 0}
+                                emptyState={
+                                    <div className="py-10 text-center text-slate-400">
+                                        🎉 All expected inventory items have been scanned and verified!
+                                    </div>
+                                }
+                            >
+                                {audit.status === 'Completed'
+                                    ? sliced.map((item) => (
+                                        <tr key={item.id} className="hover:bg-rose-50/50 dark:hover:bg-rose-950/20 transition-colors">
+                                            <td className="font-bold text-slate-900 dark:text-white">
+                                                {item.device_imei?.product?.brand?.name || ''} {item.device_imei?.product?.model_name || 'Product'}
                                             </td>
-                                        </tr>
-                                    ) : (
-                                        missingItems.map((item) => (
-                                            <tr key={item.id} className="bg-rose-50/50 hover:bg-rose-50">
-                                                <td className="px-6 py-3 font-bold text-slate-900">
-                                                    {item.device_imei?.product?.brand?.name || ''} {item.device_imei?.product?.model_name || 'Product'}
-                                                </td>
-                                                <td className="px-6 py-3 font-mono text-rose-600 font-bold">
-                                                    {item.imei_scanned}
-                                                </td>
-                                                <td className="px-6 py-3">
-                                                    <Badge variant="danger">Logged Missing</Badge>
-                                                </td>
-                                            </tr>
-                                        ))
-                                    )
-                                ) : (
-                                    unscannedList.length === 0 ? (
-                                        <tr>
-                                            <td colSpan="3" className="px-6 py-8 text-center text-slate-400">
-                                                🎉 All expected inventory items have been scanned!
-                                            </td>
-                                        </tr>
-                                    ) : (
-                                        unscannedList.map((device) => (
-                                            <tr key={device.id} className="hover:bg-slate-50">
-                                                <td className="px-6 py-3 font-bold text-slate-900">
-                                                    {device.product?.brand?.name || ''} {device.product?.model_name || 'Product'}
-                                                </td>
-                                                <td className="px-6 py-3 font-mono text-slate-600">
-                                                    {device.imei}
-                                                </td>
-                                                <td className="px-6 py-3">
-                                                    <Badge variant="warning">Awaiting Scan</Badge>
-                                                </td>
-                                            </tr>
-                                        ))
-                                    )
-                                )}
-                            </tbody>
-                        </table>
-                    </div>
-                )}
-
-                {/* Tab Content: Unmatched Scans */}
-                {activeTab === 'unmatched' && (
-                    <div className="overflow-x-auto">
-                        <table className="w-full text-sm text-left">
-                            <thead className="text-xs text-slate-500 uppercase bg-slate-50 border-b border-slate-200">
-                                <tr>
-                                    <th className="px-6 py-3 font-semibold">Scanned Code / Barcode</th>
-                                    <th className="px-6 py-3 font-semibold">Scan Note</th>
-                                    <th className="px-6 py-3 font-semibold text-right">Time Scanned</th>
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y divide-slate-100">
-                                {unmatchedItems.length === 0 ? (
-                                    <tr>
-                                        <td colSpan="3" className="px-6 py-8 text-center text-slate-400">
-                                            No unmatched or unknown barcodes scanned.
-                                        </td>
-                                    </tr>
-                                ) : (
-                                    unmatchedItems.map((item) => (
-                                        <tr key={item.id} className="bg-amber-50/40 hover:bg-amber-50">
-                                            <td className="px-6 py-3 font-mono font-bold text-amber-700">
+                                            <td className="font-mono text-rose-600 dark:text-rose-400 font-bold text-xs">
                                                 {item.imei_scanned}
                                             </td>
-                                            <td className="px-6 py-3 text-xs text-slate-600">
-                                                {item.notes || 'Unrecorded barcode'}
-                                            </td>
-                                            <td className="px-6 py-3 text-right text-xs text-slate-500">
-                                                {dayjs(item.scanned_at).format('HH:mm:ss')}
+                                            <td>
+                                                <Badge variant="danger">Logged Missing</Badge>
                                             </td>
                                         </tr>
                                     ))
-                                )}
-                            </tbody>
-                        </table>
-                    </div>
+                                    : sliced.map((device) => (
+                                        <tr key={device.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/40 transition-colors">
+                                            <td className="font-bold text-slate-900 dark:text-white">
+                                                {device.product?.brand?.name || ''} {device.product?.model_name || 'Product'}
+                                            </td>
+                                            <td className="font-mono text-slate-600 dark:text-slate-300 text-xs">
+                                                {device.imei}
+                                            </td>
+                                            <td>
+                                                <Badge variant="warning">Awaiting Scan</Badge>
+                                            </td>
+                                        </tr>
+                                    ))}
+                            </DataTable>
+                            <Pagination
+                                total={activeMissingList.length}
+                                currentPage={tabPage}
+                                perPage={tabPerPage}
+                                onPageChange={setTabPage}
+                                onPerPageChange={setTabPerPage}
+                            />
+                        </>
+                    );
+                })()}
+
+                {/* Tab Content: Unmatched Scans */}
+                {activeTab === 'unmatched' && (
+                    <>
+                        <DataTable
+                            headers={[
+                                'Scanned Code / Barcode',
+                                'Scan Note',
+                                { label: 'Time Scanned', className: 'text-right' },
+                            ]}
+                            isEmpty={unmatchedItems.length === 0}
+                            emptyState={
+                                <div className="py-10 text-center text-slate-400">
+                                    No unmatched or unknown barcodes scanned.
+                                </div>
+                            }
+                        >
+                            {unmatchedItems
+                                .slice((tabPage - 1) * tabPerPage, tabPage * tabPerPage)
+                                .map((item) => (
+                                    <tr key={item.id} className="hover:bg-amber-50/40 dark:hover:bg-amber-950/20 transition-colors">
+                                        <td className="font-mono font-bold text-amber-700 dark:text-amber-400 text-xs">
+                                            {item.imei_scanned}
+                                        </td>
+                                        <td className="text-xs text-slate-600 dark:text-slate-300">
+                                            {item.notes || 'Unrecorded barcode'}
+                                        </td>
+                                        <td className="text-right text-xs text-slate-500 dark:text-slate-400 font-mono">
+                                            {dayjs(item.scanned_at).format('HH:mm:ss')}
+                                        </td>
+                                    </tr>
+                                ))}
+                        </DataTable>
+                        <Pagination
+                            total={unmatchedItems.length}
+                            currentPage={tabPage}
+                            perPage={tabPerPage}
+                            onPageChange={setTabPage}
+                            onPerPageChange={setTabPerPage}
+                        />
+                    </>
                 )}
-            </Card>
+            </div>
 
             {/* Custom Finalize Audit Confirmation Modal */}
             <Modal show={showCompleteModal} onClose={() => setShowCompleteModal(false)} maxWidth="md">

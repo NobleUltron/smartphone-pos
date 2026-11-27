@@ -41,7 +41,8 @@ class UserController extends Controller
             $query->where('status', $request->status);
         }
 
-        $users = $query->orderBy('name')->paginate(10)->withQueryString();
+        $perPage = max(10, min(100, (int) $request->input('per_page', 10)));
+        $users = $query->orderBy('name')->paginate($perPage)->withQueryString();
 
         $totalStaff = User::count();
         $cashiers = User::where('role', 'cashier')->count();

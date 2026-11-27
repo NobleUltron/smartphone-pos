@@ -35,7 +35,8 @@ class RepairController extends Controller
             }
         }
 
-        $repairs = $query->with(['user', 'technician', 'customer', 'parts.brand', 'sale.layawayPayments'])->latest()->paginate(10)->withQueryString();
+        $perPage = max(10, min(100, (int) $request->input('per_page', 10)));
+        $repairs = $query->with(['user', 'technician', 'customer', 'parts.brand', 'sale.layawayPayments'])->latest()->paginate($perPage)->withQueryString();
 
         // Customers fetched below with full fields
 

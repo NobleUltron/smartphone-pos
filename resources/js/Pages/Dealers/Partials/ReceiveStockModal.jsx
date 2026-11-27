@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useForm, router } from '@inertiajs/react';
 import Modal from '@/Components/Modal';
 import { Download, X, Search, Plus, Package, Check, Sparkles, CheckCircle2, Trash2, Smartphone, Layers, AlertCircle } from 'lucide-react';
+import toast from 'react-hot-toast';
 
 export default function ReceiveStockModal({
     isOpen,
@@ -94,19 +95,19 @@ export default function ReceiveStockModal({
     const handleAddCurrentToBatch = () => {
         // Validation before staging
         if (mode === 'existing' && !selectedProduct && !data.product_id) {
-            alert('Please select an existing catalog product first.');
+            toast.error('Please select an existing catalog product first.');
             return;
         }
         if (mode === 'new' && !data.model_name.trim()) {
-            alert('Please enter a product model name.');
+            toast.error('Please enter a product model name.');
             return;
         }
         if (!data.wholesale_cost || Number(data.wholesale_cost) < 0) {
-            alert('Please enter dealer wholesale cost.');
+            toast.error('Please enter dealer wholesale cost.');
             return;
         }
         if (!data.retail_price || Number(data.retail_price) <= 0) {
-            alert('Please enter target retail price.');
+            toast.error('Please enter target retail price.');
             return;
         }
 
@@ -138,7 +139,7 @@ export default function ReceiveStockModal({
         };
 
         if (isSerialized && newItem.imei_number && stagedItems.some(i => i.imei_number === newItem.imei_number)) {
-            alert('This IMEI is already in the intake batch slip.');
+            toast.error('This IMEI is already in the intake batch slip.');
             return;
         }
 
@@ -663,7 +664,7 @@ export default function ReceiveStockModal({
                         <button
                             type="button"
                             onClick={handleAddCurrentToBatch}
-                            className="w-full py-2.5 px-4 bg-emerald-50 dark:bg-emerald-950/60 hover:bg-emerald-100 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition-all shadow-sm"
+                            className="w-full py-2.5 px-4 bg-emerald-50 dark:bg-emerald-950/60 hover:bg-emerald-100 dark:hover:bg-emerald-900/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition-all shadow-sm"
                         >
                             <Plus size={16} /> Add This Item to Intake Batch Slip
                         </button>
@@ -686,7 +687,7 @@ export default function ReceiveStockModal({
                                 {stagedItems.map((staged, idx) => (
                                     <div key={idx} className="p-3 flex items-center justify-between hover:bg-white dark:hover:bg-slate-800/80 transition-colors">
                                         <div className="flex items-center gap-2.5">
-                                            <div className={`p-1.5 rounded-lg ${staged.type === 'serialized' ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700'}`}>
+                                            <div className={`p-1.5 rounded-lg ${staged.type === 'serialized' ? 'bg-amber-100 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300' : 'bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300'}`}>
                                                 {staged.type === 'serialized' ? <Smartphone size={14} /> : <Layers size={14} />}
                                             </div>
                                             <div>

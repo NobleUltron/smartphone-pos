@@ -8,6 +8,9 @@ import Card from '@/Components/SaaS/Card';
 import Badge from '@/Components/SaaS/Badge';
 import Button from '@/Components/SaaS/Button';
 import PageHeader from '@/Components/SaaS/PageHeader';
+import DataTable from '@/Components/SaaS/DataTable';
+import Pagination from '@/Components/SaaS/Pagination';
+import Modal from '@/Components/Modal';
 
 export default function WarrantiesIndex({ auth, claims = {}, inStockDevices = [], filters = {}, summary }) {
     const [searchQuery, setSearchQuery] = useState('');
@@ -336,17 +339,26 @@ export default function WarrantiesIndex({ auth, claims = {}, inStockDevices = []
 
             {/* Claims Tracking Table */}
             <div className="animate-slide-up" style={{ animationDelay: '0.2s' }}>
-                <Card noPadding className="overflow-hidden">
-                    <div className="px-6 py-4 border-b border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900 flex flex-col sm:flex-row justify-between items-stretch sm:items-center gap-3">
-                        <h3 className="font-bold text-slate-900 dark:text-white flex items-center gap-2">
-                            <RefreshCw size={20} className="text-pink-500" /> Claims & Returns Log
-                        </h3>
-                        
-                        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5">
+                {/* Standalone Search & Filter Bar */}
+                <Card className="mb-6">
+                    <div className="flex flex-col md:flex-row gap-3 items-stretch md:items-center justify-between">
+                        <div className="relative flex-1">
+                            <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
+                                <Search size={18} />
+                            </div>
+                            <input 
+                                type="text" 
+                                className="saas-input !pl-10 w-full" 
+                                placeholder="Search claims by IMEI, customer, or claim type..." 
+                                value={claimSearchQuery}
+                                onChange={e => setClaimSearchQuery(e.target.value)}
+                            />
+                        </div>
+                        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
                             <select
                                 value={statusFilter}
                                 onChange={(e) => setStatusFilter(e.target.value)}
-                                className="saas-input !py-2 !text-xs font-semibold sm:w-40"
+                                className="saas-input sm:w-48"
                             >
                                 <option value="all">All Statuses</option>
                                 <option value="active">Active (Open)</option>
@@ -357,89 +369,81 @@ export default function WarrantiesIndex({ auth, claims = {}, inStockDevices = []
                                 <option value="Completed">Completed</option>
                                 <option value="Rejected">Rejected</option>
                             </select>
-
-                            <div className="relative w-full sm:w-64">
-                                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
-                                    <Search size={16} />
-                                </div>
-                                <input 
-                                    type="text" 
-                                    className="saas-input !pl-9 !py-2 !text-sm" 
-                                    placeholder="Search IMEI, customer, type..." 
-                                    value={claimSearchQuery}
-                                    onChange={e => setClaimSearchQuery(e.target.value)}
-                                />
-                            </div>
+                            {(claimSearchQuery || statusFilter !== 'all') && (
+                                <Button variant="secondary" onClick={() => { setClaimSearchQuery(''); setStatusFilter('all'); }}>
+                                    Clear
+                                </Button>
+                            )}
                         </div>
                     </div>
+                </Card>
 
-                    {/* Desktop Table */}
-                    <div className="hidden md:block overflow-x-auto">
-                        <table className="saas-table w-full whitespace-nowrap">
-                            <thead>
-                                <tr>
-                                    <th>Claim ID</th>
-                                    <th>Device</th>
-                                    <th>Customer</th>
-                                    <th>Type</th>
-                                    <th>Issue</th>
-                                    <th>Status</th>
-                                    <th>Date</th>
-                                    <th className="text-right">Action</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {claims.data && claims.data.length > 0 ? claims.data.map(claim => (
-                                    <tr key={claim.id}>
-                                        <td className="font-bold text-slate-900 dark:text-white">#{claim.id}</td>
-                                        <td>
-                                            <div className="font-bold text-slate-900 dark:text-white">{claim.device_imei?.product?.brand?.name} {claim.device_imei?.product?.model_name}</div>
-                                            <div className="text-sm text-slate-500 dark:text-slate-400 font-mono mt-0.5">{claim.device_imei?.imei}</div>
-                                        </td>
-                                        <td>
-                                            {claim.customer ? (
-                                                <div>
-                                                    <div className="font-bold text-slate-900 dark:text-white">{claim.customer.name}</div>
-                                                    <div className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">{claim.customer.phone}</div>
-                                                </div>
-                                            ) : <span className="text-slate-500 dark:text-slate-400 italic">Walk-in</span>}
-                                        </td>
-                                        <td>
-                                            <Badge variant="neutral">{claim.claim_type}</Badge>
-                                        </td>
-                                        <td className="max-w-[220px]">
-                                            <div className="truncate text-sm text-slate-900 dark:text-slate-200" title={claim.issue_description}>
-                                                {claim.issue_description}
-                                            </div>
-                                            {claim.resolution_notes && (
-                                                <div className="truncate text-xs text-slate-500 dark:text-slate-400 italic mt-1" title={claim.resolution_notes}>
-                                                    {claim.resolution_notes}
-                                                </div>
-                                            )}
-                                        </td>
-                                        <td>{getStatusBadge(claim.status)}</td>
-                                        <td className="text-slate-500 dark:text-slate-400 text-sm">
-                                            {new Date(claim.created_at).toLocaleDateString()}
-                                        </td>
-                                        <td className="text-right">
-                                            <Button variant="secondary" onClick={() => openUpdateModal(claim)} className="!py-1.5 !px-3 !text-xs">
-                                                Update
-                                            </Button>
-                                        </td>
-                                    </tr>
-                                )) : (
-                                    <tr>
-                                        <td colSpan="8" className="text-center py-12 text-slate-500 dark:text-slate-400">
-                                            No warranty claims or returns logged yet.
-                                        </td>
-                                    </tr>
-                                )}
-                            </tbody>
-                        </table>
-                    </div>
+                {/* Desktop Table */}
+                <div className="hidden md:block">
+                    <DataTable
+                        headers={[
+                            'Claim ID',
+                            'Device',
+                            'Customer',
+                            'Type',
+                            'Issue',
+                            'Status',
+                            'Date',
+                            { label: 'Action', className: 'text-right' },
+                        ]}
+                        isEmpty={!claims.data || claims.data.length === 0}
+                        emptyState={
+                            <div className="py-12 text-center text-slate-500 dark:text-slate-400">
+                                <RefreshCw size={40} className="mx-auto text-slate-300 dark:text-slate-600 mb-3" />
+                                <p className="font-semibold text-slate-700 dark:text-slate-300">No warranty claims or returns logged yet.</p>
+                            </div>
+                        }
+                    >
+                        {claims.data?.map(claim => (
+                            <tr key={claim.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/40 transition-colors">
+                                <td className="font-mono font-bold text-slate-900 dark:text-white">#{claim.id}</td>
+                                <td>
+                                    <div className="font-bold text-slate-900 dark:text-white">{claim.device_imei?.product?.brand?.name} {claim.device_imei?.product?.model_name}</div>
+                                    <div className="text-xs text-slate-500 dark:text-slate-400 font-mono mt-0.5">{claim.device_imei?.imei}</div>
+                                </td>
+                                <td>
+                                    {claim.customer ? (
+                                        <div>
+                                            <div className="font-bold text-slate-900 dark:text-white">{claim.customer.name}</div>
+                                            <div className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">{claim.customer.phone}</div>
+                                        </div>
+                                    ) : <span className="text-slate-500 dark:text-slate-400 italic">Walk-in</span>}
+                                </td>
+                                <td>
+                                    <Badge variant="neutral">{claim.claim_type}</Badge>
+                                </td>
+                                <td className="max-w-[220px]">
+                                    <div className="truncate text-sm text-slate-900 dark:text-slate-200" title={claim.issue_description}>
+                                        {claim.issue_description}
+                                    </div>
+                                    {claim.resolution_notes && (
+                                        <div className="truncate text-xs text-slate-500 dark:text-slate-400 italic mt-0.5" title={claim.resolution_notes}>
+                                            {claim.resolution_notes}
+                                        </div>
+                                    )}
+                                </td>
+                                <td>{getStatusBadge(claim.status)}</td>
+                                <td className="text-slate-500 dark:text-slate-400 text-sm">
+                                    {new Date(claim.created_at).toLocaleDateString()}
+                                </td>
+                                <td className="text-right">
+                                    <Button variant="secondary" size="sm" onClick={() => openUpdateModal(claim)} className="whitespace-nowrap">
+                                        Update
+                                    </Button>
+                                </td>
+                            </tr>
+                        ))}
+                    </DataTable>
+                </div>
 
-                    {/* Mobile Claims Cards */}
-                    <div className="md:hidden divide-y divide-slate-100 dark:divide-slate-800">
+                {/* Mobile Claims Cards */}
+                <Card noPadding className="md:hidden overflow-hidden">
+                    <div className="divide-y divide-slate-100 dark:divide-slate-800">
                         {claims.data && claims.data.length > 0 ? claims.data.map(claim => (
                             <div key={claim.id} className="p-4 space-y-2.5 bg-white dark:bg-slate-900">
                                 <div className="flex items-start justify-between gap-2">
@@ -469,36 +473,27 @@ export default function WarrantiesIndex({ auth, claims = {}, inStockDevices = []
                             <div className="py-10 text-center text-sm text-slate-400">No warranty claims found.</div>
                         )}
                     </div>
-
-                    {/* Pagination */}
-                    {claims.links && claims.links.length > 3 && (
-                        <div className="flex justify-center p-5 border-t border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900">
-                            <nav className="inline-flex flex-wrap bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden">
-                                {claims.links.map((link, k) => (
-                                    <Link 
-                                        key={k}
-                                        href={link.url || '#'}
-                                        preserveScroll
-                                        preserveState
-                                        className={`px-4 py-2 text-sm font-medium border-r border-slate-200 dark:border-slate-700 last:border-0 ${
-                                            link.active ? 'bg-indigo-50 dark:bg-indigo-900/40 text-indigo-600 dark:text-indigo-300 font-bold' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700'
-                                        } ${link.url === null ? 'opacity-50 cursor-not-allowed pointer-events-none' : ''}`}
-                                        dangerouslySetInnerHTML={{ __html: link.label }}
-                                    />
-                                ))}
-                            </nav>
-                        </div>
-                    )}
                 </Card>
+
+                {/* Pagination */}
+                <Pagination data={claims} />
             </div>
 
             {/* Log Claim Modal */}
-            {showClaimModal && selectedDevice && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fade-in">
-                    <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-xl w-full max-w-lg overflow-hidden flex flex-col max-h-[90vh]">
-                        <div className="px-6 py-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
-                            <h3 className="font-bold text-slate-900 dark:text-white">Log Warranty Claim</h3>
-                            <button type="button" onClick={() => setShowClaimModal(false)} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors">
+            <Modal show={showClaimModal && !!selectedDevice} onClose={() => setShowClaimModal(false)} maxWidth="lg">
+                {selectedDevice && (
+                    <div className="bg-white dark:bg-slate-900 rounded-2xl overflow-hidden flex flex-col max-h-[90vh]">
+                        <div className="px-6 py-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between shrink-0">
+                            <div className="flex items-center gap-3">
+                                <div className="p-2.5 bg-indigo-50 dark:bg-indigo-950/60 rounded-xl text-indigo-600 dark:text-indigo-400">
+                                    <ShieldCheck size={20} />
+                                </div>
+                                <div>
+                                    <h3 className="font-bold text-lg text-slate-900 dark:text-white">Log Warranty Claim</h3>
+                                    <p className="text-xs text-slate-500 dark:text-slate-400">Register a repair, replacement, or refund claim</p>
+                                </div>
+                            </div>
+                            <button type="button" onClick={() => setShowClaimModal(false)} className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
                                 <X size={18} />
                             </button>
                         </div>
@@ -628,23 +623,31 @@ export default function WarrantiesIndex({ auth, claims = {}, inStockDevices = []
                                 </div>
                             </form>
                         </div>
-                        <div className="px-6 py-4 border-t border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/50 flex gap-3 justify-end">
+                        <div className="px-6 py-4 border-t border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/50 flex gap-3 justify-end shrink-0">
                             <Button variant="secondary" onClick={() => setShowClaimModal(false)}>Cancel</Button>
                             <Button variant="primary" form="claimForm" type="submit" isLoading={claimForm.processing}>
                                 Submit Claim
                             </Button>
                         </div>
                     </div>
-                </div>
-            )}
+                )}
+            </Modal>
 
             {/* Update Status Modal */}
-            {showUpdateModal && selectedClaim && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fade-in">
-                    <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-xl w-full max-w-lg overflow-hidden flex flex-col max-h-[90vh]">
-                        <div className="px-6 py-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
-                            <h3 className="font-bold text-slate-900 dark:text-white">Update Claim #{selectedClaim.id}</h3>
-                            <button type="button" onClick={() => setShowUpdateModal(false)} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors">
+            <Modal show={showUpdateModal && !!selectedClaim} onClose={() => setShowUpdateModal(false)} maxWidth="lg">
+                {selectedClaim && (
+                    <div className="bg-white dark:bg-slate-900 rounded-2xl overflow-hidden flex flex-col max-h-[90vh]">
+                        <div className="px-6 py-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between shrink-0">
+                            <div className="flex items-center gap-3">
+                                <div className="p-2.5 bg-amber-50 dark:bg-amber-950/60 rounded-xl text-amber-600 dark:text-amber-400">
+                                    <Wrench size={20} />
+                                </div>
+                                <div>
+                                    <h3 className="font-bold text-lg text-slate-900 dark:text-white">Update Claim #{selectedClaim.id}</h3>
+                                    <p className="text-xs text-slate-500 dark:text-slate-400">Update claim status, device disposition, and resolution notes</p>
+                                </div>
+                            </div>
+                            <button type="button" onClick={() => setShowUpdateModal(false)} className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
                                 <X size={18} />
                             </button>
                         </div>
@@ -761,15 +764,15 @@ export default function WarrantiesIndex({ auth, claims = {}, inStockDevices = []
                                 </div>
                             </form>
                         </div>
-                        <div className="px-6 py-4 border-t border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/50 flex gap-3 justify-end">
+                        <div className="px-6 py-4 border-t border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/50 flex gap-3 justify-end shrink-0">
                             <Button variant="secondary" onClick={() => setShowUpdateModal(false)}>Cancel</Button>
                             <Button variant="primary" form="updateForm" type="submit" isLoading={updateForm.processing}>
                                 Save Changes
                             </Button>
                         </div>
                     </div>
-                </div>
-            )}
+                )}
+            </Modal>
         </AuthenticatedLayout>
     );
 }

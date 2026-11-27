@@ -46,7 +46,8 @@ class CustomerController extends Controller
             $query->orderBy('created_at', 'desc');
         }
 
-        $customers = $query->paginate(10)->withQueryString();
+        $perPage = max(10, min(100, (int) $request->input('per_page', 10)));
+        $customers = $query->paginate($perPage)->withQueryString();
 
         $totalCustomers = Customer::count();
         $corporateCustomers = Customer::whereNotNull('company_name')->whereRaw("TRIM(company_name) != ''")->count();

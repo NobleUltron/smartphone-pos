@@ -299,7 +299,8 @@ class CashDrawerController extends Controller
             $query->where('status', $status);
         }
 
-        $drawers = $query->paginate(10)->withQueryString();
+        $perPage = max(10, min(100, (int) $request->input('per_page', 10)));
+        $drawers = $query->paginate($perPage)->withQueryString();
 
         $cashiers = $isManager
             ? User::orderBy('name')->get(['id', 'name'])

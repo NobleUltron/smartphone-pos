@@ -43,7 +43,8 @@ class WarrantyController extends Controller
             $query->where('status', $statusFilter);
         }
 
-        $claims = $query->orderBy('created_at', 'desc')->paginate(10)->withQueryString();
+        $perPage = max(10, min(100, (int) $request->input('per_page', 10)));
+        $claims = $query->orderBy('created_at', 'desc')->paginate($perPage)->withQueryString();
 
         $inStockDevices = DeviceImei::with('product.brand')
             ->where('status', 'In Stock')

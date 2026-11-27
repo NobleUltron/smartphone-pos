@@ -216,17 +216,17 @@ Thank you.`;
             <div className="flex flex-col max-h-[90vh] bg-white dark:bg-slate-900 rounded-2xl overflow-hidden shadow-2xl relative border border-slate-200 dark:border-slate-800">
                 
                 {/* Fixed Header */}
-                <div className="px-6 py-4 bg-slate-900 text-white flex items-center justify-between border-b border-slate-800 shrink-0">
+                <div className="px-6 py-4 bg-white dark:bg-slate-900 flex items-center justify-between border-b border-slate-200 dark:border-slate-800 shrink-0">
                     <div className="flex items-center gap-3">
-                        <div className="w-11 h-11 rounded-xl bg-gradient-to-tr from-indigo-500 to-rose-500 flex items-center justify-center text-white shadow-md shadow-indigo-500/20">
+                        <div className="w-11 h-11 rounded-xl bg-gradient-to-tr from-indigo-500 to-rose-500 flex items-center justify-center text-white shadow-md shadow-indigo-500/20 shrink-0">
                             <Wrench size={22} />
                         </div>
                         <div>
                             <div className="flex items-center gap-3">
-                                <h2 className="text-xl font-bold text-white font-mono tracking-tight">{repair.repair_code}</h2>
+                                <h2 className="text-lg font-bold text-slate-900 dark:text-white font-mono tracking-tight">{repair.repair_code}</h2>
                                 {getStatusBadge(repair.status)}
                             </div>
-                            <p className="text-xs text-slate-400 mt-0.5">Received on {new Date(repair.created_at).toLocaleString()}</p>
+                            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Received on {new Date(repair.created_at).toLocaleString()}</p>
                         </div>
                     </div>
                     <div className="flex items-center gap-2">
@@ -234,10 +234,10 @@ Thank you.`;
                             href={route('repairs.print', repair.id)} 
                             target="_blank" 
                             rel="noreferrer"
-                            className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold flex items-center gap-1.5 transition-colors border border-slate-700 hover:text-white"
+                            className="px-3 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-semibold flex items-center gap-1.5 transition-colors border border-slate-200 dark:border-slate-700"
                             title="Print Intake Claim Ticket"
                         >
-                            <Printer size={15} className="text-rose-400" />
+                            <Printer size={15} className="text-rose-500 dark:text-rose-400" />
                             <span className="hidden sm:inline">Intake Ticket</span>
                         </a>
                         <a 
@@ -253,7 +253,7 @@ Thank you.`;
                         <button 
                             type="button" 
                             onClick={onClose}
-                            className="w-9 h-9 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white flex items-center justify-center transition-colors ml-1"
+                            className="w-9 h-9 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-white flex items-center justify-center transition-colors ml-1"
                         >
                             <X size={20} />
                         </button>
@@ -599,12 +599,12 @@ Thank you.`;
                                     }} 
                                     className="space-y-4"
                                 >
-                                    <div className="flex justify-between items-center bg-slate-900 text-white px-4 py-2 rounded-t-xl">
+                                    <div className="flex justify-between items-center bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-white border border-slate-200 dark:border-slate-700 px-4 py-2.5 rounded-t-xl">
                                         <h3 className="text-sm font-bold flex items-center gap-2">
                                             Record Additional Payment
                                         </h3>
-                                        <div className="text-sm">
-                                            Balance: <span className="font-bold text-emerald-400">UGX {balanceDue.toLocaleString()}</span>
+                                        <div className="text-sm text-slate-600 dark:text-slate-300">
+                                            Balance: <span className="font-bold text-emerald-600 dark:text-emerald-400">UGX {balanceDue.toLocaleString()}</span>
                                         </div>
                                     </div>
                                     <div className="p-4 border border-t-0 border-slate-200 dark:border-slate-800 rounded-b-xl bg-slate-50 dark:bg-slate-800/60 space-y-4">
@@ -681,20 +681,20 @@ Thank you.`;
 
                 {/* Delete Confirmation Overlay */}
                 {showDeletePartModal && (
-                    <div className="absolute inset-0 z-50 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4">
-                        <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6 overflow-hidden animate-in fade-in zoom-in duration-200">
+                    <div className="absolute inset-0 z-50 bg-slate-900/50 dark:bg-slate-950/75 backdrop-blur-sm flex items-center justify-center p-4">
+                        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-2xl w-full max-w-sm p-6 overflow-hidden animate-in fade-in zoom-in duration-200">
                             <div className="flex items-center gap-4 mb-6">
-                                <div className="w-12 h-12 rounded-full bg-rose-100 flex items-center justify-center shrink-0">
-                                    <Trash2 size={24} className="text-rose-600" />
+                                <div className="w-12 h-12 rounded-full bg-rose-100 dark:bg-rose-950/60 flex items-center justify-center shrink-0">
+                                    <Trash2 size={24} className="text-rose-600 dark:text-rose-400" />
                                 </div>
                                 <div>
-                                    <h3 className="text-lg font-bold text-slate-900">Remove Repair Part</h3>
-                                    <p className="text-sm text-slate-500 mt-1">
+                                    <h3 className="text-lg font-bold text-slate-900 dark:text-white">Remove Repair Part</h3>
+                                    <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
                                         Are you sure you want to remove this part? It will be returned to inventory.
                                     </p>
                                 </div>
                             </div>
-                            <div className="flex justify-end gap-3 pt-4 border-t border-slate-100">
+                            <div className="flex justify-end gap-3 pt-4 border-t border-slate-100 dark:border-slate-800">
                                 <Button variant="secondary" onClick={() => setShowDeletePartModal(false)}>
                                     Cancel
                                 </Button>

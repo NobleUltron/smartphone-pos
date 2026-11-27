@@ -82,7 +82,8 @@ class ReceiptHistoryController extends Controller
         $validCount = max(0, $totalReceipts - $refundedCount);
         $avgSaleValue = $validCount > 0 ? round($totalRevenue / $validCount) : 0;
 
-        $sales = $query->paginate(10)->withQueryString();
+        $perPage = max(10, min(100, (int) $request->input('per_page', 10)));
+        $sales = $query->paginate($perPage)->withQueryString();
 
         $settings = [
             'shop_name' => \App\Models\Setting::get('shop_name', 'SmartPOS Kampala'),

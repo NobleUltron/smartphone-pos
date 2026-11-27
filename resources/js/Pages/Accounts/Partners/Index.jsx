@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Head, Link, router, useForm, usePage } from '@inertiajs/react';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import PageHeader from '@/Components/SaaS/PageHeader';
+import Pagination from '@/Components/SaaS/Pagination';
 import Modal from '@/Components/Modal';
 import { 
     Users, 
@@ -44,6 +45,8 @@ export default function PartnersIndex({ partners, metrics, paymentAccounts, unas
     const [showAssignModal, setShowAssignModal] = useState(false);
     const [showStatementModal, setShowStatementModal] = useState(false);
     const [statementTab, setStatementTab] = useState('instock'); // 'instock' | 'sold' | 'ledger'
+    const [statementPage, setStatementPage] = useState(1);
+    const [statementPerPage, setStatementPerPage] = useState(10);
     const [partnerToDelete, setPartnerToDelete] = useState(null);
     const [isDeletingPartner, setIsDeletingPartner] = useState(false);
     const [refurbDevice, setRefurbDevice] = useState(null);
@@ -200,6 +203,7 @@ export default function PartnersIndex({ partners, metrics, paymentAccounts, unas
     const openStatementFor = (partner) => {
         setSelectedPartner(partner);
         setStatementTab('instock');
+        setStatementPage(1);
         setShowStatementModal(true);
     };
 
@@ -1027,14 +1031,14 @@ export default function PartnersIndex({ partners, metrics, paymentAccounts, unas
                         <div className="flex items-center gap-2 border-b border-slate-200 dark:border-slate-800 pb-2">
                             <button
                                 type="button"
-                                onClick={() => setStatementTab('instock')}
+                                onClick={() => { setStatementTab('instock'); setStatementPage(1); }}
                                 className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${statementTab === 'instock' ? 'bg-indigo-600 text-white' : 'text-slate-600 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800'}`}
                             >
                                 In-Stock Phones ({activePartner.in_stock_count})
                             </button>
                             <button
                                 type="button"
-                                onClick={() => setStatementTab('sold')}
+                                onClick={() => { setStatementTab('sold'); setStatementPage(1); }}
                                 className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${statementTab === 'sold' ? 'bg-indigo-600 text-white' : 'text-slate-600 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800'}`}
                             >
                                 Sold Phones & Profit ({activePartner.sold_count})
@@ -1049,8 +1053,11 @@ export default function PartnersIndex({ partners, metrics, paymentAccounts, unas
                                         No active phones on shelf right now. All items funded by {activePartner.name} are sold.
                                     </div>
                                 ) : (
+                                    <>
                                     <div className="max-h-72 overflow-y-auto space-y-2">
-                                        {activePartner.in_stock_devices.map(device => (
+                                        {activePartner.in_stock_devices
+                                            .slice((statementPage - 1) * statementPerPage, statementPage * statementPerPage)
+                                            .map(device => (
                                             <div
                                                 key={device.id}
                                                 className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800 flex items-center justify-between text-xs"
@@ -1097,6 +1104,15 @@ export default function PartnersIndex({ partners, metrics, paymentAccounts, unas
                                             </div>
                                         ))}
                                     </div>
+                                    <Pagination
+                                        total={activePartner.in_stock_devices.length}
+                                        currentPage={statementPage}
+                                        perPage={statementPerPage}
+                                        onPageChange={setStatementPage}
+                                        onPerPageChange={setStatementPerPage}
+                                        className="mt-2"
+                                    />
+                                    </>
                                 )}
                             </div>
                         )}
@@ -1109,8 +1125,11 @@ export default function PartnersIndex({ partners, metrics, paymentAccounts, unas
                                         No sold phones recorded for this partner yet.
                                     </div>
                                 ) : (
+                                    <>
                                     <div className="max-h-72 overflow-y-auto space-y-2">
-                                        {activePartner.sold_devices.map(device => (
+                                        {activePartner.sold_devices
+                                            .slice((statementPage - 1) * statementPerPage, statementPage * statementPerPage)
+                                            .map(device => (
                                             <div
                                                 key={device.id}
                                                 className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800 flex items-center justify-between text-xs"
@@ -1139,6 +1158,15 @@ export default function PartnersIndex({ partners, metrics, paymentAccounts, unas
                                             </div>
                                         ))}
                                     </div>
+                                    <Pagination
+                                        total={activePartner.sold_devices.length}
+                                        currentPage={statementPage}
+                                        perPage={statementPerPage}
+                                        onPageChange={setStatementPage}
+                                        onPerPageChange={setStatementPerPage}
+                                        className="mt-2"
+                                    />
+                                    </>
                                 )}
                             </div>
                         )}

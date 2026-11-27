@@ -84,7 +84,8 @@ class ExpenseController extends Controller
             $query->whereDate('expense_date', '<=', $request->input('date_to'));
         }
 
-        $expenses = $query->paginate(15)->withQueryString();
+        $perPage = max(10, min(100, (int) $request->input('per_page', 15)));
+        $expenses = $query->paginate($perPage)->withQueryString();
 
         // Summary aggregates based on current filter & role scope
         $summaryQuery = clone $query;

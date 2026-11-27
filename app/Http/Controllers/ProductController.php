@@ -160,10 +160,11 @@ class ProductController extends Controller
             }
         }
 
+        $perPage = max(10, min(100, (int) $request->input('per_page', 10)));
         $products = $query->leftJoin('brands', 'products.brand_id', '=', 'brands.id')
             ->orderByRaw('COALESCE(brands.name, products.model_name) ASC')
             ->orderBy('products.model_name', 'asc')
-            ->paginate(10)
+            ->paginate($perPage)
             ->withQueryString();
 
         $categories = Category::orderBy('name', 'asc')->get();

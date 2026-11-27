@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import { Head, Link, useForm, router } from '@inertiajs/react';
 import { Handshake, Phone, MapPin, PackageOpen, CheckCircle, RotateCcw, X, DollarSign, Edit2, Receipt, Printer, Eye, MessageCircle, FileText, Download, TrendingUp, Clock, ShieldCheck, Award, BarChart2, Trash2, Wallet, AlertCircle, Search } from 'lucide-react';
@@ -11,6 +11,7 @@ import PageHeader from '@/Components/SaaS/PageHeader';
 import Card from '@/Components/SaaS/Card';
 import Button from '@/Components/SaaS/Button';
 import Badge from '@/Components/SaaS/Badge';
+import Pagination from '@/Components/SaaS/Pagination';
 import ReceiveStockModal from './Partials/ReceiveStockModal';
 import IssueStockModal from './Partials/IssueStockModal';
 import VoidConsignmentModal from './Partials/VoidConsignmentModal';
@@ -44,6 +45,12 @@ export default function Show({
     const [directionTab, setDirectionTab] = useState('all');
     const [statusTab, setStatusTab] = useState('all');
     const [historySearch, setHistorySearch] = useState('');
+    const [historyPage, setHistoryPage] = useState(1);
+    const [historyPerPage, setHistoryPerPage] = useState(10);
+
+    useEffect(() => {
+        setHistoryPage(1);
+    }, [directionTab, statusTab, historySearch]);
 
     const pendingCount = useMemo(() => (dealer.dealer_items || []).filter(i => i.status === 'Pending').length, [dealer.dealer_items]);
     const soldCount = useMemo(() => (dealer.dealer_items || []).filter(i => i.status === 'Sold').length, [dealer.dealer_items]);
@@ -487,7 +494,7 @@ export default function Show({
                         <div className="flex flex-wrap items-center gap-1.5">
                             <button
                                 onClick={() => setStatusTab('all')}
-                                className={`px-2.5 py-1 text-xs font-bold rounded-lg transition-colors ${statusTab === 'all' ? 'bg-slate-800 dark:bg-slate-200 text-white dark:text-slate-900' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700'}`}
+                                className={`px-2.5 py-1 text-xs font-bold rounded-lg transition-colors ${statusTab === 'all' ? 'bg-indigo-600 text-white shadow-sm' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700'}`}
                             >
                                 All Statuses ({dealer.dealer_items.length})
                             </button>
@@ -535,17 +542,17 @@ export default function Show({
                     </div>
                 </div>
                 <div className="overflow-x-auto">
-                    <table className="w-full text-sm text-left">
-                        <thead className="text-xs text-slate-500 uppercase bg-slate-50/50 border-b border-slate-200">
+                    <table className="saas-table w-full whitespace-nowrap">
+                        <thead>
                             <tr>
-                                <th className="px-6 py-4 font-semibold">Direction / Item</th>
-                                <th className="px-6 py-4 font-semibold">Qty / Status</th>
-                                <th className="px-6 py-4 font-semibold">Timeline</th>
-                                <th className="px-6 py-4 font-semibold">Pricing Structure</th>
-                                <th className="px-6 py-4 font-semibold text-right">Actions</th>
+                                <th>Direction / Item</th>
+                                <th>Qty / Status</th>
+                                <th>Timeline</th>
+                                <th>Pricing Structure</th>
+                                <th className="text-right">Actions</th>
                             </tr>
                         </thead>
-                        <tbody className="divide-y divide-slate-100">
+                        <tbody>
                             {filteredAndSortedItems.length === 0 ? (
                                 <tr>
                                     <td colSpan="5" className="px-6 py-8 text-center text-slate-500">
@@ -554,6 +561,7 @@ export default function Show({
                                 </tr>
                              ) : (
                                 filteredAndSortedItems
+                                    .slice((historyPage - 1) * historyPerPage, historyPage * historyPerPage)
                                     .map((item) => {
                                         const unitCost = Number(item.wholesale_cost || item.dealer_price || 0);
                                         const qtyTotal = Number(item.quantity || 1);
@@ -568,11 +576,11 @@ export default function Show({
                                         <td className="px-6 py-4">
                                             <div className="mb-1">
                                                 {item.direction === 'inward' ? (
-                                                    <span className="px-2 py-0.5 bg-indigo-50 text-indigo-700 border border-indigo-200 rounded-md text-[10px] font-bold uppercase tracking-wider">
+                                                    <span className="px-2 py-0.5 bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800/70 rounded-md text-[10px] font-bold uppercase tracking-wider">
                                                         Received Inward
                                                     </span>
                                                 ) : (
-                                                    <span className="px-2 py-0.5 bg-amber-50 text-amber-700 border border-amber-200 rounded-md text-[10px] font-bold uppercase tracking-wider">
+                                                    <span className="px-2 py-0.5 bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800/70 rounded-md text-[10px] font-bold uppercase tracking-wider">
                                                         Issued Outward
                                                     </span>
                                                 )}
@@ -636,8 +644,13 @@ export default function Show({
                                                                      </div>
                                                                  </div>
                                                              ) : (
-                                                                 <div className="text-xs font-bold text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
-                                                                     <CheckCircle size={12} /> Paid: {formatCurrency(alreadyPaid)}
+                                                                 <div className="flex items-center gap-1.5 flex-wrap">
+                                                                     <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
+                                                                         <CheckCircle size={12} /> Paid: {formatCurrency(alreadyPaid)}
+                                                                     </span>
+                                                                     <span className="px-1.5 py-0.5 bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/70 rounded text-[10px] font-bold uppercase tracking-wide">
+                                                                         {qtySold >= qtyTotal ? 'Settled' : 'Paid for Sold'}
+                                                                     </span>
                                                                  </div>
                                                              )}
                                                          </div>
@@ -658,23 +671,8 @@ export default function Show({
                                             )}
                                         </td>
                                         <td className="px-6 py-4 text-right">
-                                            <div className="flex flex-wrap items-center justify-end gap-2">
-                                                <button 
-                                                    onClick={() => openViewModal(item, false)}
-                                                    className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
-                                                    title="View Details"
-                                                >
-                                                    <Eye size={16} />
-                                                </button>
-                                                {item.status === 'Pending' && (
-                                                    <button 
-                                                        onClick={() => openViewModal(item, true)}
-                                                        className="p-1.5 text-slate-400 hover:text-amber-600 hover:bg-amber-50 rounded-lg transition-colors"
-                                                        title="Edit Item / Pricing Details"
-                                                    >
-                                                        <Edit2 size={16} />
-                                                    </button>
-                                                )}
+                                            <div className="flex flex-wrap items-center justify-end gap-1.5">
+                                                {/* Contextual actions on the left of the right-aligned group */}
                                                 {item.direction === 'inward' && (
                                                      <>
                                                          {qtySold > 0 && remainingOwed > 0 && (
@@ -688,20 +686,15 @@ export default function Show({
                                                              </button>
                                                          )}
                                                          {qtySold > 0 && remainingOwed <= 0 && alreadyPaid > 0 && (
-                                                             <div className="flex items-center gap-1.5">
-                                                                 <span className="px-2 py-1 bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 rounded-lg text-xs font-bold flex items-center gap-1">
-                                                                     <CheckCircle size={13} /> {qtySold >= qtyTotal ? 'Settled' : 'Paid for Sold'}
-                                                                 </span>
-                                                                 <a
-                                                                     href={`/dealers/items/${item.id}/voucher?mode=stream`}
-                                                                     target="_blank"
-                                                                     rel="noreferrer"
-                                                                     className="px-2.5 py-1 bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950/50 dark:hover:bg-indigo-900 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 rounded-lg text-xs font-bold flex items-center gap-1 transition-colors"
-                                                                     title="View / Print Official Payout Voucher (PDF)"
-                                                                 >
-                                                                     <FileText size={13} /> Voucher
-                                                                 </a>
-                                                             </div>
+                                                             <a
+                                                                 href={`/dealers/items/${item.id}/voucher?mode=stream`}
+                                                                 target="_blank"
+                                                                 rel="noreferrer"
+                                                                 className="px-2.5 py-1 bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950/50 dark:hover:bg-indigo-900/70 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 rounded-lg text-xs font-bold flex items-center gap-1 transition-colors"
+                                                                 title="View / Print Official Payout Voucher (PDF)"
+                                                             >
+                                                                 <FileText size={13} /> Voucher
+                                                             </a>
                                                          )}
                                                      </>
                                                 )}
@@ -710,14 +703,14 @@ export default function Show({
                                                         {item.direction !== 'inward' && (
                                                             <button 
                                                                 onClick={() => openActionModal(item, 'sold')}
-                                                                className="px-3 py-1.5 bg-emerald-100 text-emerald-700 hover:bg-emerald-200 rounded-lg text-xs font-bold transition-colors flex items-center gap-1"
+                                                                className="px-3 py-1.5 bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-200 dark:hover:bg-emerald-900/70 rounded-lg text-xs font-bold transition-colors flex items-center gap-1"
                                                             >
                                                                 <CheckCircle size={14} /> Sold
                                                             </button>
                                                         )}
                                                         <button 
                                                             onClick={() => openActionModal(item, 'returned')}
-                                                            className="px-3 py-1.5 bg-blue-100 text-blue-700 hover:bg-blue-200 rounded-lg text-xs font-bold transition-colors flex items-center gap-1"
+                                                            className="px-3 py-1.5 bg-blue-100 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 hover:bg-blue-200 dark:hover:bg-blue-900/70 rounded-lg text-xs font-bold transition-colors flex items-center gap-1"
                                                             title={item.direction === 'inward' ? 'Return device to sourcing dealer and remove from shop stock' : 'Restock item into shop inventory'}
                                                         >
                                                             <RotateCcw size={14} /> {item.direction === 'inward' ? 'Return to Dealer' : 'Restock'}
@@ -734,10 +727,27 @@ export default function Show({
                                                         )}
                                                     </>
                                                 )}
+                                                {/* Universal icon actions pinned at the far right edge */}
+                                                {item.status === 'Pending' && (
+                                                    <button 
+                                                        onClick={() => openViewModal(item, true)}
+                                                        className="p-1.5 text-slate-400 hover:text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-950/60 rounded-lg transition-colors"
+                                                        title="Edit Item / Pricing Details"
+                                                    >
+                                                        <Edit2 size={16} />
+                                                    </button>
+                                                )}
+                                                <button 
+                                                    onClick={() => openViewModal(item, false)}
+                                                    className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-950/60 rounded-lg transition-colors"
+                                                    title="View Details"
+                                                >
+                                                    <Eye size={16} />
+                                                </button>
                                                 {item.status === 'Sold' && item.sale_id && (
                                                     <button 
                                                         onClick={() => openReceiptPreview(item.sale_id)}
-                                                        className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors flex items-center justify-center"
+                                                        className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-950/60 rounded-lg transition-colors flex items-center justify-center"
                                                         title="View Receipt"
                                                     >
                                                         <Printer size={16} />
@@ -753,6 +763,13 @@ export default function Show({
                     </table>
                 </div>
             </Card>
+            <Pagination
+                total={filteredAndSortedItems.length}
+                currentPage={historyPage}
+                perPage={historyPerPage}
+                onPageChange={setHistoryPage}
+                onPerPageChange={setHistoryPerPage}
+            />
 
             {/* Action Modal */}
             <Modal show={actionItem !== null} onClose={closeActionModal} maxWidth="md">

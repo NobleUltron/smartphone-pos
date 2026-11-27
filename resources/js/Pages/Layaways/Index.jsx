@@ -5,6 +5,8 @@ import PageHeader from '@/Components/SaaS/PageHeader';
 import Card from '@/Components/SaaS/Card';
 import Badge from '@/Components/SaaS/Badge';
 import Button from '@/Components/SaaS/Button';
+import DataTable from '@/Components/SaaS/DataTable';
+import Pagination from '@/Components/SaaS/Pagination';
 import Modal from '@/Components/Modal';
 import {
     Clock, CheckCircle2, FileText, DollarSign,
@@ -189,195 +191,182 @@ export default function LayawaysIndex({ auth, layaways, summary, filters = {}, h
                     </div>
                 )}
 
-                {/* Layaways Table Card */}
-                <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-slate-200/80 dark:border-slate-800 overflow-hidden">
-                    <div className="p-5 border-b border-slate-100 dark:border-slate-800 flex flex-col lg:flex-row lg:items-center justify-between gap-4 bg-slate-50/50 dark:bg-slate-800/40">
-                        <div className="flex items-center gap-2.5 flex-wrap">
-                            <div className="w-8 h-8 rounded-lg bg-amber-50 dark:bg-amber-900/30 border border-amber-100 dark:border-amber-800 flex items-center justify-center text-amber-600 dark:text-amber-400 font-bold">
-                                <Clock size={18} />
-                            </div>
-                            <h3 className="text-base font-bold text-slate-900 dark:text-white">Customer Layaways</h3>
-                            <span className="text-xs font-bold text-slate-600 dark:text-slate-300 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-3 py-1 rounded-full shadow-sm">
-                                {totalRecords} Record{totalRecords === 1 ? '' : 's'}
-                            </span>
-                        </div>
-
-                        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
-                            {/* Status Tabs */}
-                            <div className="inline-flex rounded-xl bg-slate-100 dark:bg-slate-800 p-1 border border-slate-200 dark:border-slate-700">
-                                {[
-                                    { key: 'active', label: `Active (${summary?.active_layaways || 0})` },
-                                    { key: 'completed', label: `Completed (${summary?.completed_layaways || 0})` },
-                                    { key: 'all', label: 'All' },
-                                ].map(tab => (
-                                    <button
-                                        key={tab.key}
-                                        type="button"
-                                        onClick={() => setStatusFilter(tab.key)}
-                                        className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
-                                            statusFilter === tab.key
-                                                ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-sm'
-                                                : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200'
-                                        }`}
-                                    >
-                                        {tab.label}
-                                    </button>
-                                ))}
-                            </div>
-
-                            {/* Search Input */}
-                            <div className="relative min-w-[220px]">
-                                <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
-                                <input
-                                    type="text"
-                                    value={searchQuery}
-                                    onChange={(e) => setSearchQuery(e.target.value)}
-                                    placeholder="Search invoice, customer, IMEI..."
-                                    className="saas-input !pl-9 !py-1.5 !text-xs w-full"
-                                />
-                                {searchQuery && (
-                                    <button
-                                        type="button"
-                                        onClick={() => setSearchQuery('')}
-                                        className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
-                                    >
-                                        <X size={14} />
-                                    </button>
-                                )}
-                            </div>
-                        </div>
+                {/* Segmented Status Tabs */}
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div className="inline-flex items-center p-1 bg-slate-100 dark:bg-slate-800/80 rounded-xl border border-slate-200/60 dark:border-slate-700/60 w-fit">
+                        {[
+                            { key: 'active', label: `Active (${summary?.active_layaways || 0})` },
+                            { key: 'completed', label: `Completed (${summary?.completed_layaways || 0})` },
+                            { key: 'all', label: 'All' },
+                        ].map(tab => (
+                            <button
+                                key={tab.key}
+                                type="button"
+                                onClick={() => setStatusFilter(tab.key)}
+                                className={`px-4 py-2 rounded-lg text-xs font-bold transition-all whitespace-nowrap ${
+                                    statusFilter === tab.key
+                                        ? 'bg-white dark:bg-slate-900 text-indigo-600 dark:text-indigo-400 shadow-sm'
+                                        : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200'
+                                }`}
+                            >
+                                {tab.label}
+                            </button>
+                        ))}
                     </div>
+                    <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">
+                        {totalRecords} Record{totalRecords === 1 ? '' : 's'}
+                    </span>
+                </div>
 
-                    {/* Desktop Table */}
-                    <div className="hidden md:block overflow-x-auto">
-                        <table className="w-full text-left border-collapse text-sm">
-                            <thead>
-                                <tr className="bg-slate-50/70 dark:bg-slate-800/60 border-b border-slate-100 dark:border-slate-800 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
-                                    <th className="px-6 py-3.5">Invoice & Date</th>
-                                    <th className="px-6 py-3.5">Customer Contact</th>
-                                    <th className="px-6 py-3.5 text-right">Total Sale</th>
-                                    <th className="px-6 py-3.5 text-right">Paid & Progress</th>
-                                    <th className="px-6 py-3.5 text-right">Balance</th>
-                                    <th className="px-6 py-3.5 text-right">Actions</th>
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                                {rows.map(sale => {
-                                    const paid = getPaidAmount(sale);
-                                    const balance = getBalance(sale);
-                                    const pct = getProgressPercent(sale);
-                                    const isPaid = sale.payment_status === 'Paid' || balance <= 0;
-                                    return (
-                                        <tr key={sale.id} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/50 transition-colors group">
-                                            <td className="px-6 py-4">
-                                                <div className="flex items-center gap-2">
-                                                    <span className="font-extrabold text-slate-900 dark:text-white font-mono text-sm">
-                                                        INV-{sale.id.toString().padStart(5, '0')}
-                                                    </span>
-                                                    {sale.repair_id && (
-                                                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-indigo-50 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-700">
-                                                            <Wrench size={10} /> Repair
-                                                        </span>
-                                                    )}
-                                                </div>
-                                                <div className="text-slate-500 dark:text-slate-400 text-xs flex items-center gap-1.5 mt-0.5 font-medium">
-                                                    <Calendar size={13} className="text-slate-400" />
-                                                    {new Date(sale.created_at).toLocaleDateString()}
-                                                </div>
-                                            </td>
-                                            <td className="px-6 py-4">
-                                                <div className="font-bold text-slate-900 dark:text-white flex items-center gap-2">
-                                                    <User size={14} className="text-slate-400" />
+                {/* Standalone Search Card */}
+                <Card>
+                    <div className="flex flex-col sm:flex-row gap-3">
+                        <div className="relative flex-1">
+                            <Search size={18} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                            <input
+                                type="text"
+                                value={searchQuery}
+                                onChange={(e) => setSearchQuery(e.target.value)}
+                                placeholder="Search invoice #, customer name, phone, or IMEI..."
+                                className="saas-input !pl-10 w-full"
+                            />
+                        </div>
+                        {searchQuery && (
+                            <Button variant="secondary" onClick={() => setSearchQuery('')}>
+                                Clear
+                            </Button>
+                        )}
+                    </div>
+                </Card>
+
+                {/* Desktop Table */}
+                <div className="hidden md:block">
+                    <DataTable
+                        headers={[
+                            'Invoice & Date',
+                            'Customer Contact',
+                            { label: 'Total Sale', className: 'text-right' },
+                            { label: 'Paid & Progress', className: 'text-right' },
+                            { label: 'Balance', className: 'text-right' },
+                            { label: 'Actions', className: 'text-right' },
+                        ]}
+                        isEmpty={rows.length === 0}
+                        emptyState={
+                            <div className="py-12 text-center text-slate-400">
+                                <Clock className="w-12 h-12 text-slate-300 dark:text-slate-600 mx-auto mb-3" />
+                                <p className="font-bold text-slate-700 dark:text-slate-300 text-base">
+                                    {searchQuery ? 'No matching layaways found' : 'No layaways found'}
+                                </p>
+                                <p className="text-xs text-slate-400 mt-1">
+                                    {searchQuery
+                                        ? 'Try clearing your search or switching tabs.'
+                                        : statusFilter === 'active'
+                                            ? 'All customer layaways and installments have been settled.'
+                                            : 'No records available in this view.'}
+                                </p>
+                            </div>
+                        }
+                    >
+                        {rows.map(sale => {
+                            const paid = getPaidAmount(sale);
+                            const balance = getBalance(sale);
+                            const pct = getProgressPercent(sale);
+                            const isPaid = sale.payment_status === 'Paid' || balance <= 0;
+                            return (
+                                <tr key={sale.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/40 transition-colors">
+                                    <td>
+                                        <div className="flex items-center gap-2">
+                                            <span className="font-extrabold text-slate-900 dark:text-white font-mono text-sm">
+                                                INV-{sale.id.toString().padStart(5, '0')}
+                                            </span>
+                                            {sale.repair_id && (
+                                                <Badge variant="primary">
+                                                    <Wrench size={10} className="mr-1 inline" /> Repair
+                                                </Badge>
+                                            )}
+                                        </div>
+                                        <div className="text-slate-500 dark:text-slate-400 text-xs flex items-center gap-1.5 mt-0.5 font-medium">
+                                            <Calendar size={12} className="text-slate-400" />
+                                            {new Date(sale.created_at).toLocaleDateString()}
+                                        </div>
+                                    </td>
+                                    <td>
+                                        <div className="flex items-center gap-3">
+                                            <div className="w-9 h-9 rounded-xl bg-amber-50 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400 font-bold text-xs flex items-center justify-center shrink-0">
+                                                {(sale.customer?.name || 'W').substring(0, 2).toUpperCase()}
+                                            </div>
+                                            <div>
+                                                <div className="font-bold text-slate-900 dark:text-white">
                                                     {sale.customer?.name || 'Walk-in Customer'}
                                                 </div>
                                                 {sale.customer?.phone && (
-                                                    <div className="text-slate-500 dark:text-slate-400 text-xs flex items-center gap-1 mt-0.5 pl-5 font-mono">
+                                                    <div className="text-slate-500 dark:text-slate-400 text-xs font-mono">
                                                         {sale.customer.phone}
                                                     </div>
                                                 )}
-                                            </td>
-                                            <td className="px-6 py-4 text-right">
-                                                <span className="font-bold text-slate-900 dark:text-white text-sm">
-                                                    UGX {Number(sale.final_amount).toLocaleString()}
-                                                </span>
-                                            </td>
-                                            <td className="px-6 py-4 text-right">
-                                                <div className="flex flex-col items-end gap-1">
-                                                    <span className="font-bold text-emerald-600 dark:text-emerald-400 text-sm">
-                                                        UGX {paid.toLocaleString()}
-                                                    </span>
-                                                    <div className="flex items-center gap-2 w-28">
-                                                        <div className="flex-1 h-1.5 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
-                                                            <div
-                                                                className={`h-full rounded-full ${isPaid ? 'bg-emerald-500' : 'bg-amber-500'}`}
-                                                                style={{ width: `${pct}%` }}
-                                                            />
-                                                        </div>
-                                                        <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 w-7 text-right">{pct}%</span>
-                                                    </div>
+                                            </div>
+                                        </div>
+                                    </td>
+                                    <td className="text-right">
+                                        <span className="font-bold text-slate-900 dark:text-white text-sm">
+                                            UGX {Number(sale.final_amount).toLocaleString()}
+                                        </span>
+                                    </td>
+                                    <td className="text-right">
+                                        <div className="flex flex-col items-end gap-1">
+                                            <span className="font-bold text-emerald-600 dark:text-emerald-400 text-sm">
+                                                UGX {paid.toLocaleString()}
+                                            </span>
+                                            <div className="flex items-center gap-2 w-28">
+                                                <div className="flex-1 h-1.5 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
+                                                    <div
+                                                        className={`h-full rounded-full ${isPaid ? 'bg-emerald-500' : 'bg-amber-500'}`}
+                                                        style={{ width: `${pct}%` }}
+                                                    />
                                                 </div>
-                                            </td>
-                                            <td className="px-6 py-4 text-right">
-                                                {isPaid ? (
-                                                    <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-extrabold bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
-                                                        <CheckCircle2 size={13} /> Paid in Full
-                                                    </span>
-                                                ) : (
-                                                    <span className="inline-block px-2.5 py-1 rounded-lg text-xs font-extrabold bg-amber-50 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800">
-                                                        UGX {balance.toLocaleString()}
-                                                    </span>
-                                                )}
-                                            </td>
-                                            <td className="px-6 py-4 text-right">
-                                                <div className="flex items-center justify-end gap-2">
-                                                    {!isPaid && (
-                                                        <button
-                                                            type="button"
-                                                            onClick={() => openWhatsApp(sale.customer?.phone || '', buildLayawayReminderMessage(sale, storeSettings))}
-                                                            className="px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-sm transition-all"
-                                                            title="Send WhatsApp balance reminder"
-                                                        >
-                                                            <MessageCircle size={14} />
-                                                            Remind
-                                                        </button>
-                                                    )}
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => openSaleModal(sale)}
-                                                        className="px-3.5 py-2 bg-slate-900 dark:bg-indigo-600 hover:bg-slate-800 dark:hover:bg-indigo-500 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-sm transition-all"
-                                                    >
-                                                        <CreditCard size={14} />
-                                                        {isPaid ? 'View History' : 'Manage Payments'}
-                                                    </button>
-                                                </div>
-                                            </td>
-                                        </tr>
-                                    );
-                                })}
+                                                <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 w-7 text-right">{pct}%</span>
+                                            </div>
+                                        </div>
+                                    </td>
+                                    <td className="text-right">
+                                        {isPaid ? (
+                                            <Badge variant="success">Paid in Full</Badge>
+                                        ) : (
+                                            <Badge variant="warning">UGX {balance.toLocaleString()}</Badge>
+                                        )}
+                                    </td>
+                                    <td className="text-right">
+                                        <div className="flex items-center justify-end gap-2">
+                                            {!isPaid && (
+                                                <button
+                                                    type="button"
+                                                    onClick={() => openWhatsApp(sale.customer?.phone || '', buildLayawayReminderMessage(sale, storeSettings))}
+                                                    className="p-2 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-900/30 rounded-lg transition-colors"
+                                                    title="Send WhatsApp balance reminder"
+                                                >
+                                                    <MessageCircle size={16} />
+                                                </button>
+                                            )}
+                                            <Button
+                                                variant={isPaid ? 'secondary' : 'primary'}
+                                                size="sm"
+                                                onClick={() => openSaleModal(sale)}
+                                                className="whitespace-nowrap"
+                                            >
+                                                <CreditCard size={14} className="mr-1.5" />
+                                                {isPaid ? 'View History' : 'Manage Payments'}
+                                            </Button>
+                                        </div>
+                                    </td>
+                                </tr>
+                            );
+                        })}
+                    </DataTable>
+                </div>
 
-                                {rows.length === 0 && (
-                                    <tr>
-                                        <td colSpan="6" className="px-6 py-16 text-center text-slate-400">
-                                            <Clock className="w-12 h-12 text-slate-300 dark:text-slate-600 mx-auto mb-3" />
-                                            <p className="font-bold text-slate-700 dark:text-slate-300 text-base">
-                                                {searchQuery ? 'No matching layaways found' : 'No layaways found'}
-                                            </p>
-                                            <p className="text-xs text-slate-400 mt-1">
-                                                {searchQuery
-                                                    ? 'Try clearing your search or switching tabs.'
-                                                    : statusFilter === 'active'
-                                                        ? 'All customer layaways and installments have been settled.'
-                                                        : 'No records available in this view.'}
-                                            </p>
-                                        </td>
-                                    </tr>
-                                )}
-                            </tbody>
-                        </table>
-                    </div>
-
-                    {/* Mobile Cards View */}
-                    <div className="md:hidden divide-y divide-slate-100 dark:divide-slate-800">
+                {/* Mobile Cards View */}
+                <Card noPadding className="md:hidden overflow-hidden">
+                    <div className="divide-y divide-slate-100 dark:divide-slate-800">
                         {rows.map(sale => {
                             const paid = getPaidAmount(sale);
                             const balance = getBalance(sale);
@@ -405,13 +394,9 @@ export default function LayawaysIndex({ auth, layaways, summary, filters = {}, h
                                             </p>
                                         </div>
                                         {isPaid ? (
-                                            <span className="px-2 py-1 rounded-lg text-[11px] font-extrabold bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300">
-                                                Paid
-                                            </span>
+                                            <Badge variant="success">Paid</Badge>
                                         ) : (
-                                            <span className="px-2 py-1 rounded-lg text-[11px] font-extrabold bg-amber-50 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300">
-                                                Due: UGX {balance.toLocaleString()}
-                                            </span>
+                                            <Badge variant="warning">Due: UGX {balance.toLocaleString()}</Badge>
                                         )}
                                     </div>
 
@@ -444,34 +429,10 @@ export default function LayawaysIndex({ auth, layaways, summary, filters = {}, h
                             </div>
                         )}
                     </div>
+                </Card>
 
-                    {/* Pagination */}
-                    {paginationLinks.length > 3 && (
-                        <div className="px-6 py-4 border-t border-slate-100 dark:border-slate-800 flex flex-wrap items-center justify-between gap-3 bg-slate-50/40 dark:bg-slate-800/30">
-                            <p className="text-xs text-slate-500 dark:text-slate-400">
-                                Showing <strong className="text-slate-700 dark:text-slate-200">{layaways.from || 0}</strong>–<strong className="text-slate-700 dark:text-slate-200">{layaways.to || 0}</strong> of <strong className="text-slate-700 dark:text-slate-200">{layaways.total || 0}</strong>
-                            </p>
-                            <div className="flex flex-wrap gap-1">
-                                {paginationLinks.map((link, idx) => (
-                                    <button
-                                        key={idx}
-                                        type="button"
-                                        disabled={!link.url}
-                                        onClick={() => link.url && router.visit(link.url, { preserveScroll: true, preserveState: true })}
-                                        className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors ${
-                                            link.active
-                                                ? 'bg-slate-900 dark:bg-indigo-600 text-white'
-                                                : link.url
-                                                    ? 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700'
-                                                    : 'text-slate-400 dark:text-slate-600 cursor-not-allowed'
-                                        }`}
-                                        dangerouslySetInnerHTML={{ __html: link.label }}
-                                    />
-                                ))}
-                            </div>
-                        </div>
-                    )}
-                </div>
+                {/* Pagination */}
+                <Pagination data={!Array.isArray(layaways) ? layaways : null} className="mt-2" />
             </div>
 
             {/* Manage Payments Modal */}
