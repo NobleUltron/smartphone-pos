@@ -72,13 +72,23 @@ class ReceiptHistoryController extends Controller
             }
         }
 
-        // Clone query for calculating overall filtered summary stats
-        $summaryQuery = clone $query;
-        $totalReceipts = $summaryQuery->count();
-        $totalRevenue = (float) (clone $summaryQuery)->where('payment_status', '!=', 'Refunded')->sum('final_amount');
-        $totalRefunded = (float) (clone $summaryQuery)->where('payment_status', 'Refunded')->sum('final_amount');
-        $refundedCount = (clone $summaryQuery)->where('payment_status', 'Refunded')->count();
-        $totalDiscounts = (float) (clone $summaryQuery)->where('payment_status', '!=', 'Refunded')->sum('discount');
+        // Single aggregate query for filtered summary stats (replaces 5 separate cloned queries)
+        $stats = (clone $query)
+            ->reorder()
+            ->selectRaw("
+                COUNT(*) as total_receipts,
+                COALESCE(SUM(CASE WHEN payment_status != 'Refunded' THEN final_amount ELSE 0 END), 0) as total_revenue,
+                COALESCE(SUM(CASE WHEN payment_status = 'Refunded' THEN final_amount ELSE 0 END), 0) as total_refunded,
+                SUM(CASE WHEN payment_status = 'Refunded' THEN 1 ELSE 0 END) as refunded_count,
+                COALESCE(SUM(CASE WHEN payment_status != 'Refunded' THEN discount ELSE 0 END), 0) as total_discounts
+            ")
+            ->first();
+
+        $totalReceipts = (int) ($stats->total_receipts ?? 0);
+        $totalRevenue = (float) ($stats->total_revenue ?? 0);
+        $totalRefunded = (float) ($stats->total_refunded ?? 0);
+        $refundedCount = (int) ($stats->refunded_count ?? 0);
+        $totalDiscounts = (float) ($stats->total_discounts ?? 0);
         $validCount = max(0, $totalReceipts - $refundedCount);
         $avgSaleValue = $validCount > 0 ? round($totalRevenue / $validCount) : 0;
 
@@ -95,28 +105,28 @@ class ReceiptHistoryController extends Controller
             'terms_conditions' => \App\Models\Setting::getTermsConditions(),
         ];
 
-        $inStockDevices = \App\Models\DeviceImei::with('product.brand')
-            ->where('status', 'In Stock')
-            ->orderByDesc('id')
-            ->get()
-            ->map(function ($d) {
-                $brand = $d->product?->brand?->name ?? '';
-                $model = $d->product?->model_name ?? 'Device';
-                $spec = trim(($d->storage_capacity ?? '') . ' ' . ($d->color ?? ''));
-                return [
-                    'id' => $d->id,
-                    'imei' => $d->imei,
-                    'label' => trim("{$brand} {$model}" . ($spec ? " ({$spec})" : '')) . " — IMEI: {$d->imei}",
-                    'selling_price' => (float) ($d->selling_price ?? 0),
-                    'condition' => $d->condition ?? 'Brand New',
-                ];
-            })
-            ->values();
-
         return Inertia::render('Receipts/Index', [
             'sales' => $sales,
             'settings' => $settings,
-            'inStockDevices' => $inStockDevices,
+            'inStockDevices' => fn () => \App\Models\DeviceImei::with('product:id,model_name,brand_id', 'product.brand:id,name')
+                ->select('id', 'product_id', 'imei', 'storage_capacity', 'color', 'selling_price', 'condition')
+                ->where('status', 'In Stock')
+                ->orderByDesc('id')
+                ->limit(250)
+                ->get()
+                ->map(function ($d) {
+                    $brand = $d->product?->brand?->name ?? '';
+                    $model = $d->product?->model_name ?? 'Device';
+                    $spec = trim(($d->storage_capacity ?? '') . ' ' . ($d->color ?? ''));
+                    return [
+                        'id' => $d->id,
+                        'imei' => $d->imei,
+                        'label' => trim("{$brand} {$model}" . ($spec ? " ({$spec})" : '')) . " — IMEI: {$d->imei}",
+                        'selling_price' => (float) ($d->selling_price ?? 0),
+                        'condition' => $d->condition ?? 'Brand New',
+                    ];
+                })
+                ->values(),
             'summary' => [
                 'total_receipts' => $totalReceipts,
                 'total_revenue' => $totalRevenue,

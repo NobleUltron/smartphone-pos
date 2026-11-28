@@ -15,7 +15,10 @@ class POSController extends Controller
 {
     public function index()
     {
-        $customers = Customer::orderBy('name')->get();
+        $customers = Customer::select('id', 'name', 'phone', 'email')
+            ->orderBy('name')
+            ->limit(300)
+            ->get();
         $hasActiveDrawer = CashDrawer::where('user_id', auth()->id())
             ->where('status', 'open')
             ->exists();
@@ -104,8 +107,8 @@ class POSController extends Controller
         }
 
         $results = collect([
-            ...$bulkProducts->get(),
-            ...$serializedProducts->get()
+            ...$bulkProducts->limit(30)->get(),
+            ...$serializedProducts->limit(30)->get()
         ]);
 
         return response()->json($results);

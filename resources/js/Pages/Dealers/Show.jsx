@@ -12,6 +12,7 @@ import Card from '@/Components/SaaS/Card';
 import Button from '@/Components/SaaS/Button';
 import Badge from '@/Components/SaaS/Badge';
 import Pagination from '@/Components/SaaS/Pagination';
+import ReceiptPreviewModal from '@/Components/SaaS/ReceiptPreviewModal';
 import ReceiveStockModal from './Partials/ReceiveStockModal';
 import IssueStockModal from './Partials/IssueStockModal';
 import VoidConsignmentModal from './Partials/VoidConsignmentModal';
@@ -521,7 +522,7 @@ export default function Show({
                             </button>
                         </div>
 
-                        <div className="relative min-w-[220px]">
+                        <div className="relative w-full sm:w-auto sm:min-w-[220px]">
                             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={14} />
                             <input
                                 type="text"
@@ -942,7 +943,7 @@ export default function Show({
 
                         {!isEditing ? (
                             <div className="space-y-4">
-                                <div className="grid grid-cols-3 gap-4 pb-4 border-b border-slate-100 dark:border-slate-800">
+                                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pb-4 border-b border-slate-100 dark:border-slate-800">
                                     <div>
                                         <span className="block text-xs font-bold text-slate-500 uppercase">Quantity</span>
                                         <span className="text-sm text-slate-900 dark:text-white font-bold">{viewItem.quantity}</span>
@@ -971,7 +972,7 @@ export default function Show({
                                         </div>
 
                                         {viewItem.type === 'serialized' && (
-                                            <div className="grid grid-cols-3 gap-4 pb-4 border-b border-slate-100 dark:border-slate-800">
+                                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pb-4 border-b border-slate-100 dark:border-slate-800">
                                                 <div>
                                                     <span className="block text-xs font-bold text-slate-500 uppercase">Condition</span>
                                                     <span className="text-sm text-slate-900 dark:text-white font-medium">{viewItem.device_imei?.condition || 'Brand New'}</span>
@@ -1059,7 +1060,7 @@ export default function Show({
                                                     {editErrors.imei_number && <p className="text-rose-500 text-xs mt-1">{editErrors.imei_number}</p>}
                                                 </div>
 
-                                                <div className="grid grid-cols-3 gap-3">
+                                                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                                                     <div>
                                                         <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase mb-1">Condition</label>
                                                         <select
@@ -1351,232 +1352,13 @@ export default function Show({
                 )}
             </Modal>
 
-            {/* Receipt Preview Modal — identical to Receipts/Index.jsx */}
-            {previewSale && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm animate-fade-in">
-                    <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full max-h-[90vh] flex flex-col overflow-hidden border border-slate-200" style={{ backgroundColor: '#FFFFFF', color: '#0F172A', borderColor: '#E2E8F0' }}>
-                        <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50" style={{ backgroundColor: '#F8FAFC', borderColor: '#F1F5F9' }}>
-                            <h3 className="font-bold text-slate-900 flex items-center gap-2" style={{ color: '#0F172A' }}>
-                                <Receipt size={18} className="text-slate-500" style={{ color: '#64748B' }} />
-                                Receipt #{previewSale.id} Preview
-                            </h3>
-                            <button onClick={() => setPreviewSale(null)} className="text-slate-400 hover:text-slate-600 transition-colors text-lg font-bold" style={{ color: '#94A3B8' }}>
-                                &times;
-                            </button>
-                        </div>
-                        <div className="p-6 overflow-y-auto font-sans flex justify-center" style={{ backgroundColor: '#F1F5F9' }}>
-                            <div 
-                                className="rounded-xl shadow-xl p-6 w-full max-w-[340px] font-sans relative overflow-hidden transition-all duration-300"
-                                style={{ backgroundColor: '#FFFFFF', color: '#0F172A', border: '1px solid #E2E8F0' }}
-                            >
-                                {/* Header */}
-                                <div className="flex flex-col items-center text-center mb-4">
-                                    {settings?.store_logo ? (
-                                        <img src={settings.store_logo} alt="Store Logo" className="max-w-[140px] max-h-[70px] object-contain mb-2" />
-                                    ) : (
-                                        <div className="w-10 h-10 border border-slate-900 flex items-center justify-center mb-2 rounded-lg">
-                                            <Store size={20} style={{ color: '#0F172A' }} />
-                                        </div>
-                                    )}
-                                    <h1 className="font-extrabold text-base leading-tight uppercase tracking-wider mb-1" style={{ color: '#0F172A' }}>
-                                        {settings?.shop_name || 'SmartPOS Kampala'}
-                                    </h1>
-                                    <div className="text-xs leading-tight font-medium" style={{ color: '#475569' }}>
-                                        <p>{settings?.shop_address || '123 Kampala Road, Kampala'}</p>
-                                        <p>Tel: {settings?.shop_phone || '+256 700 000 000'}</p>
-                                    </div>
-                                </div>
-
-                                {previewSale.payment_status === 'Refunded' && (
-                                    <div className="bg-slate-950 text-white text-center py-1.5 mb-4 font-black text-xs uppercase tracking-widest rounded-lg">
-                                        *** REFUNDED ***
-                                    </div>
-                                )}
-
-                                {/* Metadata */}
-                                <div className="text-xs mb-3 leading-tight font-mono space-y-1" style={{ color: '#334155' }}>
-                                    <div className="flex justify-between">
-                                        <span className="font-bold">Receipt #:</span>
-                                        <span className="font-bold" style={{ color: '#0F172A' }}>{previewSale.id}</span>
-                                    </div>
-                                    <div className="flex justify-between">
-                                        <span className="font-bold">Date:</span>
-                                        <span style={{ color: '#0F172A' }}>{new Date(previewSale.sale_date || previewSale.created_at).toLocaleString([], { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })}</span>
-                                    </div>
-                                    <div className="flex justify-between">
-                                        <span className="font-bold">Cashier:</span>
-                                        <span style={{ color: '#0F172A' }}>{previewSale.user?.name || 'System'}</span>
-                                    </div>
-                                    {previewSale.customer ? (
-                                        <>
-                                            <div className="flex justify-between mt-1 pt-1 border-t border-slate-200">
-                                                <span className="font-bold">Customer:</span>
-                                                <span className="font-bold" style={{ color: '#0F172A' }}>{previewSale.customer.name}</span>
-                                            </div>
-                                            <div className="flex justify-between">
-                                                <span className="font-bold">Phone:</span>
-                                                <span style={{ color: '#0F172A' }}>{previewSale.customer.phone}</span>
-                                            </div>
-                                        </>
-                                    ) : previewSale.dealer_item && previewSale.dealer_item.length > 0 && previewSale.dealer_item[0]?.dealer ? (
-                                        <>
-                                            <div className="flex justify-between mt-1 pt-1 border-t border-slate-200">
-                                                <span className="font-bold">Partner/Dealer:</span>
-                                                <span className="font-bold" style={{ color: '#0F172A' }}>{previewSale.dealer_item[0].dealer.name}</span>
-                                            </div>
-                                            <div className="flex justify-between">
-                                                <span className="font-bold">Phone:</span>
-                                                <span style={{ color: '#0F172A' }}>{previewSale.dealer_item[0].dealer.phone}</span>
-                                            </div>
-                                        </>
-                                    ) : null}
-                                </div>
-
-                                <div className="border-t border-dashed border-slate-300 mb-3"></div>
-
-                                {/* Items */}
-                                <div className="mb-3">
-                                    <div className="flex justify-between text-[11px] font-semibold uppercase border-b border-dashed border-slate-300 pb-1 mb-2" style={{ color: '#64748B' }}>
-                                        <span>Item Description</span>
-                                        <span>Amount</span>
-                                    </div>
-                                    <div className="space-y-3">
-                                        {previewSale.repair ? (
-                                            <div className="text-xs leading-tight">
-                                                <div className="flex justify-between font-bold mb-0.5" style={{ color: '#0F172A' }}>
-                                                    <span className="pr-2 text-wrap text-[13px]">Repair: {previewSale.repair.device_model}</span>
-                                                    <span className="whitespace-nowrap tabular-nums">{Number(previewSale.repair.estimated_cost).toLocaleString()}</span>
-                                                </div>
-                                                <div className="flex justify-between text-xs" style={{ color: '#475569' }}>
-                                                    <div className="font-mono">
-                                                        <div>Ticket #: {previewSale.repair.repair_code}</div>
-                                                        {previewSale.repair.imei_serial && <div>IMEI/SN: {previewSale.repair.imei_serial}</div>}
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        ) : previewSale.sale_items?.map((item, idx) => (
-                                            <div key={idx} className="text-xs leading-tight">
-                                                <div className="flex justify-between font-bold mb-0.5" style={{ color: '#0F172A' }}>
-                                                    <span className="pr-2 text-wrap text-[13px]">
-                                                        {item.device_imei?.product ? (
-                                                            `${item.device_imei.product.brand?.name || ''} ${item.device_imei.product.model_name}`
-                                                        ) : item.product ? (
-                                                            `${item.product.brand?.name || ''} ${item.product.model_name}`
-                                                        ) : 'Unknown Item'}
-                                                    </span>
-                                                    <span className="whitespace-nowrap tabular-nums">{Number(item.price * (item.quantity || 1)).toLocaleString()}</span>
-                                                </div>
-                                                <div className="flex justify-between text-xs" style={{ color: '#475569' }}>
-                                                    <div className="font-mono">
-                                                        {item.device_imei ? (
-                                                            <>
-                                                                <div>IMEI: {item.device_imei.imei}</div>
-                                                                {item.warranty_months > 0 && <div>WTY: {item.warranty_months} Months</div>}
-                                                                {item.notes && <div className="mt-1 font-bold italic underline whitespace-pre-wrap">{item.notes}</div>}
-                                                            </>
-                                                        ) : (
-                                                            <>
-                                                                <div>Qty: {item.quantity} @ {Number(item.price).toLocaleString()}</div>
-                                                                {item.notes && <div className="mt-1 font-bold italic underline whitespace-pre-wrap">{item.notes}</div>}
-                                                            </>
-                                                        )}
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        ))}
-                                    </div>
-                                </div>
-
-                                <div className="border-t border-dashed border-slate-300 mb-3"></div>
-
-                                {/* Totals */}
-                                <div className="text-xs space-y-1.5 mb-3" style={{ color: '#334155' }}>
-                                    <div className="flex justify-between">
-                                        <span>Subtotal</span>
-                                        <span className="tabular-nums font-semibold" style={{ color: '#0F172A' }}>{settings?.currency_symbol || 'UGX'} {Number(previewSale.total_amount).toLocaleString()}</span>
-                                    </div>
-                                    <div className="flex justify-between">
-                                        <span>Discount</span>
-                                        <span className="tabular-nums font-semibold" style={{ color: '#0F172A' }}>{settings?.currency_symbol || 'UGX'} {Number(previewSale.discount).toLocaleString()}</span>
-                                    </div>
-                                    {Number(previewSale.trade_in_value) > 0 && (
-                                        <div className="flex justify-between">
-                                            <span>Trade-In ({previewSale.trade_in_device})</span>
-                                            <span className="tabular-nums font-semibold" style={{ color: '#0F172A' }}>-{settings?.currency_symbol || 'UGX'} {Number(previewSale.trade_in_value).toLocaleString()}</span>
-                                        </div>
-                                    )}
-                                    <div className="flex justify-between items-end mt-2 pt-2 border-t border-slate-900" style={{ color: '#0F172A' }}>
-                                        <span className="font-extrabold text-sm uppercase">Total</span>
-                                        <span className="font-black text-base tabular-nums leading-none">
-                                            <span className="text-xs mr-1">{settings?.currency_symbol || 'UGX'}</span>{Number(previewSale.final_amount).toLocaleString()}
-                                        </span>
-                                    </div>
-                                </div>
-
-                                <div className="border-t border-dashed border-slate-300 mb-3"></div>
-
-                                {/* Payment Info */}
-                                <div className="text-xs font-mono mb-4 leading-tight space-y-1" style={{ color: '#334155' }}>
-                                    <div className="flex justify-between">
-                                        <span>Payment Method:</span>
-                                        <span className="font-bold" style={{ color: '#0F172A' }}>{previewSale.payment_method}</span>
-                                    </div>
-                                    <div className="flex justify-between">
-                                        <span>Payment Status:</span>
-                                        <span className="font-bold uppercase" style={{ color: '#0F172A' }}>{previewSale.payment_status}</span>
-                                    </div>
-                                    {previewSale.payment_method === 'Cash' && previewSale.tendered_amount > 0 && (
-                                        <>
-                                            <div className="border-t border-dashed border-slate-300 my-1.5 pt-1.5"></div>
-                                            <div className="flex justify-between">
-                                                <span>Tendered Amount:</span>
-                                                <span className="font-bold" style={{ color: '#0F172A' }}>{settings?.currency_symbol || 'UGX'} {Number(previewSale.tendered_amount).toLocaleString()}</span>
-                                            </div>
-                                            <div className="flex justify-between">
-                                                <span>Change Due:</span>
-                                                <span className="font-bold" style={{ color: '#0F172A' }}>{settings?.currency_symbol || 'UGX'} {Math.max(0, Number(previewSale.tendered_amount) - Number(previewSale.final_amount)).toLocaleString()}</span>
-                                            </div>
-                                        </>
-                                    )}
-                                </div>
-
-                                {/* Terms & Footer */}
-                                <div className="text-center text-xs leading-tight">
-                                    <p className="font-extrabold mb-3 uppercase tracking-wide" style={{ color: '#0F172A' }}>
-                                        {settings?.receipt_footer || 'Thank you for shopping!'}
-                                    </p>
-                                    {settings?.terms_conditions?.length > 0 && (
-                                        <div className="mb-4 rounded-xl p-3 text-left border" style={{ backgroundColor: '#F8FAFC', borderColor: '#E2E8F0' }}>
-                                            <div className="font-extrabold text-[10px] uppercase mb-1" style={{ color: '#475569' }}>Terms &amp; Conditions</div>
-                                            <ol className="list-decimal pl-4 space-y-0.5 text-[11px] font-medium" style={{ color: '#334155' }}>
-                                                {settings.terms_conditions.map((term, index) => (
-                                                    <li key={index}>{term}</li>
-                                                ))}
-                                            </ol>
-                                        </div>
-                                    )}
-                                    <p className="font-mono text-[11px] mt-2 font-semibold" style={{ color: '#64748B' }}>Powered by SmartPOS</p>
-                                </div>
-
-                                <div className="flex justify-center pt-3">
-                                    <Barcode value={`SALE-${previewSale.id}`} width={1.2} height={40} fontSize={10} displayValue={true} />
-                                </div>
-                            </div>
-                        </div>
-                        <div className="px-6 py-4 border-t border-slate-100 flex gap-3 justify-end" style={{ backgroundColor: '#F8FAFC', borderColor: '#F1F5F9' }}>
-                            <Button variant="secondary" onClick={() => setPreviewSale(null)}>Close</Button>
-                            <a
-                                href={`/pos/receipt/${previewSale.id}`}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="saas-btn saas-btn-primary flex items-center gap-2"
-                            >
-                                <Printer size={16} /> Print
-                            </a>
-                        </div>
-                    </div>
-                </div>
-            )}
+            {/* Receipt Preview Modal — shared component */}
+            <ReceiptPreviewModal
+                show={!!previewSale}
+                sale={previewSale}
+                settings={settings}
+                onClose={() => setPreviewSale(null)}
+            />
 
             {/* Statement & Reconciliation Options Modal */}
             <Modal show={showStatementModal} onClose={() => setShowStatementModal(false)} maxWidth="md">

@@ -43,7 +43,7 @@ export default function PrintTicket({ repair, settings }) {
             </div>
 
             {/* Receipt Container */}
-            <div className="receipt-container bg-white w-[380px] mx-auto shadow-xl rounded-xl overflow-hidden text-black print:shadow-none print:rounded-none">
+            <div className="receipt-container bg-white w-[380px] max-w-full mx-auto shadow-xl rounded-xl overflow-hidden text-black print:shadow-none print:rounded-none">
                 
                 <div className="p-4 print:p-0">
                     {/* Header */}

@@ -14,9 +14,9 @@ export default function PageHeader({ title, breadcrumbs = [], actions = null }) 
                 </div>
             </div>
 
-            <div className="relative z-10 shrink-0">
+            <div className="relative z-10 min-w-0">
                 {breadcrumbs.length > 0 && (
-                    <nav className="flex items-center gap-2 text-sm text-slate-300 mb-2 font-medium">
+                    <nav className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-slate-300 mb-2 font-medium">
                         {breadcrumbs.map((crumb, idx) => (
                             <React.Fragment key={idx}>
                                 {idx > 0 && <ChevronRight size={14} className="text-slate-500 shrink-0" />}

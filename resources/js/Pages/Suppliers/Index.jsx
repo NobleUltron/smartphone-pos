@@ -136,7 +136,7 @@ export default function SuppliersIndex({ auth, suppliers, filters = {}, summary 
         <AuthenticatedLayout user={auth.user}>
             <Head title="Suppliers" />
 
-            <div className="max-w-7xl mx-auto py-8 px-4 sm:px-6 lg:px-8">
+            <div className="space-y-6">
                 <PageHeader
                     title="Suppliers"
                     breadcrumbs={[{ label: 'Home', href: '/' }, { label: 'Suppliers' }]}

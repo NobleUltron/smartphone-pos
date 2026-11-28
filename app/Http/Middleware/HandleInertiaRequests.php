@@ -30,9 +30,36 @@ class HandleInertiaRequests extends Middleware
      */
     public function share(Request $request): array
     {
+        return [
+            ...parent::share($request),
+            'auth' => [
+                'user' => fn () => $request->user()
+                    ? $request->user()->only(['id', 'name', 'email', 'phone', 'role', 'profile_photo_path', 'profile_photo_url', 'email_verified_at'])
+                    : null,
+                'permissions' => fn () => $request->user() ? $request->user()->resolvedPermissions() : [],
+            ],
+            'permissions' => fn () => [
+                'allow_cashier_discounts' => (bool) \App\Models\Setting::get('allow_cashier_discounts', true),
+                'allow_cashier_price_overwrites' => (bool) \App\Models\Setting::get('allow_cashier_price_overwrites', true),
+                'allow_cashier_dealer_intake' => (bool) \App\Models\Setting::get('allow_cashier_dealer_intake', true),
+            ],
+            'notifications' => fn () => $this->resolveNotifications($request),
+            'flash' => [
+                'success' => fn () => $request->session()->get('success'),
+                'error' => fn () => $request->session()->get('error'),
+            ],
+        ];
+    }
+
+    protected function resolveNotifications(Request $request): array
+    {
         $notifications = [];
-        if ($request->user() && in_array($request->user()->role, ['admin', 'manager'])) {
-            // Defective Items (cached for 90s to avoid DB load on every request)
+        $user = $request->user();
+        if (!$user) {
+            return $notifications;
+        }
+
+        if (in_array($user->role, ['admin', 'manager'])) {
             $defectiveCount = Cache::remember('global_defective_count', 90, function () {
                 return \App\Models\DeviceImei::where('status', 'Defective')->count();
             });
@@ -47,7 +74,6 @@ class HandleInertiaRequests extends Middleware
                 ];
             }
 
-            // Unified high-performance low stock count (cached for 90s to prevent subquery overhead on navigation)
             $totalLowStock = Cache::remember('global_low_stock_count', 90, function () {
                 return \App\Models\Product::where(function ($query) {
                     $query->where('type', 'bulk')
@@ -85,43 +111,24 @@ class HandleInertiaRequests extends Middleware
             }
         }
 
-        // Notifications for ALL users
-        if ($request->user()) {
-            $overdueCount = Cache::remember('global_overdue_dealer_items_count', 90, function () {
-                return \App\Models\DealerItem::where('status', 'Pending')
-                    ->whereNotNull('expected_return_date')
-                    ->where('expected_return_date', '<', \Carbon\Carbon::today())
-                    ->count();
-            });
+        $overdueCount = Cache::remember('global_overdue_dealer_items_count', 90, function () {
+            return \App\Models\DealerItem::where('status', 'Pending')
+                ->whereNotNull('expected_return_date')
+                ->where('expected_return_date', '<', \Carbon\Carbon::today())
+                ->count();
+        });
 
-            if ($overdueCount > 0) {
-                $notifications[] = [
-                    'id' => 'overdue-dealer-items',
-                    'title' => 'Overdue Dealer Items',
-                    'description' => $overdueCount . ' item(s) are past their expected return date.',
-                    'type' => 'warning',
-                    'url' => route('dealers.index'),
-                    'time' => 'Action Required'
-                ];
-            }
+        if ($overdueCount > 0) {
+            $notifications[] = [
+                'id' => 'overdue-dealer-items',
+                'title' => 'Overdue Dealer Items',
+                'description' => $overdueCount . ' item(s) are past their expected return date.',
+                'type' => 'warning',
+                'url' => route('dealers.index'),
+                'time' => 'Action Required'
+            ];
         }
 
-        return [
-            ...parent::share($request),
-            'auth' => [
-                'user' => $request->user(),
-                'permissions' => $request->user() ? $request->user()->resolvedPermissions() : [],
-            ],
-            'permissions' => [
-                'allow_cashier_discounts' => (bool) \App\Models\Setting::get('allow_cashier_discounts', true),
-                'allow_cashier_price_overwrites' => (bool) \App\Models\Setting::get('allow_cashier_price_overwrites', true),
-                'allow_cashier_dealer_intake' => (bool) \App\Models\Setting::get('allow_cashier_dealer_intake', true),
-            ],
-            'notifications' => $notifications,
-            'flash' => [
-                'success' => $request->session()->get('success'),
-                'error' => $request->session()->get('error'),
-            ],
-        ];
+        return $notifications;
     }
 }

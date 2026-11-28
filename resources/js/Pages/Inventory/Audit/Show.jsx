@@ -4,7 +4,6 @@ import { Head, Link, router } from '@inertiajs/react';
 import toast from 'react-hot-toast';
 import axios from 'axios';
 import { Scan, CheckCircle, AlertTriangle, HelpCircle, FileText, Check, ArrowLeft, RefreshCcw, Volume2, VolumeX, ShieldCheck, Camera, CameraOff } from 'lucide-react';
-import { Html5Qrcode, Html5QrcodeSupportedFormats } from 'html5-qrcode';
 import dayjs from 'dayjs';
 import PageHeader from '@/Components/SaaS/PageHeader';
 import Card from '@/Components/SaaS/Card';
@@ -151,6 +150,8 @@ export default function Show({ audit, unscannedDevices = [] }) {
         let cancelled = false;
         const startScanner = async () => {
             try {
+                const { Html5Qrcode, Html5QrcodeSupportedFormats } = await import('html5-qrcode');
+                if (cancelled) return;
                 const html5QrCode = new Html5Qrcode('audit-camera-reader', {
                     formatsToSupport: [
                         Html5QrcodeSupportedFormats.CODE_128,

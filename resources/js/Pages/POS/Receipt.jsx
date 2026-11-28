@@ -157,7 +157,7 @@ export default function Receipt({ sale, settings }) {
                             onClick={() => setFormat('a4')}
                             className={`flex-1 py-2 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 cursor-pointer ${
                                 format === 'a4'
-                                    ? 'bg-slate-900 dark:bg-white text-white dark:text-slate-900 shadow-md'
+                                    ? 'bg-indigo-600 text-white shadow-md'
                                     : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
                             }`}
                         >
@@ -368,10 +368,12 @@ export default function Receipt({ sale, settings }) {
                                     <span>Customer:</span>
                                     <span className="font-bold text-black">{sale.customer.name}</span>
                                 </div>
-                                <div className="flex justify-between">
-                                    <span>Phone:</span>
-                                    <span className="text-black">{sale.customer.phone}</span>
-                                </div>
+                                {sale.customer.phone && !String(sale.customer.phone).toUpperCase().startsWith('WALKIN-') && (
+                                    <div className="flex justify-between">
+                                        <span>Phone:</span>
+                                        <span className="text-black">{sale.customer.phone}</span>
+                                    </div>
+                                )}
                             </>
                         ) : sale.dealer_item && sale.dealer_item.length > 0 && sale.dealer_item[0].dealer ? (
                             <>
@@ -609,7 +611,7 @@ export default function Receipt({ sale, settings }) {
                         <div className="font-bold text-slate-900 text-xs">
                             {sale.customer?.name || 'Walk-in Customer'}
                         </div>
-                        {sale.customer?.phone && (
+                        {sale.customer?.phone && !String(sale.customer.phone).toUpperCase().startsWith('WALKIN-') && (
                             <div className="text-[11px] text-slate-600 font-mono">
                                 Tel: {sale.customer.phone}
                             </div>
@@ -872,7 +874,7 @@ export default function Receipt({ sale, settings }) {
                         <div className="h-6"></div>
                         <div className="border-t border-slate-400 pt-1.5">
                             <div className="font-bold text-[11px] text-slate-900">Authorized Signature & Official Stamp</div>
-                            <div className="text-[9px] text-slate-500">SmartPOS Sales & Verification Desk</div>
+                            <div className="text-[9px] text-slate-500">{settings?.shop_name || 'SmartPOS'} Sales & Verification Desk</div>
                         </div>
                     </div>
                 </div>
@@ -880,7 +882,7 @@ export default function Receipt({ sale, settings }) {
                 {/* A4 Bottom Barcode & Footer */}
                 <div className="mt-3 pt-2 border-t border-dashed border-slate-200 flex flex-col sm:flex-row items-center justify-between text-slate-400 text-[9px] gap-2">
                     <div>
-                        {settings?.receipt_footer ? `${settings.receipt_footer} • ` : ''}Powered by SmartPOS Enterprise POS Engine • Official Tax & Warranty Document
+                        {settings?.receipt_footer ? `${settings.receipt_footer} • ` : ''}{settings?.shop_name || 'SmartPOS'} • Official Sales & Warranty Document
                     </div>
                     <div>
                         <Barcode value={`INV-${sale.id}`} width={1.1} height={20} fontSize={8} margin={0} displayValue={true} background="transparent" lineColor="#334155" />
@@ -920,25 +922,30 @@ export default function Receipt({ sale, settings }) {
                         ${format === 'a4' ? `
                             @page {
                                 size: A4 portrait;
-                                margin: 8mm 12mm;
+                                margin: 10mm;
                             }
-                            html, body {
+                            html, html.dark, body, html.dark body {
                                 width: 100% !important;
-                                min-width: 100% !important;
+                                min-width: 0 !important;
+                                max-width: 100% !important;
                                 height: auto !important;
                                 margin: 0 !important;
                                 padding: 0 !important;
                                 background: #ffffff !important;
-                                color: #000000 !important;
+                                background-color: #ffffff !important;
+                                color: #0f172a !important;
+                                color-scheme: light !important;
                                 -webkit-print-color-adjust: exact !important;
                                 print-color-adjust: exact !important;
                             }
-                            #app, [data-page], .receipt-wrapper {
+                            #app, [data-page], .receipt-wrapper, .dark .receipt-wrapper {
                                 width: 100% !important;
-                                max-width: none !important;
+                                max-width: 100% !important;
+                                min-height: 0 !important;
                                 margin: 0 !important;
                                 padding: 0 !important;
                                 background: #ffffff !important;
+                                background-color: #ffffff !important;
                             }
                             .receipt-container {
                                 display: none !important;
@@ -947,10 +954,14 @@ export default function Receipt({ sale, settings }) {
                                 display: block !important;
                                 width: 100% !important;
                                 max-width: 100% !important;
-                                margin: 0 !important;
-                                padding: 0 !important;
+                                box-sizing: border-box !important;
+                                margin: 0 auto !important;
+                                padding: 0 2mm !important;
                                 border: none !important;
+                                border-radius: 0 !important;
                                 box-shadow: none !important;
+                                background: #ffffff !important;
+                                background-color: #ffffff !important;
                                 page-break-after: avoid !important;
                                 page-break-inside: avoid !important;
                             }

@@ -264,7 +264,7 @@ Thank you.`;
                 <div className="flex-1 flex flex-col md:flex-row overflow-y-auto no-scrollbar">
                     
                     {/* Left Column: Details & Payment History */}
-                    <div className="w-full md:w-1/2 p-6 bg-slate-50/70 dark:bg-slate-950/60 border-b md:border-b-0 md:border-r border-slate-200/80 dark:border-slate-800 space-y-6 overflow-y-auto no-scrollbar">
+                    <div className="w-full md:w-1/2 p-4 sm:p-6 bg-slate-50/70 dark:bg-slate-950/60 border-b md:border-b-0 md:border-r border-slate-200/80 dark:border-slate-800 space-y-6 md:overflow-y-auto no-scrollbar">
                         
                         {/* Customer Info */}
                         <div className="space-y-2">
@@ -395,7 +395,7 @@ Thank you.`;
                     </div>
 
                     {/* Right Column: Update Status & Payment */}
-                    <div className="w-full md:w-1/2 p-6 space-y-6 overflow-y-auto no-scrollbar bg-white dark:bg-slate-900">
+                    <div className="w-full md:w-1/2 p-4 sm:p-6 space-y-6 md:overflow-y-auto no-scrollbar bg-white dark:bg-slate-900">
                         
                         {/* Parts Used Form */}
                         <div className="space-y-3 bg-white dark:bg-slate-900 p-4 rounded-xl border shadow-sm border-slate-200 dark:border-slate-800">
@@ -599,7 +599,7 @@ Thank you.`;
                                     }} 
                                     className="space-y-4"
                                 >
-                                    <div className="flex justify-between items-center bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-white border border-slate-200 dark:border-slate-700 px-4 py-2.5 rounded-t-xl">
+                                    <div className="flex flex-wrap justify-between items-center gap-1 bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-white border border-slate-200 dark:border-slate-700 px-4 py-2.5 rounded-t-xl">
                                         <h3 className="text-sm font-bold flex items-center gap-2">
                                             Record Additional Payment
                                         </h3>

@@ -3,7 +3,6 @@ import { useForm, router } from '@inertiajs/react';
 import Modal from '@/Components/Modal';
 import { Handshake, X, Search, Package, Check, Smartphone, Layers, Calendar, ArrowUpRight, AlertCircle, Loader2, Trash2, Plus } from 'lucide-react';
 import axios from 'axios';
-import { debounce } from 'lodash';
 import dayjs from 'dayjs';
 import toast from 'react-hot-toast';
 
@@ -38,29 +37,29 @@ export default function IssueStockModal({
     }, [preselectedDealerId]);
 
     // Debounced search for available in-stock devices / bulk items
-    const searchStock = useMemo(
-        () =>
-            debounce((query) => {
-                if (!query.trim()) {
+    const searchTimerRef = useRef(null);
+    const searchStock = (query) => {
+        if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
+        if (!query.trim()) {
+            setSearchResults([]);
+            setIsSearching(false);
+            return;
+        }
+        searchTimerRef.current = setTimeout(() => {
+            setIsSearching(true);
+            axios.get(route('dealers.search-device'), { params: { query } })
+                .then(res => {
+                    setSearchResults(res.data || []);
+                })
+                .catch(err => {
+                    console.error('Error searching inventory for consignment:', err);
                     setSearchResults([]);
+                })
+                .finally(() => {
                     setIsSearching(false);
-                    return;
-                }
-                setIsSearching(true);
-                axios.get(route('dealers.search-device'), { params: { query } })
-                    .then(res => {
-                        setSearchResults(res.data || []);
-                    })
-                    .catch(err => {
-                        console.error('Error searching inventory for consignment:', err);
-                        setSearchResults([]);
-                    })
-                    .finally(() => {
-                        setIsSearching(false);
-                    });
-            }, 300),
-        []
-    );
+                });
+        }, 300);
+    };
 
     const handleSearchChange = (e) => {
         const val = e.target.value;

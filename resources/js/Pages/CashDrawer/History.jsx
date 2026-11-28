@@ -38,7 +38,7 @@ export default function History({ auth, drawers, cashiers = [], isManager = fals
         <AuthenticatedLayout user={auth.user}>
             <Head title="Shift History" />
 
-            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
+            <div className="space-y-6">
                 {/* Header */}
                 <PageHeader
                     title="Shift Audit History"

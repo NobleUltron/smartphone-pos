@@ -102,7 +102,7 @@ export default function LayawaysIndex({ auth, layaways, summary, filters = {}, h
         <AuthenticatedLayout user={auth.user}>
             <Head title="Layaways & Installments" />
 
-            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
+            <div className="space-y-6">
                 {/* Header */}
                 <PageHeader
                     title="Layaways & Installments"
@@ -482,9 +482,9 @@ export default function LayawaysIndex({ auth, layaways, summary, filters = {}, h
                         {/* Modal Split View */}
                         <div className="flex-1 flex flex-col md:flex-row overflow-y-auto">
                             {/* Left Column: Layaway Summary & Payment History */}
-                            <div className="w-full md:w-1/2 p-6 bg-slate-50/70 dark:bg-slate-950/60 border-b md:border-b-0 md:border-r border-slate-200/80 dark:border-slate-800 space-y-6 overflow-y-auto">
+                            <div className="w-full md:w-1/2 p-4 sm:p-6 bg-slate-50/70 dark:bg-slate-950/60 border-b md:border-b-0 md:border-r border-slate-200/80 dark:border-slate-800 space-y-6 md:overflow-y-auto">
                                 {/* Financial KPI Grid */}
-                                <div className="grid grid-cols-3 gap-3">
+                                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                                     <div className="bg-white dark:bg-slate-900 p-3.5 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
                                         <p className="text-[11px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider">Total Sale</p>
                                         <p className="text-sm font-extrabold text-slate-900 dark:text-white mt-1">

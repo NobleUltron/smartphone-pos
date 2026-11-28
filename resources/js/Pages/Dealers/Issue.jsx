@@ -1,9 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useCallback } from 'react';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import { Head, Link, useForm, router } from '@inertiajs/react';
 import { Handshake, Search, Package, User, ArrowLeft } from 'lucide-react';
 import axios from 'axios';
-import { debounce } from 'lodash';
 import PageHeader from '@/Components/SaaS/PageHeader';
 import Card from '@/Components/SaaS/Card';
 import Button from '@/Components/SaaS/Button';
@@ -26,21 +25,27 @@ export default function Issue({ dealers }) {
 
     const [selectedDevice, setSelectedDevice] = useState(null);
 
-    const searchDevices = debounce(async (query) => {
+    const searchTimerRef = useRef(null);
+
+    const searchDevices = useCallback((query) => {
+        if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
         if (!query) {
             setSearchResults([]);
+            setIsSearching(false);
             return;
         }
-        setIsSearching(true);
-        try {
-            const res = await axios.get(route('dealers.search-device', { query }));
-            setSearchResults(res.data);
-        } catch (error) {
-            console.error(error);
-        } finally {
-            setIsSearching(false);
-        }
-    }, 300);
+        searchTimerRef.current = setTimeout(async () => {
+            setIsSearching(true);
+            try {
+                const res = await axios.get(route('dealers.search-device', { query }));
+                setSearchResults(res.data);
+            } catch (error) {
+                console.error(error);
+            } finally {
+                setIsSearching(false);
+            }
+        }, 300);
+    }, []);
 
     const handleSearchChange = (e) => {
         setSearchQuery(e.target.value);

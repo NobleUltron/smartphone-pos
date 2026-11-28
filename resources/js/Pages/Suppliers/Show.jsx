@@ -202,7 +202,7 @@ export default function SuppliersShow({ auth, supplier, paymentAccounts = [] }) 
         <AuthenticatedLayout user={auth.user}>
             <Head title={`Supplier: ${supplier.name}`} />
             
-            <div className="max-w-7xl mx-auto py-8 px-4 sm:px-6 lg:px-8">
+            <div className="space-y-6">
                 <PageHeader 
                     title={supplier.name} 
                     breadcrumbs={[{ label: 'Home', href: '/' }, { label: 'Suppliers', href: route('suppliers.index') }, { label: supplier.name }]}

@@ -131,7 +131,7 @@ export default function RepairFormModal({ isOpen, onClose, products, customers =
                 <form onSubmit={handleSubmit} className="flex-1 flex flex-col md:flex-row overflow-y-auto">
                     
                     {/* Left Column: Customer & Device Intake */}
-                    <div className="w-full md:w-1/2 p-6 bg-slate-50/70 dark:bg-slate-950/60 border-b md:border-b-0 md:border-r border-slate-200/80 dark:border-slate-800 space-y-6 overflow-y-auto">
+                    <div className="w-full md:w-1/2 p-4 sm:p-6 bg-slate-50/70 dark:bg-slate-950/60 border-b md:border-b-0 md:border-r border-slate-200/80 dark:border-slate-800 space-y-6 md:overflow-y-auto">
                         
                         {/* Customer Details */}
                         <div className="space-y-3">
@@ -218,7 +218,7 @@ export default function RepairFormModal({ isOpen, onClose, products, customers =
                                     {errors.device_model && <p className="text-xs text-red-500 mt-1">{errors.device_model}</p>}
                                 </div>
 
-                                <div className="grid grid-cols-2 gap-3">
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                                     <div className="space-y-1.5">
                                         <label className="text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider">IMEI / Serial</label>
                                         <div className="relative">
@@ -304,7 +304,7 @@ export default function RepairFormModal({ isOpen, onClose, products, customers =
                     </div>
 
                     {/* Right Column: Parts Assignment & Financials */}
-                    <div className="w-full md:w-1/2 p-6 space-y-6 overflow-y-auto bg-white dark:bg-slate-900 flex flex-col justify-between">
+                    <div className="w-full md:w-1/2 p-4 sm:p-6 space-y-6 md:overflow-y-auto bg-white dark:bg-slate-900 flex flex-col justify-between">
                         
                         <div className="space-y-6">
                             {/* Parts Integration Card */}
@@ -410,7 +410,7 @@ export default function RepairFormModal({ isOpen, onClose, products, customers =
                                     </select>
                                     {errors.technician_id && <p className="text-xs text-red-500 mt-1">{errors.technician_id}</p>}
                                 </div>
-                                <div className="grid grid-cols-2 gap-4">
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                     <div className="space-y-1.5">
                                         <div className="flex items-center justify-between">
                                             <label className="text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider">Est. Cost (UGX) *</label>
@@ -469,7 +469,7 @@ export default function RepairFormModal({ isOpen, onClose, products, customers =
                         </div>
 
                         {/* Modal Action Footer */}
-                        <div className="flex justify-end gap-3 pt-4 border-t border-slate-100 dark:border-slate-800 mt-4">
+                        <div className="flex flex-wrap justify-end gap-2 sm:gap-3 pt-4 border-t border-slate-100 dark:border-slate-800 mt-4">
                             <Button type="button" variant="secondary" onClick={onClose}>
                                 Cancel
                             </Button>

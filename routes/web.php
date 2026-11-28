@@ -60,19 +60,22 @@ Route::get('/', function (\Illuminate\Http\Request $request) {
 });
 
 Route::get('/dashboard', function () {
-    $todayDirectSales = Sale::whereDate('sale_date', Carbon::today())
+    $todayStart = Carbon::today()->startOfDay();
+    $todayEnd = Carbon::today()->endOfDay();
+
+    $todayDirectSales = Sale::whereBetween('sale_date', [$todayStart, $todayEnd])
         ->whereNull('repair_id')
         ->whereIn('payment_status', ['Paid', 'Refunded'])
         ->where('payment_method', '!=', 'Layaway')
         ->sum('final_amount');
 
-    $todayLayawayPayments = \App\Models\LayawayPayment::whereDate('payment_date', Carbon::today())
+    $todayLayawayPayments = \App\Models\LayawayPayment::whereBetween('payment_date', [$todayStart, $todayEnd])
         ->sum('amount_paid');
 
-    $todayInvoicePayments = \App\Models\InvoicePayment::whereDate('payment_date', Carbon::today())
+    $todayInvoicePayments = \App\Models\InvoicePayment::whereBetween('payment_date', [$todayStart, $todayEnd])
         ->sum('amount');
 
-    $todayRefunds = \App\Models\Expense::whereDate('expense_date', Carbon::today())
+    $todayRefunds = \App\Models\Expense::whereBetween('expense_date', [$todayStart, $todayEnd])
         ->whereIn('category', ['Refund', 'Refund (Past Shift)'])
         ->sum('amount');
 
@@ -90,31 +93,48 @@ Route::get('/dashboard', function () {
     });
 
     $activeRepairsCount = Repair::whereIn('status', ['Pending', 'In Progress'])->count();
-    $completedRepairsToday = Repair::whereIn('status', ['Completed', 'Delivered'])->whereDate('updated_at', Carbon::today())->count();
+    $completedRepairsToday = Repair::whereIn('status', ['Completed', 'Delivered'])->whereBetween('updated_at', [$todayStart, $todayEnd])->count();
 
+    // 4 grouped range queries instead of 28 per-day queries
     $salesData = Cache::remember('dashboard_sales_7days', 120, function () {
-        return collect(range(6, 0))->map(function ($days) {
-            $date = Carbon::today()->subDays($days);
-            $directSales = Sale::whereDate('sale_date', $date)
-                ->whereNull('repair_id')
-                ->whereIn('payment_status', ['Paid', 'Refunded'])
-                ->where('payment_method', '!=', 'Layaway')
-                ->sum('final_amount');
-                
-            $layawayPayments = \App\Models\LayawayPayment::whereDate('payment_date', $date)
-                ->sum('amount_paid');
+        $start = Carbon::today()->subDays(6)->startOfDay();
+        $end = Carbon::today()->endOfDay();
 
-            $invoicePayments = \App\Models\InvoicePayment::whereDate('payment_date', $date)
-                ->sum('amount');
-                
-            $refunds = \App\Models\Expense::whereDate('expense_date', $date)
-                ->whereIn('category', ['Refund', 'Refund (Past Shift)'])
-                ->sum('amount');
-                
-            $total = $directSales + $layawayPayments + $invoicePayments - $refunds;
+        $directByDay = Sale::whereBetween('sale_date', [$start, $end])
+            ->whereNull('repair_id')
+            ->whereIn('payment_status', ['Paid', 'Refunded'])
+            ->where('payment_method', '!=', 'Layaway')
+            ->selectRaw('DATE(sale_date) as d, COALESCE(SUM(final_amount), 0) as total')
+            ->groupByRaw('DATE(sale_date)')
+            ->pluck('total', 'd');
+
+        $layawayByDay = \App\Models\LayawayPayment::whereBetween('payment_date', [$start, $end])
+            ->selectRaw('DATE(payment_date) as d, COALESCE(SUM(amount_paid), 0) as total')
+            ->groupByRaw('DATE(payment_date)')
+            ->pluck('total', 'd');
+
+        $invoiceByDay = \App\Models\InvoicePayment::whereBetween('payment_date', [$start, $end])
+            ->selectRaw('DATE(payment_date) as d, COALESCE(SUM(amount), 0) as total')
+            ->groupByRaw('DATE(payment_date)')
+            ->pluck('total', 'd');
+
+        $refundsByDay = \App\Models\Expense::whereBetween('expense_date', [$start, $end])
+            ->whereIn('category', ['Refund', 'Refund (Past Shift)'])
+            ->selectRaw('DATE(expense_date) as d, COALESCE(SUM(amount), 0) as total')
+            ->groupByRaw('DATE(expense_date)')
+            ->pluck('total', 'd');
+
+        return collect(range(6, 0))->map(function ($days) use ($directByDay, $layawayByDay, $invoiceByDay, $refundsByDay) {
+            $date = Carbon::today()->subDays($days);
+            $key = $date->toDateString();
+            $total = (float) ($directByDay[$key] ?? 0)
+                + (float) ($layawayByDay[$key] ?? 0)
+                + (float) ($invoiceByDay[$key] ?? 0)
+                - (float) ($refundsByDay[$key] ?? 0);
+
             return [
                 'date' => $date->format('M d'),
-                'sales' => (float) $total
+                'sales' => $total,
             ];
         });
     });
@@ -156,13 +176,8 @@ Route::get('/dashboard', function () {
         ->count();
     $dealerOwedAmount = (float) \App\Models\DealerItem::where('direction', 'inward')
         ->where('quantity_sold', '>', 0)
-        ->get()
-        ->sum(function ($item) {
-            $unitCost = floatval($item->wholesale_cost ?? $item->dealer_price ?? 0);
-            $totalOwed = $unitCost * $item->quantity_sold;
-            $alreadyPaid = floatval($item->settlement_amount ?? 0);
-            return max(0, $totalOwed - $alreadyPaid);
-        });
+        ->selectRaw("COALESCE(SUM(CASE WHEN (quantity_sold * COALESCE(NULLIF(wholesale_cost, 0), dealer_price, 0) - COALESCE(settlement_amount, 0)) > 0 THEN (quantity_sold * COALESCE(NULLIF(wholesale_cost, 0), dealer_price, 0) - COALESCE(settlement_amount, 0)) ELSE 0 END), 0) as total")
+        ->value('total');
     $dealerOutwardPendingCount = \App\Models\DealerItem::where(function ($q) {
             $q->where('direction', 'outward')->orWhereNull('direction');
         })
@@ -175,7 +190,10 @@ Route::get('/dashboard', function () {
         ->where('expected_return_date', '<', Carbon::today())
         ->count();
 
-    $activeLayaways = Sale::with('layawayPayments')->where('payment_status', 'Partial')->get();
+    // Fetch active partial layaways ONCE and reuse for KPIs + Follow-Ups queue
+    $activeLayaways = Sale::with(['customer', 'layawayPayments', 'saleItems.product.brand'])
+        ->where('payment_status', 'Partial')
+        ->get();
     $activeLayawaysCount = $activeLayaways->count();
     $totalLayawayReceivable = (float) $activeLayaways->sum(function ($sale) {
         return max(0, $sale->final_amount - $sale->layawayPayments->sum('amount_paid'));
@@ -184,21 +202,18 @@ Route::get('/dashboard', function () {
     $todayRepairRevenue = (float) \App\Models\LayawayPayment::whereHas('sale', function ($q) {
             $q->whereNotNull('repair_id');
         })
-        ->whereDate('payment_date', Carbon::today())
+        ->whereBetween('payment_date', [$todayStart, $todayEnd])
         ->sum('amount_paid');
 
     $activeDrawersCount = \App\Models\CashDrawer::where('status', 'open')->count();
-    $todayExpenses = (float) \App\Models\Expense::whereDate('expense_date', Carbon::today())
+    $todayExpenses = (float) \App\Models\Expense::whereBetween('expense_date', [$todayStart, $todayEnd])
         ->whereNotIn('category', ['Refund', 'Refund (Past Shift)'])
         ->sum('amount');
 
     // Unified Overdue & Follow-Ups Collection Queue (Layaways + B2B Invoices + Outward Dealer Consignments)
     $followUpItems = collect();
 
-    $layawayFollowUps = Sale::with(['customer', 'layawayPayments', 'saleItems.product.brand'])
-        ->where('payment_status', 'Partial')
-        ->get();
-    foreach ($layawayFollowUps as $sale) {
+    foreach ($activeLayaways as $sale) {
         $paid = (float) $sale->layawayPayments->sum('amount_paid');
         $bal = max(0, (float) $sale->final_amount - $paid);
         if ($bal <= 0) continue;

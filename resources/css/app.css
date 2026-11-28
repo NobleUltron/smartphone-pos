@@ -1,4 +1,3 @@
-@import 'bootstrap/dist/css/bootstrap.min.css';
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -432,13 +431,90 @@ a { text-decoration: none; }
     background-color: #ffffff !important;
 }
 
+.dark [data-receipt-light-mode="true"] .bg-slate-50,
+.dark [data-receipt-light-mode="true"] .bg-slate-50\/50,
+.dark [data-receipt-light-mode="true"] .bg-slate-50\/70,
+.dark [data-receipt-light-mode="true"] .bg-slate-50\/80 {
+    background-color: #f8fafc !important;
+}
+
+.dark [data-receipt-light-mode="true"] .bg-slate-100 {
+    background-color: #f1f5f9 !important;
+}
+
+.dark [data-receipt-light-mode="true"] .bg-slate-900 {
+    background-color: #0f172a !important;
+}
+
+.dark [data-receipt-light-mode="true"] .text-white {
+    color: #ffffff !important;
+}
+
+.dark [data-receipt-light-mode="true"] .text-slate-900,
+.dark [data-receipt-light-mode="true"] h1,
+.dark [data-receipt-light-mode="true"] h2,
+.dark [data-receipt-light-mode="true"] h3,
+.dark [data-receipt-light-mode="true"] h4 {
+    color: #0f172a !important;
+}
+
+.dark [data-receipt-light-mode="true"] .text-slate-800 {
+    color: #1e293b !important;
+}
+
+.dark [data-receipt-light-mode="true"] .text-slate-700 {
+    color: #334155 !important;
+}
+
+.dark [data-receipt-light-mode="true"] .text-slate-600 {
+    color: #475569 !important;
+}
+
+.dark [data-receipt-light-mode="true"] .text-slate-500 {
+    color: #64748b !important;
+}
+
+.dark [data-receipt-light-mode="true"] .text-slate-400 {
+    color: #94a3b8 !important;
+}
+
+.dark [data-receipt-light-mode="true"] .border-slate-100 {
+    border-color: #f1f5f9 !important;
+}
+
+.dark [data-receipt-light-mode="true"] .border-slate-200,
+.dark [data-receipt-light-mode="true"] .border-slate-200\/60,
+.dark [data-receipt-light-mode="true"] .border-slate-200\/80 {
+    border-color: #e2e8f0 !important;
+}
+
+.dark [data-receipt-light-mode="true"] .border-slate-300 {
+    border-color: #cbd5e1 !important;
+}
+
+.dark [data-receipt-light-mode="true"] table thead,
+.dark [data-receipt-light-mode="true"] table thead tr,
+.dark [data-receipt-light-mode="true"] table thead th {
+    background-color: #0f172a !important;
+    color: #ffffff !important;
+    border-color: #0f172a !important;
+}
+
+.dark [data-receipt-light-mode="true"] table tbody tr:hover {
+    background-color: transparent !important;
+}
+
 /* Print safety — always light regardless of dark mode */
 @media print {
-    html, body, .saas-card, .saas-table-container,
+    html, html.dark, body, html.dark body,
+    .dark .receipt-wrapper, .receipt-wrapper,
+    .saas-card, .saas-table-container,
     .saas-table th, .saas-table td,
-    .receipt-container, .print-ticket-container, .print-label-container {
+    .receipt-container, .a4-invoice-container, .print-ticket-container, .print-label-container {
         background: #ffffff !important;
-        color: #000000 !important;
+        background-color: #ffffff !important;
+        color: #0f172a !important;
+        color-scheme: light !important;
         border-color: #cbd5e1 !important;
         box-sizing: border-box !important;
         -webkit-print-color-adjust: exact !important;

@@ -20,7 +20,10 @@ class AccountController extends Controller
 {
     public function __construct()
     {
-        TreasuryService::ensureDefaultAccounts();
+        \Illuminate\Support\Facades\Cache::remember('default_accounts_ensured', 3600, function () {
+            TreasuryService::ensureDefaultAccounts();
+            return true;
+        });
     }
 
     public function callAction($method, $parameters)
@@ -106,8 +109,8 @@ class AccountController extends Controller
             ->value('total');
         $dealerPayables = (float) \App\Models\DealerItem::where('direction', 'inward')
             ->where('quantity_sold', '>', 0)
-            ->get()
-            ->sum(fn($item) => max(0, ($item->quantity_sold * (float) ($item->wholesale_cost ?: $item->dealer_price ?: 0)) - (float) ($item->settlement_amount ?? 0)));
+            ->selectRaw("COALESCE(SUM(CASE WHEN (quantity_sold * COALESCE(NULLIF(wholesale_cost, 0), dealer_price, 0) - COALESCE(settlement_amount, 0)) > 0 THEN (quantity_sold * COALESCE(NULLIF(wholesale_cost, 0), dealer_price, 0) - COALESCE(settlement_amount, 0)) ELSE 0 END), 0) as total")
+            ->value('total');
         $totalPayables = $supplierPayables + $dealerPayables;
         $adjustedNetWorth = $ownerNetWorth + $totalReceivables - $totalPayables;
 

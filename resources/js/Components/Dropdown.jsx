@@ -54,13 +54,13 @@ const Content = ({
     let widthClasses = '';
 
     if (width === '48') {
-        widthClasses = 'w-48';
+        widthClasses = 'w-48 max-w-[calc(100vw-2rem)]';
     } else if (width === '64') {
-        widthClasses = 'w-64';
+        widthClasses = 'w-64 max-w-[calc(100vw-2rem)]';
     } else if (width === '80') {
-        widthClasses = 'w-80';
+        widthClasses = 'w-72 sm:w-80 max-w-[calc(100vw-1.5rem)]';
     } else if (width === '96') {
-        widthClasses = 'w-96';
+        widthClasses = 'w-80 sm:w-96 max-w-[calc(100vw-1.5rem)]';
     }
 
     return (

@@ -194,9 +194,9 @@ function LayoutInner({ children }) {
             <Toaster position="top-right" toastOptions={{ className: 'font-sans' }} />
             
             {/* Mobile Sidebar Overlay */}
-            {isMobile && isSidebarOpen && (
+            {isSidebarOpen && (
                 <div 
-                    className="fixed inset-0 bg-slate-900/50 z-40 backdrop-blur-sm transition-opacity"
+                    className="fixed inset-0 bg-slate-900/50 z-40 backdrop-blur-sm transition-opacity lg:hidden"
                     onClick={() => setIsSidebarOpen(false)}
                 />
             )}
@@ -215,11 +215,9 @@ function LayoutInner({ children }) {
                         </div>
                         <span className="font-bold text-lg text-white tracking-tight">SmartPOS</span>
                     </Link>
-                    {isMobile && (
-                        <button onClick={() => setIsSidebarOpen(false)} className="p-2 -mr-2 rounded-lg hover:bg-white/10 text-slate-400 hover:text-white transition-colors">
-                            <X size={20} />
-                        </button>
-                    )}
+                    <button onClick={() => setIsSidebarOpen(false)} className="lg:hidden p-2 -mr-2 rounded-lg hover:bg-white/10 text-slate-400 hover:text-white transition-colors">
+                        <X size={20} />
+                    </button>
                 </div>
 
                 {/* Sidebar Navigation */}
@@ -298,14 +296,12 @@ function LayoutInner({ children }) {
                 {/* Top Navbar */}
                 <header className={`h-20 backdrop-blur-md border-b flex items-center justify-between px-4 sm:px-8 z-30 sticky top-0 transition-colors duration-200 ${isDark ? 'bg-[#0f172a]/95 border-slate-800/80' : 'bg-white/90 border-slate-200'}`}>
                     <div className="flex items-center gap-4">
-                        {isMobile && (
-                            <button 
-                                onClick={() => setIsSidebarOpen(true)}
-                                className={`p-2 -ml-2 rounded-xl transition-colors ${isDark ? 'text-slate-300 hover:bg-slate-800' : 'text-slate-500 hover:bg-slate-100'}`}
-                            >
-                                <Menu size={24} />
-                            </button>
-                        )}
+                        <button 
+                            onClick={() => setIsSidebarOpen(true)}
+                            className={`lg:hidden p-2 -ml-2 rounded-xl transition-colors ${isDark ? 'text-slate-300 hover:bg-slate-800' : 'text-slate-500 hover:bg-slate-100'}`}
+                        >
+                            <Menu size={24} />
+                        </button>
                         {!isTechnician && (
                             <Link 
                                 href={route('pos.index')} 

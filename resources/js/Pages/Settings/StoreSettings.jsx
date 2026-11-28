@@ -71,6 +71,18 @@ export default function StoreSettings({ auth, settings, windowsPrinters = [], ba
     });
 
     const [newTerm, setNewTerm] = useState('');
+    const [logoPreviewUrl, setLogoPreviewUrl] = useState(null);
+
+    // Safely manage object URL for newly selected logo file
+    useEffect(() => {
+        if (!data.store_logo) {
+            setLogoPreviewUrl(null);
+            return;
+        }
+        const url = URL.createObjectURL(data.store_logo);
+        setLogoPreviewUrl(url);
+        return () => URL.revokeObjectURL(url);
+    }, [data.store_logo]);
 
     // QZ Tray connection state
     const [qzStatus, setQzStatus] = useState('checking'); // 'checking' | 'connected' | 'disconnected'
@@ -84,10 +96,12 @@ export default function StoreSettings({ auth, settings, windowsPrinters = [], ba
     const [simModalOpen, setSimModalOpen] = useState(false);
     const [simData, setSimData] = useState(null);
 
-    // Check QZ Tray connectivity on mount
+    // Only probe QZ Tray when QZ Tray mode is actually selected
     useEffect(() => {
-        checkQzTrayConnection();
-    }, []);
+        if (data.print_mode === 'qztray') {
+            checkQzTrayConnection();
+        }
+    }, [data.print_mode]);
 
     const checkQzTrayConnection = async () => {
         setQzStatus('checking');
@@ -231,8 +245,8 @@ export default function StoreSettings({ auth, settings, windowsPrinters = [], ba
                                     <div className="shrink-0 flex flex-col gap-2">
                                         <label className="saas-label">Store Logo</label>
                                         <div className="w-24 h-24 rounded-2xl border-2 border-dashed border-slate-200 dark:border-slate-700 flex items-center justify-center overflow-hidden bg-slate-50 dark:bg-slate-800 relative group cursor-pointer hover:border-indigo-400 transition-colors">
-                                            {data.store_logo ? (
-                                                <img src={URL.createObjectURL(data.store_logo)} className="w-full h-full object-contain p-1" />
+                                            {logoPreviewUrl ? (
+                                                <img src={logoPreviewUrl} className="w-full h-full object-contain p-1" />
                                             ) : settings?.store_logo ? (
                                                 <img src={settings.store_logo} className="w-full h-full object-contain p-1" />
                                             ) : (
@@ -352,21 +366,21 @@ export default function StoreSettings({ auth, settings, windowsPrinters = [], ba
                                             onClick={() => setData('print_mode', 'browser')}
                                             className={`p-3.5 rounded-xl border cursor-pointer transition-all flex flex-col justify-between ${
                                                 data.print_mode === 'browser'
-                                                    ? 'border-indigo-600 bg-indigo-50/50 ring-2 ring-indigo-500/20'
-                                                    : 'border-slate-200 hover:border-slate-300 bg-white'
+                                                    ? 'border-indigo-500 bg-indigo-50/60 dark:bg-indigo-950/40 ring-2 ring-indigo-500/20'
+                                                    : 'border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600 bg-white dark:bg-slate-900'
                                             }`}
                                         >
                                             <div>
                                                 <div className="flex items-center justify-between mb-1.5">
-                                                    <Printer size={18} className={data.print_mode === 'browser' ? 'text-indigo-600' : 'text-slate-500'} />
-                                                    {data.print_mode === 'browser' && <Check size={16} className="text-indigo-600 font-bold" />}
+                                                    <Printer size={18} className={data.print_mode === 'browser' ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-500 dark:text-slate-400'} />
+                                                    {data.print_mode === 'browser' && <Check size={16} className="text-indigo-600 dark:text-indigo-400 font-bold" />}
                                                 </div>
-                                                <div className="font-bold text-xs text-slate-900 flex items-center gap-1.5">
+                                                <div className="font-bold text-xs text-slate-900 dark:text-white flex items-center flex-wrap gap-1.5">
                                                     Browser Thermal
-                                                    <span className="text-[9px] font-extrabold px-1.5 py-0.2 rounded bg-emerald-100 text-emerald-700">Cloud & Local</span>
+                                                    <span className="text-[9px] font-extrabold px-1.5 py-0.5 rounded bg-emerald-100 dark:bg-emerald-950/70 text-emerald-700 dark:text-emerald-300 border border-emerald-200/70 dark:border-emerald-800/70">Cloud &amp; Local</span>
                                                 </div>
-                                                <p className="text-[11px] text-slate-500 mt-1 leading-snug">
-                                                    Universal 80mm roll print dialog. Recommended for Cloud (Render) & mobile devices.
+                                                <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1.5 leading-snug">
+                                                    Universal 80mm roll print dialog. Recommended for Cloud (Render) &amp; mobile devices.
                                                 </p>
                                             </div>
                                         </div>
@@ -376,20 +390,20 @@ export default function StoreSettings({ auth, settings, windowsPrinters = [], ba
                                             onClick={() => setData('print_mode', 'spooler')}
                                             className={`p-3.5 rounded-xl border cursor-pointer transition-all flex flex-col justify-between ${
                                                 data.print_mode === 'spooler'
-                                                    ? 'border-indigo-600 bg-indigo-50/50 ring-2 ring-indigo-500/20'
-                                                    : 'border-slate-200 hover:border-slate-300 bg-white'
+                                                    ? 'border-indigo-500 bg-indigo-50/60 dark:bg-indigo-950/40 ring-2 ring-indigo-500/20'
+                                                    : 'border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600 bg-white dark:bg-slate-900'
                                             }`}
                                         >
                                             <div>
                                                 <div className="flex items-center justify-between mb-1.5">
-                                                    <Usb size={18} className={data.print_mode === 'spooler' ? 'text-indigo-600' : 'text-slate-500'} />
-                                                    {data.print_mode === 'spooler' && <Check size={16} className="text-indigo-600 font-bold" />}
+                                                    <Usb size={18} className={data.print_mode === 'spooler' ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-500 dark:text-slate-400'} />
+                                                    {data.print_mode === 'spooler' && <Check size={16} className="text-indigo-600 dark:text-indigo-400 font-bold" />}
                                                 </div>
-                                                <div className="font-bold text-xs text-slate-900 flex items-center gap-1.5">
+                                                <div className="font-bold text-xs text-slate-900 dark:text-white flex items-center flex-wrap gap-1.5">
                                                     Windows Spooler
-                                                    <span className="text-[9px] font-extrabold px-1.5 py-0.2 rounded bg-indigo-100 text-indigo-700">Local PC</span>
+                                                    <span className="text-[9px] font-extrabold px-1.5 py-0.5 rounded bg-indigo-100 dark:bg-indigo-950/70 text-indigo-700 dark:text-indigo-300 border border-indigo-200/70 dark:border-indigo-800/70">Local PC</span>
                                                 </div>
-                                                <p className="text-[11px] text-slate-500 mt-1 leading-snug">
+                                                <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1.5 leading-snug">
                                                     Direct raw ESC/POS via Winspool. Requires server and printer on the same Windows PC (XAMPP).
                                                 </p>
                                             </div>
@@ -400,20 +414,20 @@ export default function StoreSettings({ auth, settings, windowsPrinters = [], ba
                                             onClick={() => setData('print_mode', 'network')}
                                             className={`p-3.5 rounded-xl border cursor-pointer transition-all flex flex-col justify-between ${
                                                 data.print_mode === 'network'
-                                                    ? 'border-indigo-600 bg-indigo-50/50 ring-2 ring-indigo-500/20'
-                                                    : 'border-slate-200 hover:border-slate-300 bg-white'
+                                                    ? 'border-indigo-500 bg-indigo-50/60 dark:bg-indigo-950/40 ring-2 ring-indigo-500/20'
+                                                    : 'border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600 bg-white dark:bg-slate-900'
                                             }`}
                                         >
                                             <div>
                                                 <div className="flex items-center justify-between mb-1.5">
-                                                    <Wifi size={18} className={data.print_mode === 'network' ? 'text-indigo-600' : 'text-slate-500'} />
-                                                    {data.print_mode === 'network' && <Check size={16} className="text-indigo-600 font-bold" />}
+                                                    <Wifi size={18} className={data.print_mode === 'network' ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-500 dark:text-slate-400'} />
+                                                    {data.print_mode === 'network' && <Check size={16} className="text-indigo-600 dark:text-indigo-400 font-bold" />}
                                                 </div>
-                                                <div className="font-bold text-xs text-slate-900 flex items-center gap-1.5">
+                                                <div className="font-bold text-xs text-slate-900 dark:text-white flex items-center flex-wrap gap-1.5">
                                                     Network Socket
-                                                    <span className="text-[9px] font-extrabold px-1.5 py-0.2 rounded bg-slate-100 text-slate-700">LAN</span>
+                                                    <span className="text-[9px] font-extrabold px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700">LAN</span>
                                                 </div>
-                                                <p className="text-[11px] text-slate-500 mt-1 leading-snug">
+                                                <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1.5 leading-snug">
                                                     Direct TCP socket on port 9100 for network thermal printers on local LAN.
                                                 </p>
                                             </div>
@@ -424,20 +438,20 @@ export default function StoreSettings({ auth, settings, windowsPrinters = [], ba
                                             onClick={() => setData('print_mode', 'mock')}
                                             className={`p-3.5 rounded-xl border cursor-pointer transition-all flex flex-col justify-between ${
                                                 data.print_mode === 'mock'
-                                                    ? 'border-indigo-600 bg-indigo-50/50 ring-2 ring-indigo-500/20'
-                                                    : 'border-slate-200 hover:border-slate-300 bg-white'
+                                                    ? 'border-indigo-500 bg-indigo-50/60 dark:bg-indigo-950/40 ring-2 ring-indigo-500/20'
+                                                    : 'border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600 bg-white dark:bg-slate-900'
                                             }`}
                                         >
                                             <div>
                                                 <div className="flex items-center justify-between mb-1.5">
-                                                    <Terminal size={18} className={data.print_mode === 'mock' ? 'text-indigo-600' : 'text-slate-500'} />
-                                                    {data.print_mode === 'mock' && <Check size={16} className="text-indigo-600 font-bold" />}
+                                                    <Terminal size={18} className={data.print_mode === 'mock' ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-500 dark:text-slate-400'} />
+                                                    {data.print_mode === 'mock' && <Check size={16} className="text-indigo-600 dark:text-indigo-400 font-bold" />}
                                                 </div>
-                                                <div className="font-bold text-xs text-slate-900 flex items-center gap-1.5">
+                                                <div className="font-bold text-xs text-slate-900 dark:text-white flex items-center flex-wrap gap-1.5">
                                                     Dev Simulator
-                                                    <span className="text-[9px] font-extrabold px-1.5 py-0.2 rounded bg-slate-100 text-slate-700">Testing</span>
+                                                    <span className="text-[9px] font-extrabold px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700">Testing</span>
                                                 </div>
-                                                <p className="text-[11px] text-slate-500 mt-1 leading-snug">
+                                                <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1.5 leading-snug">
                                                     Simulates ESC/POS buffer in-browser for zero-hardware testing.
                                                 </p>
                                             </div>
@@ -449,63 +463,63 @@ export default function StoreSettings({ auth, settings, windowsPrinters = [], ba
                                 {/* Paper Roll Width */}
                                 <div>
                                     <label className="saas-label mb-2">Paper Roll Width</label>
-                                    <div className="grid grid-cols-2 gap-3">
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                                         <button
                                             type="button"
                                             onClick={() => setData('printer_paper_width', '80mm')}
                                             className={`p-3 rounded-xl border flex items-center justify-between transition-all ${
                                                 data.printer_paper_width === '80mm'
-                                                    ? 'border-rose-500 bg-rose-50/40 text-rose-900 font-bold'
-                                                    : 'border-slate-200 text-slate-600 hover:bg-slate-50'
+                                                    ? 'border-rose-500 bg-rose-50/60 dark:bg-rose-950/40 text-rose-900 dark:text-rose-300 font-bold ring-2 ring-rose-500/15'
+                                                    : 'border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800/60'
                                             }`}
                                         >
                                             <div className="text-left">
                                                 <span className="block text-xs font-extrabold">80mm Roll (Standard)</span>
-                                                <span className="block text-[11px] opacity-75 font-normal">48 Characters / Line</span>
+                                                <span className="block text-[11px] opacity-80 font-normal">48 Characters / Line</span>
                                             </div>
-                                            {data.printer_paper_width === '80mm' && <Check size={16} className="text-rose-600" />}
+                                            {data.printer_paper_width === '80mm' && <Check size={16} className="text-rose-600 dark:text-rose-400" />}
                                         </button>
                                         <button
                                             type="button"
                                             onClick={() => setData('printer_paper_width', '58mm')}
                                             className={`p-3 rounded-xl border flex items-center justify-between transition-all ${
                                                 data.printer_paper_width === '58mm'
-                                                    ? 'border-rose-500 bg-rose-50/40 text-rose-900 font-bold'
-                                                    : 'border-slate-200 text-slate-600 hover:bg-slate-50'
+                                                    ? 'border-rose-500 bg-rose-50/60 dark:bg-rose-950/40 text-rose-900 dark:text-rose-300 font-bold ring-2 ring-rose-500/15'
+                                                    : 'border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800/60'
                                             }`}
                                         >
                                             <div className="text-left">
                                                 <span className="block text-xs font-extrabold">58mm Roll (Compact)</span>
-                                                <span className="block text-[11px] opacity-75 font-normal">32 Characters / Line</span>
+                                                <span className="block text-[11px] opacity-80 font-normal">32 Characters / Line</span>
                                             </div>
-                                            {data.printer_paper_width === '58mm' && <Check size={16} className="text-rose-600" />}
+                                            {data.printer_paper_width === '58mm' && <Check size={16} className="text-rose-600 dark:text-rose-400" />}
                                         </button>
                                     </div>
                                 </div>
 
                                 {/* Mode-Specific Configuration Details */}
                                 {data.print_mode === 'browser' && (
-                                    <div className="p-4 rounded-xl border border-indigo-200 bg-indigo-50/50 space-y-2 text-xs">
-                                        <div className="flex items-center justify-between">
-                                            <div className="flex items-center gap-2 font-bold text-indigo-950">
-                                                <Printer size={16} className="text-indigo-600" />
+                                    <div className="p-4 rounded-xl border border-indigo-200 dark:border-indigo-800/70 bg-indigo-50/60 dark:bg-indigo-950/35 space-y-2 text-xs">
+                                        <div className="flex flex-wrap items-center justify-between gap-2">
+                                            <div className="flex items-center gap-2 font-bold text-indigo-950 dark:text-indigo-200">
+                                                <Printer size={16} className="text-indigo-600 dark:text-indigo-400" />
                                                 Browser Thermal Printing (Recommended for Cloud / Render)
                                             </div>
-                                            <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200 flex items-center gap-1">
+                                            <span className="text-[10px] font-bold text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/70 px-2 py-0.5 rounded-md border border-emerald-200 dark:border-emerald-800/70 flex items-center gap-1">
                                                 <CheckCircle size={11} /> Universal Driverless
                                             </span>
                                         </div>
-                                        <p className="text-[11px] text-slate-600 leading-relaxed">
-                                            Thermal receipts open directly in your browser's print dialog, formatted for <strong>{data.printer_paper_width} roll width</strong> with zero margins. Since it uses your computer's native browser printer system, it works immediately with any USB thermal printer plugged into your PC without needing server-side Windows spoolers.
+                                        <p className="text-[11px] text-slate-600 dark:text-slate-300 leading-relaxed">
+                                            Thermal receipts open directly in your browser's print dialog, formatted for <strong className="text-slate-900 dark:text-white">{data.printer_paper_width} roll width</strong> with zero margins. Since it uses your computer's native browser printer system, it works immediately with any USB thermal printer plugged into your PC without needing server-side Windows spoolers.
                                         </p>
                                     </div>
                                 )}
 
                                 {data.print_mode === 'spooler' && (
-                                    <div className="p-4 rounded-xl border border-slate-200 bg-slate-50/60 space-y-4">
+                                    <div className="p-4 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/60 dark:bg-slate-800/50 space-y-4">
                                         <div className="flex items-center justify-between">
                                             <label className="saas-label mb-0">Installed Windows / Thermal Printer</label>
-                                            <span className="text-xs font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200 flex items-center gap-1">
+                                            <span className="text-xs font-bold text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/70 px-2 py-0.5 rounded-md border border-emerald-200 dark:border-emerald-800/70 flex items-center gap-1">
                                                 <CheckCircle size={12} /> Direct Spooler
                                             </span>
                                         </div>
@@ -631,12 +645,12 @@ export default function StoreSettings({ auth, settings, windowsPrinters = [], ba
                                 )}
 
                                 {data.print_mode === 'mock' && (
-                                    <div className="p-4 rounded-xl border border-indigo-200 bg-indigo-50/40 text-xs text-indigo-900 space-y-2">
+                                    <div className="p-4 rounded-xl border border-indigo-200 dark:border-indigo-800/70 bg-indigo-50/50 dark:bg-indigo-950/35 text-xs text-indigo-900 dark:text-indigo-200 space-y-2">
                                         <div className="font-bold flex items-center gap-1.5">
-                                            <Terminal size={15} className="text-indigo-600" />
+                                            <Terminal size={15} className="text-indigo-600 dark:text-indigo-400" />
                                             Developer Simulator Mode Active
                                         </div>
-                                        <p className="text-[11px] text-indigo-700 leading-relaxed">
+                                        <p className="text-[11px] text-indigo-700 dark:text-slate-300 leading-relaxed">
                                             Print jobs will not be sent to physical hardware. Instead, the backend ESC/POS command stream will be decoded into an ASCII text preview and displayed in an interactive modal.
                                         </p>
                                     </div>
@@ -644,7 +658,7 @@ export default function StoreSettings({ auth, settings, windowsPrinters = [], ba
 
                                 {/* Hardware Options */}
                                 <div className="space-y-3 pt-1">
-                                    <label className="flex items-center justify-between p-3.5 bg-slate-50 rounded-xl border border-slate-200/80 cursor-pointer hover:bg-slate-100/80 transition-colors">
+                                    <label className="flex items-center justify-between p-3.5 bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-slate-200/80 dark:border-slate-700/80 cursor-pointer hover:bg-slate-100/80 dark:hover:bg-slate-800 transition-colors">
                                         <div>
                                             <span className="block text-xs font-bold text-slate-900 flex items-center gap-1.5">
                                                 <DollarSign size={14} className="text-emerald-600" /> Kick Cash Drawer on Receipt Print
@@ -661,7 +675,7 @@ export default function StoreSettings({ auth, settings, windowsPrinters = [], ba
                                         />
                                     </label>
 
-                                    <label className="flex items-center justify-between p-3.5 bg-slate-50 rounded-xl border border-slate-200/80 cursor-pointer hover:bg-slate-100/80 transition-colors">
+                                    <label className="flex items-center justify-between p-3.5 bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-slate-200/80 dark:border-slate-700/80 cursor-pointer hover:bg-slate-100/80 dark:hover:bg-slate-800 transition-colors">
                                         <div>
                                             <span className="block text-xs font-bold text-slate-900 flex items-center gap-1.5">
                                                 <Scissors size={14} className="text-blue-600" /> Auto Cut Paper After Receipt
@@ -678,7 +692,7 @@ export default function StoreSettings({ auth, settings, windowsPrinters = [], ba
                                         />
                                     </label>
 
-                                    <label className="flex items-center justify-between p-3.5 bg-slate-50 rounded-xl border border-slate-200/80 cursor-pointer hover:bg-slate-100/80 transition-colors">
+                                    <label className="flex items-center justify-between p-3.5 bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-slate-200/80 dark:border-slate-700/80 cursor-pointer hover:bg-slate-100/80 dark:hover:bg-slate-800 transition-colors">
                                         <div>
                                             <span className="block text-xs font-bold text-slate-900 flex items-center gap-1.5">
                                                 <ImageIcon size={14} className="text-pink-600" /> Print Store Logo on Receipt
@@ -760,7 +774,7 @@ export default function StoreSettings({ auth, settings, windowsPrinters = [], ba
                                                 <button 
                                                     type="button" 
                                                     onClick={() => handleRemoveTerm(index)}
-                                                    className="w-10 h-10 shrink-0 rounded-xl bg-rose-50 text-rose-500 hover:bg-rose-100 flex items-center justify-center transition-colors"
+                                                    className="w-10 h-10 shrink-0 rounded-xl bg-rose-50 dark:bg-rose-950/60 text-rose-500 dark:text-rose-400 hover:bg-rose-100 dark:hover:bg-rose-900/60 border border-rose-200/70 dark:border-rose-800/70 flex items-center justify-center transition-colors"
                                                     title="Remove Rule"
                                                 >
                                                     <Trash2 size={16} />
@@ -796,7 +810,7 @@ export default function StoreSettings({ auth, settings, windowsPrinters = [], ba
                             </p>
 
                             <div className="space-y-3">
-                                <label className="flex items-center justify-between p-3.5 bg-slate-50 rounded-xl border border-slate-200/80 cursor-pointer hover:bg-slate-100/80 transition-colors">
+                                <label className="flex items-center justify-between p-3.5 bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-slate-200/80 dark:border-slate-700/80 cursor-pointer hover:bg-slate-100/80 dark:hover:bg-slate-800 transition-colors">
                                     <div>
                                         <span className="block text-xs font-bold text-slate-900">Allow Custom Cashier Discounts</span>
                                         <span className="block text-[11px] text-slate-500">Permit cashiers to enter manual discounts during POS checkout.</span>
@@ -809,7 +823,7 @@ export default function StoreSettings({ auth, settings, windowsPrinters = [], ba
                                     />
                                 </label>
 
-                                <label className="flex items-center justify-between p-3.5 bg-slate-50 rounded-xl border border-slate-200/80 cursor-pointer hover:bg-slate-100/80 transition-colors">
+                                <label className="flex items-center justify-between p-3.5 bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-slate-200/80 dark:border-slate-700/80 cursor-pointer hover:bg-slate-100/80 dark:hover:bg-slate-800 transition-colors">
                                     <div>
                                         <span className="block text-xs font-bold text-slate-900">Allow Item Price Overwrites</span>
                                         <span className="block text-[11px] text-slate-500">Permit cashiers to override selling prices on individual items.</span>
@@ -822,7 +836,7 @@ export default function StoreSettings({ auth, settings, windowsPrinters = [], ba
                                     />
                                 </label>
 
-                                <label className="flex items-center justify-between p-3.5 bg-slate-50 rounded-xl border border-slate-200/80 cursor-pointer hover:bg-slate-100/80 transition-colors">
+                                <label className="flex items-center justify-between p-3.5 bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-slate-200/80 dark:border-slate-700/80 cursor-pointer hover:bg-slate-100/80 dark:hover:bg-slate-800 transition-colors">
                                     <div>
                                         <span className="block text-xs font-bold text-slate-900">Allow Inward Dealer Stock Intake</span>
                                         <span className="block text-[11px] text-slate-500">Permit cashiers to receive items from partner dealers into shop inventory.</span>
@@ -894,12 +908,13 @@ export default function StoreSettings({ auth, settings, windowsPrinters = [], ba
                     <div className="sticky top-24">
                         <div className="flex items-center justify-between mb-4 ml-2 mr-1">
                             <h4 className="font-bold text-slate-400 uppercase tracking-widest text-xs">Live Receipt Preview</h4>
-                            <span className="text-[11px] font-bold px-2 py-0.5 rounded-md bg-slate-200 text-slate-700">
-                                {data.printer_paper_width} • {data.print_mode === 'spooler' ? 'Windows Spooler' : data.print_mode === 'network' ? 'TCP Socket' : data.print_mode === 'qztray' ? 'QZ Tray' : 'Simulator'}
+                            <span className="text-[11px] font-bold px-2.5 py-0.5 rounded-md bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-300/60 dark:border-slate-700">
+                                {data.printer_paper_width} • {data.print_mode === 'browser' ? 'Browser Thermal' : data.print_mode === 'spooler' ? 'Windows Spooler' : data.print_mode === 'network' ? 'TCP Socket' : data.print_mode === 'qztray' ? 'QZ Tray' : 'Simulator'}
                             </span>
                         </div>
                         
                         <div 
+                            data-receipt-light-mode="true"
                             className={`rounded-2xl shadow-2xl p-5 mx-auto font-mono text-sm relative overflow-hidden transition-all duration-300 ${
                                 data.printer_paper_width === '58mm' ? 'max-w-[280px]' : 'max-w-[360px]'
                             }`}
@@ -909,14 +924,20 @@ export default function StoreSettings({ auth, settings, windowsPrinters = [], ba
                             <div className="absolute top-0 left-0 right-0 h-2 bg-[url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI4IiBoZWlnaHQ9IjgiPjxwb2x5Z29uIGZpbGw9IiNmMThmNmY2IiBwb2ludHM9IjAsMCA4LDAgNCw4Ii8+PC9zdmc+')] bg-repeat-x -mt-1"></div>
                             
                             <div className="text-center mb-5 pt-4 flex flex-col items-center">
-                                {data.store_logo ? (
-                                    <img src={URL.createObjectURL(data.store_logo)} alt="Store Logo Preview" className="max-w-[140px] max-h-[70px] object-contain mb-2" />
-                                ) : settings?.store_logo ? (
-                                    <img src={settings.store_logo} alt="Store Logo Preview" className="max-w-[140px] max-h-[70px] object-contain mb-2" />
-                                ) : (
-                                    <div className="w-10 h-10 border border-slate-900 flex items-center justify-center mb-2 rounded-lg">
-                                        <Store size={20} style={{ color: '#0F172A' }} />
-                                    </div>
+                                {data.printer_print_logo && (
+                                    logoPreviewUrl ? (
+                                        <div className="mb-2 rounded-xl overflow-hidden border border-slate-200/80 shadow-sm bg-white p-0.5">
+                                            <img src={logoPreviewUrl} alt="Store Logo Preview" className="max-w-[120px] max-h-[64px] object-contain rounded-lg block" />
+                                        </div>
+                                    ) : settings?.store_logo ? (
+                                        <div className="mb-2 rounded-xl overflow-hidden border border-slate-200/80 shadow-sm bg-white p-0.5">
+                                            <img src={settings.store_logo} alt="Store Logo Preview" className="max-w-[120px] max-h-[64px] object-contain rounded-lg block" />
+                                        </div>
+                                    ) : (
+                                        <div className="w-10 h-10 border border-slate-900 flex items-center justify-center mb-2 rounded-lg">
+                                            <Store size={20} style={{ color: '#0F172A' }} />
+                                        </div>
+                                    )
                                 )}
                                 <h1 className="font-extrabold text-base leading-tight uppercase tracking-wider mb-1" style={{ color: '#0F172A' }}>
                                     {data.shop_name || 'SmartPOS Kampala'}
@@ -935,23 +956,19 @@ export default function StoreSettings({ auth, settings, windowsPrinters = [], ba
                                 <div className="flex justify-between"><span className="font-bold">Cashier:</span> <span>Demo Admin</span></div>
                             </div>
 
-                            <table className="w-full text-xs mb-4">
-                                <thead>
-                                    <tr className="border-b border-dashed border-slate-300" style={{ color: '#64748B' }}>
-                                        <th className="text-left pb-2 font-semibold uppercase tracking-wider">Item</th>
-                                        <th className="text-right pb-2 font-semibold uppercase tracking-wider">Price</th>
-                                    </tr>
-                                </thead>
-                                <tbody style={{ color: '#0F172A' }}>
-                                    <tr>
-                                        <td className="py-2 pr-2">
-                                            <div className="font-bold text-xs">Apple iPhone 15 Pro</div>
-                                            <div className="text-[10px] font-mono" style={{ color: '#64748B' }}>IMEI: 354892109845231</div>
-                                        </td>
-                                        <td className="py-2 text-right align-top font-bold text-xs">4,200,000</td>
-                                    </tr>
-                                </tbody>
-                            </table>
+                            <div className="mb-4 text-xs">
+                                <div className="flex justify-between pb-2 mb-2 font-semibold uppercase tracking-wider" style={{ color: '#64748B', borderBottom: '1px dashed #CBD5E1' }}>
+                                    <span>Item</span>
+                                    <span>Price</span>
+                                </div>
+                                <div className="flex justify-between items-start py-1" style={{ color: '#0F172A' }}>
+                                    <div className="pr-2">
+                                        <div className="font-bold text-xs">Apple iPhone 15 Pro</div>
+                                        <div className="text-[10px] font-mono" style={{ color: '#64748B' }}>IMEI: 354892109845231</div>
+                                    </div>
+                                    <div className="font-bold text-xs tabular-nums">4,200,000</div>
+                                </div>
+                            </div>
 
                             <div className="border-t border-dashed border-slate-300 pt-3 flex justify-between font-black text-sm mb-5" style={{ color: '#0F172A' }}>
                                 <span>Total:</span>
@@ -994,20 +1011,20 @@ export default function StoreSettings({ auth, settings, windowsPrinters = [], ba
 
             {/* Dev Simulator Modal */}
             <Modal show={simModalOpen} onClose={() => setSimModalOpen(false)} maxWidth="lg">
-                <div className="p-6 font-sans">
-                    <div className="flex items-center justify-between border-b border-slate-100 pb-4 mb-4">
+                <div className="p-6 font-sans bg-white dark:bg-slate-900 rounded-2xl">
+                    <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-4 mb-4">
                         <div className="flex items-center gap-2.5">
-                            <div className="w-9 h-9 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center">
+                            <div className="w-9 h-9 rounded-xl bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 flex items-center justify-center">
                                 <Terminal size={20} />
                             </div>
                             <div>
-                                <h3 className="font-bold text-slate-900 text-base">ESC/POS Simulator Preview</h3>
-                                <p className="text-xs text-slate-500">
+                                <h3 className="font-bold text-slate-900 dark:text-white text-base">ESC/POS Simulator Preview</h3>
+                                <p className="text-xs text-slate-500 dark:text-slate-400">
                                     Simulated thermal paper output ({simData?.byte_count || 0} bytes generated)
                                 </p>
                             </div>
                         </div>
-                        <button onClick={() => setSimModalOpen(false)} className="text-slate-400 hover:text-slate-600 font-bold">✕</button>
+                        <button onClick={() => setSimModalOpen(false)} className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors font-bold">✕</button>
                     </div>
 
                     <div className="bg-slate-900 text-emerald-400 p-4 rounded-xl font-mono text-xs overflow-x-auto max-h-[460px] whitespace-pre shadow-inner">

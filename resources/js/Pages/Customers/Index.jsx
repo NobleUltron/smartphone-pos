@@ -451,7 +451,7 @@ export default function CustomersIndex({ auth, customers = {}, summary, filters 
                                         </p>
                                     </div>
                                 </div>
-                                <div className="grid grid-cols-4 gap-1.5">
+                                <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
                                     <button type="button" onClick={() => handleViewHistory(customer)} className="py-1.5 rounded-lg bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 text-xs font-bold flex items-center justify-center gap-1">
                                         <History size={13} /> History
                                     </button>
@@ -625,7 +625,7 @@ export default function CustomersIndex({ auth, customers = {}, summary, filters 
                     <div className="flex-1 flex flex-col md:flex-row overflow-y-auto no-scrollbar bg-slate-50/30 dark:bg-slate-950/60">
                         
                         {/* Left Column: Read-Only Intake Details */}
-                        <div className="w-full md:w-1/3 p-8 bg-white/50 dark:bg-slate-900/50 backdrop-blur-xl border-b md:border-b-0 md:border-r border-slate-200/80 dark:border-slate-800 space-y-8 overflow-y-auto no-scrollbar relative">
+                        <div className="w-full md:w-1/3 p-4 sm:p-6 md:p-8 bg-white/50 dark:bg-slate-900/50 backdrop-blur-xl border-b md:border-b-0 md:border-r border-slate-200/80 dark:border-slate-800 space-y-6 md:space-y-8 md:overflow-y-auto no-scrollbar relative">
                             
                             {/* Customer Info */}
                             <div className="space-y-3">
@@ -667,19 +667,19 @@ export default function CustomersIndex({ auth, customers = {}, summary, filters 
                             <div className="space-y-3">
                                 <h3 className="text-sm font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest">Lifetime Value</h3>
                                 <div className="bg-gradient-to-br from-emerald-500 to-teal-600 p-6 rounded-2xl shadow-lg shadow-emerald-500/20 flex flex-col justify-center items-center text-white relative overflow-hidden transition-all duration-300 hover:scale-[1.02]">
-                                    <div className="absolute top-0 right-0 p-4 opacity-20">
-                                        <Receipt size={64} />
+                                    <div className="absolute -bottom-3 -right-3 opacity-15 pointer-events-none">
+                                        <Receipt size={72} />
                                     </div>
                                     <div className="relative z-10 text-center">
-                                        <div className="text-4xl font-black">{Number(selectedCustomer?.sales_sum_final_amount || 0).toLocaleString()} <span className="text-xl font-bold text-emerald-100">UGX</span></div>
-                                        <p className="text-sm font-medium text-emerald-100 mt-2 uppercase tracking-wide">Total Spent</p>
+                                        <div className="text-3xl font-black tabular-nums">{Number(selectedCustomer?.sales_sum_final_amount || 0).toLocaleString()} <span className="text-lg font-bold text-emerald-100">UGX</span></div>
+                                        <p className="text-xs font-semibold text-emerald-100 mt-1.5 uppercase tracking-wider">Total Spent</p>
                                     </div>
                                 </div>
                             </div>
                         </div>
 
                         {/* Right Column: History List */}
-                        <div className="w-full md:w-2/3 p-8 space-y-6 overflow-y-auto bg-slate-50/30 dark:bg-slate-950/40 no-scrollbar">
+                        <div className="w-full md:w-2/3 p-4 sm:p-6 md:p-8 space-y-6 md:overflow-y-auto bg-slate-50/30 dark:bg-slate-950/40 no-scrollbar">
                             <h3 className="text-sm font-bold text-slate-800 dark:text-white uppercase tracking-widest flex items-center gap-2 mb-4">
                                 <Receipt size={20} className="text-indigo-500" />
                                 Purchase History
@@ -706,7 +706,7 @@ export default function CustomersIndex({ auth, customers = {}, summary, filters 
                                             <div className="flex items-start justify-between mb-4 pl-2">
                                                 <div>
                                                     <div className="font-bold text-slate-900 dark:text-white flex items-center gap-3 text-base">
-                                                        Receipt {sale.receipt_number}
+                                                        Receipt #{sale.receipt_number || sale.id}
                                                         <Badge variant={sale.payment_status === 'Paid' ? 'success' : sale.payment_status === 'Refunded' ? 'danger' : 'warning'}>
                                                             {sale.payment_status || 'Completed'}
                                                         </Badge>
@@ -780,7 +780,7 @@ export default function CustomersIndex({ auth, customers = {}, summary, filters 
                         <div className="space-y-5">
                             <div>
                                 <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-2">Statement Filter</label>
-                                <div className="grid grid-cols-3 gap-2">
+                                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                                     <button
                                         type="button"
                                         onClick={() => setStatementFilter('all')}
@@ -833,7 +833,7 @@ export default function CustomersIndex({ auth, customers = {}, summary, filters 
                             </div>
                         </div>
 
-                        <div className="mt-8 flex items-center justify-between gap-3 pt-4 border-t border-slate-100 dark:border-slate-800">
+                        <div className="mt-8 flex flex-wrap items-center justify-between gap-3 pt-4 border-t border-slate-100 dark:border-slate-800">
                             <Button variant="secondary" onClick={() => setShowStatementModal(false)}>Close</Button>
                             <div className="flex items-center gap-2">
                                 <button 

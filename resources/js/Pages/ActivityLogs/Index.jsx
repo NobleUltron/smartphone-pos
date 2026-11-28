@@ -63,7 +63,7 @@ export default function ActivityLogsIndex({ auth, logs, users, modules, filters 
         <AuthenticatedLayout>
             <Head title="Audit Trail Log" />
 
-            <div className="max-w-7xl mx-auto py-8 px-4 sm:px-6 lg:px-8">
+            <div className="space-y-6">
                 <PageHeader
                     title="System Audit Trail Log"
                     breadcrumbs={[{ label: 'Home', href: '/' }, { label: 'Audit Log' }]}
@@ -124,7 +124,7 @@ export default function ActivityLogsIndex({ auth, logs, users, modules, filters 
                                     value={dateFrom}
                                     onChange={(e) => setDateFrom(e.target.value)}
                                     title="From date"
-                                    className="saas-input !py-2 !px-3 !text-xs !w-40"
+                                    className="saas-input !py-2 !px-3 !text-xs w-full sm:!w-40"
                                 />
                                 <span className="text-xs text-slate-400">to</span>
                                 <input
@@ -132,7 +132,7 @@ export default function ActivityLogsIndex({ auth, logs, users, modules, filters 
                                     value={dateTo}
                                     onChange={(e) => setDateTo(e.target.value)}
                                     title="To date"
-                                    className="saas-input !py-2 !px-3 !text-xs !w-40"
+                                    className="saas-input !py-2 !px-3 !text-xs w-full sm:!w-40"
                                 />
                             </div>
 

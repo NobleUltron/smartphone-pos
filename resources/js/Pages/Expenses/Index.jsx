@@ -146,7 +146,7 @@ export default function Index({ auth, expenses, summary, filters, cashiers, cate
         <AuthenticatedLayout user={auth.user}>
             <Head title="Expense Management" />
 
-            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
+            <div className="space-y-6">
                 {/* Header */}
                 <PageHeader
                     title="Expense Management"
@@ -155,7 +155,7 @@ export default function Index({ auth, expenses, summary, filters, cashiers, cate
                         { label: 'Expenses' }
                     ]}
                     actions={
-                        <div className="flex items-center gap-2.5">
+                        <div className="flex flex-wrap items-center gap-2.5">
                             {is_admin_or_manager && (
                                 <a
                                     href={`/api/expenses/export?${exportParams.toString()}`}
@@ -312,7 +312,7 @@ export default function Index({ auth, expenses, summary, filters, cashiers, cate
                                     value={dateFrom}
                                     onChange={e => { setDateFrom(e.target.value); setDateFilter(''); }}
                                     title="From date"
-                                    className="saas-input !py-2 !px-3 !text-xs !w-40"
+                                    className="saas-input !py-2 !px-3 !text-xs w-full sm:!w-40"
                                 />
                                 <span className="text-xs text-slate-400">to</span>
                                 <input
@@ -320,7 +320,7 @@ export default function Index({ auth, expenses, summary, filters, cashiers, cate
                                     value={dateTo}
                                     onChange={e => { setDateTo(e.target.value); setDateFilter(''); }}
                                     title="To date"
-                                    className="saas-input !py-2 !px-3 !text-xs !w-40"
+                                    className="saas-input !py-2 !px-3 !text-xs w-full sm:!w-40"
                                 />
                             </div>
 

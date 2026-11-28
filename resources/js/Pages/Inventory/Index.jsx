@@ -1284,7 +1284,7 @@ export default function Inventory({ auth, products, allProducts = [], categories
                                     <label className="saas-label">SKU / Barcode</label>
                                     <input type="text" className="saas-input" placeholder="e.g. CHG-001" value={newProduct.sku} onChange={e => setNewProduct({...newProduct, sku: e.target.value})} />
                                 </div>
-                                <div className="grid grid-cols-3 gap-4 mb-6">
+                                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
                                     <div>
                                         <label className="saas-label">Quantity</label>
                                         <input type="number" className="saas-input" placeholder="0" value={newProduct.quantity} onChange={e => setNewProduct({...newProduct, quantity: e.target.value})} />
@@ -2580,7 +2580,7 @@ export default function Inventory({ auth, products, allProducts = [], categories
                             </button>
                         </div>
                         <div className="p-6 overflow-y-auto">
-                        <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 grid grid-cols-3 gap-3 text-center mb-4">
+                        <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 grid grid-cols-1 sm:grid-cols-3 gap-3 text-center mb-4">
                             <div>
                                 <div className="text-[10px] font-bold text-slate-400 uppercase">Initial Buy</div>
                                 <div className="text-xs font-bold text-slate-800 dark:text-white mt-0.5">
