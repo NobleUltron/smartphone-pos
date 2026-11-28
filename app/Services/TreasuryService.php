@@ -110,6 +110,63 @@ class TreasuryService
             ?? PaymentAccount::where('type', 'cash')->first()
             ?? PaymentAccount::first();
 
+        // 0. Detect any "Fresh Financial Start" Opening Balance cutoff timestamps
+        //    so Sync Past Data NEVER re-imports transactions from before the reset.
+        $freshStartTrxs = AccountTransaction::where('category', 'Opening Balance')
+            ->where('description', 'like', '%Fresh Financial Start%')
+            ->orderBy('transaction_date', 'desc')
+            ->get();
+
+        $accountCutoffs = [];
+        $globalFreshStartCutoff = null;
+
+        foreach ($freshStartTrxs as $fsTrx) {
+            if (!$fsTrx->transaction_date) {
+                continue;
+            }
+            $dt = \Carbon\Carbon::parse($fsTrx->transaction_date);
+            if (!isset($accountCutoffs[$fsTrx->payment_account_id])) {
+                $accountCutoffs[$fsTrx->payment_account_id] = $dt;
+            }
+            if (!$globalFreshStartCutoff || $dt->gt($globalFreshStartCutoff)) {
+                $globalFreshStartCutoff = $dt;
+            }
+        }
+
+        $isBeforeFreshStart = function (?int $accountId, $date) use ($accountCutoffs, $globalFreshStartCutoff): bool {
+            $cutoff = ($accountId && isset($accountCutoffs[$accountId]))
+                ? $accountCutoffs[$accountId]
+                : $globalFreshStartCutoff;
+
+            if (!$cutoff || !$date) {
+                return false;
+            }
+
+            return \Carbon\Carbon::parse($date)->lt($cutoff);
+        };
+
+        // 0b. Auto-cleanup any stray pre-Fresh-Start backfilled rows previously imported by Sync Past Data
+        if ($globalFreshStartCutoff) {
+            $backfillRefTypes = [
+                \App\Models\Sale::class,
+                \App\Models\LayawayPayment::class,
+                \App\Models\Expense::class,
+                \App\Models\Repair::class,
+                \App\Models\InvoicePayment::class,
+            ];
+
+            foreach (PaymentAccount::all() as $acc) {
+                $cutoff = $accountCutoffs[$acc->id] ?? $globalFreshStartCutoff;
+                if ($cutoff) {
+                    AccountTransaction::where('payment_account_id', $acc->id)
+                        ->where('category', '!=', 'Opening Balance')
+                        ->whereIn('reference_type', $backfillRefTypes)
+                        ->where('transaction_date', '<', $cutoff)
+                        ->delete();
+                }
+            }
+        }
+
         // 1. Backfill Paid POS Sales
         $sales = \App\Models\Sale::where('payment_status', 'Paid')
             ->where('payment_method', '!=', 'Layaway')
@@ -117,13 +174,17 @@ class TreasuryService
             ->get();
 
         foreach ($sales as $sale) {
+            $account = PaymentAccount::getForMethod($sale->payment_method) ?? $cashAccount;
+            $saleDate = $sale->created_at ?? now();
+            if ($isBeforeFreshStart($account?->id, $saleDate)) {
+                continue;
+            }
+
             $exists = AccountTransaction::where('reference_type', \App\Models\Sale::class)
                 ->where('reference_id', $sale->id)
                 ->exists();
 
             if (!$exists) {
-                $account = PaymentAccount::getForMethod($sale->payment_method) ?? $cashAccount;
-
                 AccountTransaction::create([
                     'payment_account_id' => $account->id,
                     'type' => 'inflow',
@@ -135,7 +196,7 @@ class TreasuryService
                     'transaction_reference' => 'POS-' . $sale->id,
                     'description' => "POS Sale #{$sale->id}" . ($sale->customer ? " (" . ($sale->customer->name ?? 'Customer') . ")" : ''),
                     'user_id' => $sale->user_id,
-                    'transaction_date' => $sale->created_at ?? now(),
+                    'transaction_date' => $saleDate,
                 ]);
             }
         }
@@ -144,6 +205,12 @@ class TreasuryService
         $layawayPayments = \App\Models\LayawayPayment::where('amount_paid', '>', 0)->get();
 
         foreach ($layawayPayments as $payment) {
+            $account = PaymentAccount::getForMethod($payment->payment_method) ?? $cashAccount;
+            $paymentDate = $payment->payment_date ?? $payment->created_at ?? now();
+            if ($isBeforeFreshStart($account?->id, $paymentDate)) {
+                continue;
+            }
+
             $exists = AccountTransaction::where('reference_type', \App\Models\LayawayPayment::class)
                 ->where('reference_id', $payment->id)
                 ->exists();
@@ -164,8 +231,6 @@ class TreasuryService
             }
 
             if (!$exists && !$legacySaleRefExists && !$alreadyCoveredByRepair) {
-                $account = PaymentAccount::getForMethod($payment->payment_method) ?? $cashAccount;
-
                 AccountTransaction::create([
                     'payment_account_id' => $account->id,
                     'type' => 'inflow',
@@ -177,7 +242,7 @@ class TreasuryService
                     'transaction_reference' => 'LAY-' . $payment->id,
                     'description' => "Layaway Installment for Sale #{$payment->sale_id}",
                     'user_id' => $payment->sale?->user_id ?? $payment->user_id,
-                    'transaction_date' => $payment->payment_date ?? $payment->created_at ?? now(),
+                    'transaction_date' => $paymentDate,
                 ]);
             }
         }
@@ -188,6 +253,12 @@ class TreasuryService
             ->get();
 
         foreach ($expenses as $expense) {
+            $trxDate = $expense->created_at ?? ($expense->expense_date ? \Carbon\Carbon::parse($expense->expense_date)->setTimeFrom(now()) : now());
+            $targetAccountId = $expense->payment_account_id ?? $cashAccount?->id;
+            if ($isBeforeFreshStart($targetAccountId, $trxDate)) {
+                continue;
+            }
+
             $exists = AccountTransaction::where('reference_type', \App\Models\Expense::class)
                 ->where('reference_id', $expense->id)
                 ->exists();
@@ -207,8 +278,6 @@ class TreasuryService
 
             if (!$exists && !$alreadyCoveredByTransfer) {
                 $isInflow = $expense->category === 'Cash In';
-                $trxDate = $expense->created_at ?? ($expense->expense_date ? \Carbon\Carbon::parse($expense->expense_date)->setTimeFrom(now()) : now());
-                $targetAccountId = $expense->payment_account_id ?? $cashAccount->id;
 
                 AccountTransaction::create([
                     'payment_account_id' => $targetAccountId,
@@ -232,6 +301,11 @@ class TreasuryService
         })->get();
 
         foreach ($repairs as $repair) {
+            $repairDate = $repair->created_at ?? now();
+            if ($isBeforeFreshStart($cashAccount?->id, $repairDate)) {
+                continue;
+            }
+
             $hasLayawayTrx = false;
             if ($repair->sale) {
                 $hasLayawayTrx = AccountTransaction::where('reference_type', \App\Models\LayawayPayment::class)
@@ -255,7 +329,7 @@ class TreasuryService
                     'transaction_reference' => 'REP-' . $repair->id,
                     'description' => "Repair Deposit for Ticket #{$repair->repair_code} ({$repair->device_model})",
                     'user_id' => $repair->user_id,
-                    'transaction_date' => $repair->created_at ?? now(),
+                    'transaction_date' => $repairDate,
                 ]);
             }
         }
@@ -263,30 +337,33 @@ class TreasuryService
         // 4b. Backfill Invoice Payments
         $invoicePayments = \App\Models\InvoicePayment::with('invoice')->where('amount', '>', 0)->get();
         foreach ($invoicePayments as $invPayment) {
+            $account = $invPayment->payment_account_id
+                ? PaymentAccount::find($invPayment->payment_account_id)
+                : (PaymentAccount::getForMethod($invPayment->payment_method) ?? $cashAccount);
+            $invPayDate = $invPayment->payment_date ?? $invPayment->created_at ?? now();
+
+            if (!$account || $isBeforeFreshStart($account->id, $invPayDate)) {
+                continue;
+            }
+
             $exists = AccountTransaction::where('reference_type', \App\Models\InvoicePayment::class)
                 ->where('reference_id', $invPayment->id)
                 ->exists();
 
             if (!$exists) {
-                $account = $invPayment->payment_account_id
-                    ? PaymentAccount::find($invPayment->payment_account_id)
-                    : (PaymentAccount::getForMethod($invPayment->payment_method) ?? $cashAccount);
-
-                if ($account) {
-                    AccountTransaction::create([
-                        'payment_account_id' => $account->id,
-                        'type' => 'inflow',
-                        'amount' => $invPayment->amount,
-                        'balance_after' => 0,
-                        'category' => 'Invoice Payment',
-                        'reference_type' => \App\Models\InvoicePayment::class,
-                        'reference_id' => $invPayment->id,
-                        'transaction_reference' => 'INV-PAY-' . $invPayment->id,
-                        'description' => "Invoice Payment for " . ($invPayment->invoice?->invoice_number ?? "Invoice #{$invPayment->invoice_id}"),
-                        'user_id' => $invPayment->user_id,
-                        'transaction_date' => $invPayment->payment_date ?? $invPayment->created_at ?? now(),
-                    ]);
-                }
+                AccountTransaction::create([
+                    'payment_account_id' => $account->id,
+                    'type' => 'inflow',
+                    'amount' => $invPayment->amount,
+                    'balance_after' => 0,
+                    'category' => 'Invoice Payment',
+                    'reference_type' => \App\Models\InvoicePayment::class,
+                    'reference_id' => $invPayment->id,
+                    'transaction_reference' => 'INV-PAY-' . $invPayment->id,
+                    'description' => "Invoice Payment for " . ($invPayment->invoice?->invoice_number ?? "Invoice #{$invPayment->invoice_id}"),
+                    'user_id' => $invPayment->user_id,
+                    'transaction_date' => $invPayDate,
+                ]);
             }
         }
 
@@ -304,7 +381,10 @@ class TreasuryService
             $runningBalance = $hasOpeningTrx ? 0 : (float) ($account->opening_balance ?? 0);
 
             foreach ($transactions as $trx) {
-                if (in_array($trx->type, ['inflow', 'transfer_in'])) {
+                if ($trx->category === 'Opening Balance' && str_contains($trx->description ?? '', 'Fresh Financial Start')) {
+                    // Authoritative Fresh Financial Start baseline
+                    $runningBalance = (float) $trx->amount;
+                } elseif (in_array($trx->type, ['inflow', 'transfer_in'])) {
                     $runningBalance += (float) $trx->amount;
                 } elseif (in_array($trx->type, ['outflow', 'transfer_out'])) {
                     $runningBalance -= (float) $trx->amount;
